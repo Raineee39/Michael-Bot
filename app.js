@@ -16,6 +16,7 @@ import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS } from './date.js';
 import { generateMichaelMessage } from './utils/openai.js';
+import { loadUserMemory, saveUserMemory } from './utils/michael-memory.js';
 
 function buildDateButtons(choices) {
   return {
@@ -95,6 +96,25 @@ const NEE = [
   'nee.',
   'NEE.',
   'nee.     ...Michael',
+];
+
+const MICHAEL_MOODS = [
+  'afwezig',
+  'streng',
+  'verward',
+  'kosmisch',
+  'passief-agressief',
+  'loom',
+];
+
+const MICHAEL_REFUSALS = [
+  'Niet nu...  de energie klopt niet     en ik heb het druk..Michael',
+  'Dit valt buiten mijn bereik vandaag...  probeer het later     of niet..Michael',
+  'Ik ontvang hier niets over...  de sterren zijn vaag     jammer dan..Michael',
+  'Ik geef hier geen inzicht op...  de kosmos zwijgt     dat zegt genoeg..Michael',
+  'Nee...  niet dit     niet vandaag..Michael',
+  'Er is te veel ruis...  vraag het aan de boterham..Michael',
+  'Mijn aandacht is elders...  je begrijpt het wel..Michael',
 ];
 
 /**
@@ -229,14 +249,44 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     // "praatmetmichael" command
     if (name === 'praatmetmichael') {
       const userInput = data.options.find(o => o.name === 'bericht').value;
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'");
+      const mood = MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
 
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
-      const message = await generateMichaelMessage(req.body.member?.user?.username ?? req.body.user?.username, userInput);
-      await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-        method: 'PATCH',
-        body: { content: message },
-      });
+      // ~15% chance Michael refuses outright — no OpenAI call
+      if (Math.random() < 0.15) {
+        const refusal = MICHAEL_REFUSALS[Math.floor(Math.random() * MICHAEL_REFUSALS.length)];
+        saveUserMemory(userId, username, userInput, mood);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `> ${safeInput}\n\n${refusal}` },
+        });
+        return;
+      }
+
+      try {
+        const memory = loadUserMemory(userId);
+        const memorySummary = memory.prompts.length
+          ? memory.prompts.slice(-3).join(' / ')
+          : null;
+
+        const michaelMessage = await generateMichaelMessage(username, userInput, mood, memorySummary);
+        saveUserMemory(userId, username, userInput, mood);
+
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `> ${safeInput}\n\n${michaelMessage}` },
+        });
+      } catch (err) {
+        console.error('praatmetmichael error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `> ${safeInput}\n\nEr is ruis in het veld...  probeer het later..Michael` },
+        });
+      }
       return;
     }
 
