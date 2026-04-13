@@ -170,45 +170,35 @@ ${context}
 // Returns an integer -2 to +2. Falls back to 0 on any error.
 export async function scoreMichaelMessage(userInput) {
   try {
-    const response = await client.responses.create({
-      model: "gpt-4.1-mini",
-      max_output_tokens: 10,
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
       temperature: 0,
-      input: `
-Beoordeel dit bericht op een schaal van -2 tot +2 op basis van de intentie en toon.
-Wees ROYAAL met positieve scores — twijfel je tussen 0 en +1, kies dan +1.
-
--2 = schelden, beledigen, agressief aanvallen
--1 = provoceren, sarcasme, zinloos of respectloos
- 0 = puur neutraal, geen positieve of negatieve lading
-+1 = vriendelijk, compliment, liefde, lof, excuus, dankbaarheid, respect — ook als het kort is
-+2 = diep, indrukwekkend, bijzonder oprecht of spiritueel
-
-Voorbeelden:
-"ik hou van jou" → 1
-"je bent de beste" → 1
-"sorry dat ik gemeen was" → 1
-"wat een onzin" → -1
-"hallo" → 0
-"kut michael" → -2
-
-Bericht: "${userInput}"
-
-Reageer ALLEEN met één getal: -2, -1, 0, 1 of 2. Niets anders.
-      `.trim(),
+      max_tokens: 3,
+      messages: [
+        {
+          role: 'system',
+          content: `Beoordeel berichten op een schaal van -2 tot +2. Antwoord ALLEEN met het getal, niets anders.
+-2 = schelden, beledigen, agressief
+-1 = provocerend, respectloos, zinloos
+ 0 = puur neutraal
++1 = vriendelijk, compliment, liefde, lof, excuus, dankbaarheid — ook als het kort is
++2 = bijzonder oprecht, diepzinnig, indrukwekkend
+Twijfel je tussen 0 en 1? Kies 1.`,
+        },
+        { role: 'user', content: userInput },
+      ],
     });
-    const raw = response.output[0].content[0].text.trim();
-    console.log('[scoring] raw output:', JSON.stringify(raw));
-    // Extract the first valid score found anywhere in the response
-    const match = raw.match(/-2|-1|\+2|\+1|2|1|0/);
+    const raw = response.choices[0].message.content.trim();
+    console.log('[scoring] raw:', JSON.stringify(raw));
+    const match = raw.match(/-2|-1|\+?2|\+?1|0/);
     if (match) {
       const parsed = parseInt(match[0], 10);
       if ([-2, -1, 0, 1, 2].includes(parsed)) return parsed;
     }
-    console.warn('[scoring] unexpected model output:', JSON.stringify(raw));
+    console.warn('[scoring] unexpected output:', JSON.stringify(raw));
     return 0;
   } catch (err) {
-    console.error('[scoring] scoreMichaelMessage failed:', err?.message ?? err);
+    console.error('[scoring] failed:', err?.message ?? err);
     return 0;
   }
 }
