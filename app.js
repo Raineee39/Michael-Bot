@@ -17,9 +17,10 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression } from './utils/michael-memory.js';
-import { startGateway } from './utils/gateway.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter, generateDelayedConsequence, generatePostRevision } from './utils/openai.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap } from './utils/michael-memory.js';
+import { startGateway, MICHAEL_NAME_REPLIES } from './utils/gateway.js';
+import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
 
 function buildDateButtons(choices) {
   return {
@@ -281,6 +282,52 @@ const MICHAEL_REFUSALS = [
 const CODE_REQUEST_RE = /\b(code|codeer|programm|react|javascript|html|css|node\.?js|python|script|config|debug|bouw|build|compileer|deploy|functie schrijven|api|database)\b/i;
 
 const INSULT_RE = /\b(kut|fuck|shit|klootzak|lul|eikel|idioot|sukkel|kanker|godverdomme|hoer|bitch|asshole|bastard|stom|dom)\b/i;
+
+// Feature 3 — Detects baiting / attempts to force Michael to respond
+const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
+
+// Feature 3 — Pre-written cold dismissals for bait in /praatmetmichael
+// (slash commands always need a response, so Michael responds but coldly)
+const BAIT_DISMISSALS = [
+  'U probeert mij te sturen…  dat werkt zo niet....Michael',
+  'Ik reageer niet op bevel…  onthoud dat....Michael',
+  'Dit soort vragen bereiken mij niet op de juiste trilling...  probeer het anders....Michael',
+  'Er is hier een poging tot sturing…  ik registreer dat…  meer niet....Michael',
+  'Ik kies zelf wanneer ik antwoord…  altijd....Michael',
+];
+
+// Feature 4 — Shadow reply content: feels like Michael was watching and only now chose to respond
+const SHADOW_REPLY_LINES = [
+  'Ik kom hier nog even op terug…  dit bleef hangen....Michael',
+  'Dit was niet klaar…  blijkbaar....Michael',
+  'Ik heb dit niet afgesloten…  U ook niet....Michael',
+  'Wat U eerder zei…  hangt nog steeds in het veld....Michael',
+  'Ik was aanwezig     ook toen....Michael',
+  'Dit moment circelt nog…  ik registreer het....Michael',
+  'Er is iets in dit bericht dat ik niet direct kon plaatsen…  nu wel....Michael',
+];
+
+// ─── Feature 5 — Post-message revision ────────────────────────────────────────
+//
+// After sending a message, Michael may quietly append a second thought.
+// The original content is always preserved — only an "Edit: …" line is added.
+
+async function schedulePostRevision(channelId, messageId, originalContent, mood) {
+  if (Math.random() > 0.10) return; // 10% chance for consequence messages
+  const delay = 7000 + Math.floor(Math.random() * 13000); // 7–20 s
+  setTimeout(async () => {
+    try {
+      const editLine = await generatePostRevision(originalContent, mood);
+      await DiscordRequest(`channels/${channelId}/messages/${messageId}`, {
+        method: 'PATCH',
+        body: { content: `${originalContent}\n\n${editLine}` },
+      });
+      console.log('[revision] appended to consequence message', messageId);
+    } catch (err) {
+      console.error('[revision] failed:', err.message);
+    }
+  }, delay);
+}
 
 
 const CODE_REFUSALS = [
@@ -621,10 +668,33 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         data: { content: `> ${safeInput}\n\n${placeholder}` },
       });
 
-      // Code / technical request — refuse in-character, penalise score
+      // Feature 3 — Bait / forcing-Michael trap: respond coldly and queue unfinished business
+      if (BAIT_RE.test(userInput)) {
+        const dismissal = BAIT_DISMISSALS[Math.floor(Math.random() * BAIT_DISMISSALS.length)];
+        saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId);
+        addUnfinishedBusiness(userId, {
+          prompt:   userInput,
+          reason:   'De gebruiker probeerde Michael te commanderen of te dwingen te reageren',
+          severity: 2,
+          channelId,
+        });
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `> ${safeInput}\n\n${dismissal}` },
+        });
+        return;
+      }
+
+      // Code / technical request — refuse in-character, queue unfinished business
       if (CODE_REQUEST_RE.test(userInput)) {
         const refusal = CODE_REFUSALS[Math.floor(Math.random() * CODE_REFUSALS.length)];
-        saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2));
+        saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId);
+        addUnfinishedBusiness(userId, {
+          prompt:   userInput,
+          reason:   'De gebruiker vroeg om technische hulp — buiten Michaels domein maar hij vergeet het niet',
+          severity: 1,
+          channelId,
+        });
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${refusal}` },
@@ -635,7 +705,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // ~15% chance Michael refuses outright — no OpenAI call
       if (Math.random() < 0.15) {
         const refusal = MICHAEL_REFUSALS[Math.floor(Math.random() * MICHAEL_REFUSALS.length)];
-        saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0));
+        saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${refusal}` },
@@ -660,15 +730,39 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           : null;
         const cosmicRole = getCosmicRole(userId);
 
+        // Feature 2 — Contradiction engine: detect if user is revisiting a theme
+        const contradictionHint = detectThemeOverlap(userId, userInput);
+
         // Run message generation and AI scoring in parallel — no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
-          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null, cosmicRole),
+          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null, cosmicRole, contradictionHint),
           scoreMichaelMessage(userInput),
         ]);
 
         const newScore = (memory.judgementScore ?? 0) + scoreDelta;
-        console.log(`[score] ${username} | mood: ${mood} | delta: ${scoreDelta} | score: ${memory.judgementScore ?? 0} → ${newScore} | input: "${userInput.slice(0, 60)}"`);
-        saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta));
+        console.log(`[score] ${username} | mood: ${mood} | delta: ${scoreDelta} | score: ${memory.judgementScore ?? 0} → ${newScore} | input: "${userInput.slice(0, 60)}" | contradiction: ${contradictionHint}`);
+
+        // Feature 1 — Create unfinished business for negative interactions
+        if (scoreDelta <= -2 || INSULT_RE.test(userInput)) {
+          addUnfinishedBusiness(userId, {
+            prompt:   userInput,
+            reason:   scoreDelta <= -2 ? 'Belediging of agressief bericht' : 'Negatieve trilling in het veld',
+            severity: 3,
+            channelId,
+          });
+        } else if (scoreDelta === -1) {
+          addUnfinishedBusiness(userId, {
+            prompt:   userInput,
+            reason:   'Respectloos of provocerend bericht',
+            severity: 2,
+            channelId,
+          });
+        }
+
+        // Feature 2 — Store theme snapshot for future contradiction detection
+        addTheme(userId, userInput);
+
+        saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId);
 
         // Fire-and-forget summarisation once the message buffer fills up
         if (needsSummarisation(userId)) {
@@ -817,6 +911,123 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
   console.error('unknown interaction type', type);
   return res.status(400).json({ error: 'unknown interaction type' });
+});
+
+// ─── Feature 1 + 4 — Delayed consequences & shadow replies cron ───────────────
+//
+// Runs every 30 minutes.
+// Cycle:
+//   1. Prune stale shadow candidates from the in-memory store.
+//   2. Shadow reply (Feature 4): 25% chance per cycle, pick one eligible
+//      candidate and reply to it directly as if Michael just noticed.
+//   3. Delayed consequence (Feature 1): pick one user with outstanding
+//      unfinished business, generate an AI callback and post it.
+//      A global 25-minute cooldown prevents back-to-back firings.
+
+let lastConsequenceAt = 0;
+const CONSEQUENCE_COOLDOWN_MS = 25 * 60 * 1000; // 25 min between consequence firings
+
+cron.schedule('*/30 * * * *', async () => {
+  // 1. Prune stale shadow candidates
+  pruneOldCandidates();
+
+  // 2. Shadow reply — Feature 4
+  if (Math.random() < 0.25) {
+    const eligible = getShadowCandidates();
+    if (eligible.length > 0) {
+      const pick = eligible[Math.floor(Math.random() * eligible.length)];
+      const shadowLine = SHADOW_REPLY_LINES[Math.floor(Math.random() * SHADOW_REPLY_LINES.length)];
+      try {
+        await DiscordRequest(`channels/${pick.channelId}/messages`, {
+          method: 'POST',
+          body: {
+            content: shadowLine,
+            message_reference: { message_id: pick.messageId, fail_if_not_exists: false },
+          },
+        });
+        markShadowReplied(pick.messageId);
+        console.log(`[shadow] replied to old message ${pick.messageId} in channel ${pick.channelId}`);
+      } catch (err) {
+        console.error('[shadow] reply failed:', err.message);
+      }
+    }
+  }
+
+  // 3. Delayed consequence — Feature 1
+  const now = Date.now();
+  if (now - lastConsequenceAt < CONSEQUENCE_COOLDOWN_MS) return;
+
+  const allMemory = loadAllMemory();
+  const shadowPool = getShadowCandidates();
+
+  // Build candidate list: users with outstanding business AND a known channel
+  const candidateUsers = Object.entries(allMemory)
+    .map(([userId, u]) => {
+      const outstanding = getOutstandingBusiness(userId);
+      const userShadow  = shadowPool.find(c => c.authorId === userId);
+      const targetChannel = userShadow?.channelId ?? u.lastChannelId;
+      return { userId, user: u, outstanding, userShadow, targetChannel };
+    })
+    .filter(({ outstanding, targetChannel }) => outstanding.length > 0 && targetChannel);
+
+  if (!candidateUsers.length) return;
+
+  // Weighted random pick — higher severity weighs more
+  const totalWeight = candidateUsers.reduce((s, c) => s + (c.outstanding[0]?.severity ?? 1), 0);
+  let rnd = Math.random() * totalWeight;
+  let chosen;
+  for (const c of candidateUsers) {
+    rnd -= c.outstanding[0]?.severity ?? 1;
+    if (rnd <= 0) { chosen = c; break; }
+  }
+  chosen = chosen ?? candidateUsers[0];
+
+  const { userId, user, outstanding, userShadow, targetChannel } = chosen;
+  const item           = outstanding[0];
+  const mood           = user.currentMood ?? 'afwezig';
+  const judgementLabel = getJudgementLabel(user.judgementScore ?? 0);
+
+  lastConsequenceAt = now;
+
+  try {
+    const message = await generateDelayedConsequence(user.username || userId, item, mood, judgementLabel);
+
+    const postBody = {
+      content: message,
+      ...(userShadow ? { message_reference: { message_id: userShadow.messageId, fail_if_not_exists: false } } : {}),
+    };
+
+    const postRes = await DiscordRequest(`channels/${targetChannel}/messages`, {
+      method: 'POST',
+      body: postBody,
+    });
+    const sentMsg = await postRes.json();
+
+    if (userShadow) markShadowReplied(userShadow.messageId);
+
+    // Low-severity items are resolved after one mention; higher ones just get a cooldown
+    if (item.severity <= 1) {
+      markBusinessResolved(userId, item.id);
+    } else {
+      markBusinessMentioned(userId, item.id);
+    }
+
+    // Slightly darken mood for lingering resentment
+    saveUserMemory(userId, user.username || userId, '[delayed-consequence]', mood, -1, nextMood(mood, -1));
+
+    console.log(`[consequence] fired for ${user.username || userId} | "${item.prompt.slice(0, 50)}" | channel ${targetChannel}`);
+
+    // Feature 5 — maybe append a post-revision edit to the consequence message
+    if (sentMsg?.id) {
+      schedulePostRevision(targetChannel, sentMsg.id, message, mood);
+    }
+  } catch (err) {
+    console.error('[consequence] failed:', err.message);
+    lastConsequenceAt = 0; // reset so we can retry sooner
+  }
+
+  // Housekeeping: expire old business for all known users
+  Object.keys(allMemory).forEach(uid => maybeAgeBusiness(uid));
 });
 
 // Daily uitverkorene — runs at 10:00 AM Amsterdam time

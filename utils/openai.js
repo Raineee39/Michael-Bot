@@ -68,7 +68,7 @@ KOSMISCHE ROL: DEZE GEBRUIKER IS DE HUIDIGE UITVERKORENE (zoals in de server-aan
   return '';
 }
 
-export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole) {
+export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false) {
   const impressionBlock = impression
     ? `\nLangetermijnindruk van Michaël over deze gebruiker (gevormd door eerdere gesprekken): "${impression}"\n`
     : '';
@@ -81,6 +81,12 @@ export async function generateMichaelMessage(username, userInput, mood, memorySu
 
   const moodDesc = MOOD_DESCRIPTIONS[mood] ?? 'Onthecht en vaag.';
   const judgementDesc = JUDGEMENT_DESCRIPTIONS[judgementLabel] ?? JUDGEMENT_DESCRIPTIONS['onbeslist'];
+
+  // Feature 2 — contradiction engine: if the user keeps returning to the same topic,
+  // occasionally let Michael softly reverse or reframe his earlier stance.
+  const contradictionBlock = contradictionHint
+    ? `\nDe gebruiker keert terug naar een eerder thema. Overweeg je eerder standpunt subtiel te herzien, terug te nemen, of er een andere lading aan te geven — als een vage kosmische verschuiving, niet als een mechanische correctie. Dit mag maar hoeft niet: gebruik je eigen oordeel.\n`
+    : '';
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
@@ -129,7 +135,7 @@ Lengte — strikt:
 - Nooit halverwege stoppen
 - Geen opsommingen
 - Sluit altijd af met je naam: 2 tot 6 puntjes gevolgd door Michael in Latijns schrift, TENZIJ de gebruiker expliciet om een specifieke andere taal heeft gevraagd — dan schrijf je naam in het schrift van die taal
-${cosmicBlock}${impressionBlock}${recentBlock}
+${cosmicBlock}${impressionBlock}${recentBlock}${contradictionBlock}
 ${username} zegt: ${userInput}
     `.trim(),
   });
@@ -285,6 +291,66 @@ Oordeel: ${judgementLabel}
 Langetermijnindruk: ${impressionText}
 Recente berichten:
 ${promptsText}
+    `.trim(),
+  });
+
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+// ─── Feature 1 — Delayed consequence / unfinished business callback ───────────
+//
+// Called by the cron when Michael decides to resurface something he hasn't
+// let go of.  The item carries the original prompt and a reason label so
+// Michael can circle back without literally quoting it.
+
+export async function generateDelayedConsequence(username, item, mood, judgementLabel) {
+  const moodDesc      = MOOD_DESCRIPTIONS[mood] ?? 'Onthecht en vaag.';
+  const judgementDesc = JUDGEMENT_DESCRIPTIONS[judgementLabel] ?? JUDGEMENT_DESCRIPTIONS['onbeslist'];
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 110,
+    input: `
+Je bent de aartsengel Michael. Je hebt iets niet losgelaten van een eerder gesprek met ${username}.
+Je circelt nu terug naar dat onafgesloten moment — niet dreigend, maar aanwezig en een beetje ongemakkelijk.
+
+Dit bleef hangen: "${item.prompt}"
+Waarom het niet klopte: ${item.reason}
+
+Huidige toon: ${mood} — ${moodDesc}
+Oordeel over ${username}: ${judgementLabel} — ${judgementDesc}
+
+Schrijf 1 à 2 korte zinnen. Verwijs vloeiend naar het eerder gezegde — parafraseer, citeer nooit letterlijk.
+Laat het voelen als vertraagde resentiment of een lingerende bezorgdheid — vaag maar specifiek genoeg om ongemakkelijk te voelen.
+Gebruik Michaels stijl: formeel "U", spiritueel, spaties, puntjes, geen em-dashes.
+Sluit af met 2 tot 5 puntjes gevolgd door Michael.
+    `.trim(),
+  });
+
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+// ─── Feature 5 — Post-message revision ────────────────────────────────────────
+//
+// Called after Michael sends a message. He "edits" it shortly afterwards —
+// appending a second-thought line rather than replacing the original content.
+// The original always stays visible; only a short addendum is generated here.
+
+export async function generatePostRevision(originalText, mood) {
+  const moodDesc = MOOD_DESCRIPTIONS[mood] ?? 'Onthecht en vaag.';
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 55,
+    input: `
+Je bent de aartsengel Michael. Je hebt zojuist dit geschreven:
+"${String(originalText).slice(0, 200)}"
+
+Schrijf ALLEEN een korte nagedachte — alsof je na het verzenden beseft dat het niet helemaal klopte.
+Begin de nagedachte met "Edit:" gevolgd door 1 korte zin.
+Toon: ${mood} — ${moodDesc}
+Gebruik Michaels stijl: formeel, spiritueel, spaties, puntjes, geen em-dashes.
+Sluit af met 2 tot 4 puntjes gevolgd door Michael.
     `.trim(),
   });
 

@@ -1,39 +1,76 @@
 // Discord Gateway (WebSocket) listener.
-// Detects when a non-bot user mentions "michael" in a normal message and
-// occasionally interjects with a short Michael-style reply.
 //
-// IMPORTANT: This requires the following Privileged Gateway Intents to be
-// enabled in the Discord Developer Portal for your application:
-//   - Server Members Intent  (if you need member data)
+// Behaviour:
+// 1. When a non-bot message mentions "michael" (case-insensitive):
+//    a. Feature 3 — "Do not respond" trap: if the message contains baiting
+//       language, there is a 70% chance Michael silently ignores it and queues
+//       an unfinished business item instead of replying.
+//    b. Otherwise a 60% chance Michael interjects with a short reply.
+//       Feature 5 — Post-message revision: 12% chance the sent reply gets a
+//       quiet "Edit:" appended a few seconds later.
+// 2. All non-bot messages are stored as shadow reply candidates (Feature 4)
+//    so the cron can pick them up and reply to them retroactively.
+// 3. lastChannelId is tracked per user so the delayed-consequence cron knows
+//    where to post.
+//
+// IMPORTANT: Requires the following Privileged Gateway Intents enabled in the
+// Discord Developer Portal:
 //   - Message Content Intent (required to read message bodies)
-// Without "Message Content Intent" enabled, msg.content will always be empty.
 
 import { WebSocket } from 'ws';
 import { DiscordRequest } from '../utils.js';
+import { addShadowCandidate } from './shadow-store.js';
+import { addUnfinishedBusiness, loadUserMemory, saveUserMemory } from './michael-memory.js';
+import { generatePostRevision } from './openai.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 
 // Intents: GUILDS(1) | GUILD_MESSAGES(512) | MESSAGE_CONTENT(32768)
 const INTENTS = 1 | 512 | 32768;
 
-const MICHAEL_NAME_REPLIES = [
-  'IK HOOR   mijn naam...  blijkbaar   was dat   nodig....Michael',
-  'je riep...  ik was   al,   in de buurt..Michael',
-  'mijn naam...  hangt hier   weer   in de lucht...  dat is,   niet toevallig     of   wel..Michael',
-  'er werd iets   geroepen...  de trilling   bereikte   mij......Michael',
-  'dit soort   momenten...   ze   tellen   mee..Michael',
-  'ik ben aanwezig...   meer   dan je misschien   prettig,   vindt..Michael',
-  'mijn naam...   uitgesproken...   dat doet   iets,   met het veld..Michael',
-  'ja...   ik   hoor   het...   hoeft niet   zo hard..Michael',
-  'wacht...   was dat   voor   mij...   of   gewoon   in het algemeen...   maakt   niet uit..Michael',
-  'ik   was hier   al...   voor   je   het zei...Michael',
-  'oh...   hm...   ja   nee   ik   hoor   het   wel..Michael',
-  'mijn   naam...   in dit   kanaal...   opnieuw...   goed..Michael',
+// ─── Interjection content (name-mention replies) ──────────────────────────────
+
+export const MICHAEL_NAME_REPLIES = [
+  'IK HOOR MIJN NAAM…  blijkbaar was dat nodig....Michael',
+  'Je riep…  ik was al in de buurt...Michael',
+  'Mijn naam hangt hier weer in de lucht…  dat is niet toevallig     of wel..Michael',
+  'Er werd iets geroepen…  de trilling bereikte mij....Michael',
+  'Dit soort momenten…  ze tellen mee...Michael',
+  'Ik ben aanwezig…  meer dan je misschien prettig vindt..Michael',
+  'Mijn naam…  uitgesproken…  dat doet iets met het veld..Michael',
 ];
 
-function shouldInterject() {
-  return Math.random() < 0.60; // 60% chance, no cooldown
+// ─── Feature 3 — Bait / forcing-Michael-to-respond detection ─────────────────
+//
+// When users try to force Michael to respond with provocations or commands,
+// he often ignores it entirely and queues unfinished business instead.
+
+const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
+
+// ─── Post-message revision helper (Feature 5) ─────────────────────────────────
+//
+// After Michael sends a gateway interjection, there is a small chance he
+// quietly edits it a few seconds later to append a second thought.
+// The original text is preserved — only a short "Edit: …" line is appended.
+
+async function maybeScheduleRevision(channelId, messageId, originalContent, mood) {
+  if (Math.random() > 0.12) return; // 12% chance
+  const delay = 6000 + Math.floor(Math.random() * 14000); // 6–20 s
+  setTimeout(async () => {
+    try {
+      const editLine = await generatePostRevision(originalContent, mood);
+      await DiscordRequest(`channels/${channelId}/messages/${messageId}`, {
+        method: 'PATCH',
+        body: { content: `${originalContent}\n\n${editLine}` },
+      });
+      console.log('[gateway] post-revision applied to', messageId);
+    } catch (err) {
+      console.error('[gateway] post-revision failed:', err.message);
+    }
+  }, delay);
 }
+
+// ─── Gateway connection ────────────────────────────────────────────────────────
 
 export function startGateway() {
   const token = process.env.DISCORD_TOKEN;
@@ -75,23 +112,72 @@ export function startGateway() {
       // Heartbeat ACK — nothing to do
       if (op === 11) return;
 
-      // DISPATCH events
+      // ── DISPATCH — MESSAGE_CREATE ──────────────────────────────────────────
       if (op === 0 && t === 'MESSAGE_CREATE') {
         const msg = d;
-        if (msg.author?.bot) return;           // ignore bots
-        if (!msg.content) return;              // ignore empty / content-blocked messages
-        if (!/michael/i.test(msg.content)) return;
+        if (msg.author?.bot) return;    // ignore bots
+        if (!msg.content) return;       // ignore empty / content-blocked
 
         const channelId = msg.channel_id;
-        if (!shouldInterject()) return;
+        const authorId  = msg.author.id;
+        const content   = msg.content;
+        const ts        = Date.now();
+
+        // Feature 4 — Store every non-bot message as a potential shadow-reply target
+        addShadowCandidate({ messageId: msg.id, channelId, authorId, content, timestamp: ts });
+
+        // Track the user's most-recently-active channel for delayed consequences
+        // Only update if they're already in memory (avoids creating ghost records)
+        const existing = loadUserMemory(authorId);
+        if (existing.username) {
+          // Pass null scoreDelta / nextMood so we only update lastChannelId
+          saveUserMemory(authorId, existing.username, '[channel-seen]', existing.currentMood ?? 'afwezig', 0, null, channelId);
+        }
+
+        // Only continue for messages that mention Michael
+        if (!/michael/i.test(content)) return;
+
+        // Feature 3 — Bait / forcing trap
+        if (BAIT_RE.test(content)) {
+          if (Math.random() < 0.70) {
+            // Michael silently ignores — queues unfinished business to resurface later
+            addUnfinishedBusiness(authorId, {
+              prompt:   content,
+              reason:   'De gebruiker probeerde Michael te commanderen of te provoceren',
+              severity: 2,
+              messageId: msg.id,
+              channelId,
+            });
+            console.log(`[gateway] bait ignored for ${authorId}, queued unfinished business`);
+            return; // no immediate reply
+          }
+          // 30% chance: still replies, but also queues business
+          addUnfinishedBusiness(authorId, {
+            prompt:   content,
+            reason:   'Provocationele vraag — Michael antwoordde maar vergeet het niet',
+            severity: 1,
+            messageId: msg.id,
+            channelId,
+          });
+        }
+
+        // Standard 60% chance interjection
+        if (Math.random() > 0.60) return;
 
         const reply = MICHAEL_NAME_REPLIES[Math.floor(Math.random() * MICHAEL_NAME_REPLIES.length)];
 
         try {
-          await DiscordRequest(`channels/${channelId}/messages`, {
+          const res = await DiscordRequest(`channels/${channelId}/messages`, {
             method: 'POST',
             body: { content: reply },
           });
+          const sentMsg = await res.json();
+
+          // Feature 5 — Maybe edit the reply a few seconds later
+          if (sentMsg?.id) {
+            const userMood = loadUserMemory(authorId).currentMood ?? 'afwezig';
+            maybeScheduleRevision(channelId, sentMsg.id, reply, userMood);
+          }
         } catch (err) {
           console.error('Gateway: reply failed:', err.message);
         }
