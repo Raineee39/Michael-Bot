@@ -14,8 +14,8 @@ import { getShuffledOptions, getResult } from './game.js';
 import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
-import { ROUND_1, ROUND_2, ROUND_3, VERDICTS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck } from './utils/openai.js';
+import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression } from './utils/michael-memory.js';
 import { startGateway } from './utils/gateway.js';
 
@@ -161,6 +161,47 @@ function nextMood(currentMood, scoreDelta) {
 
   return MICHAEL_MOODS[Math.max(0, Math.min(6, base + shift))];
 }
+
+// Mood-flavoured date intros — used by /dateer
+const DATE_MOOD_INTROS = {
+  woedend: [
+    `💢⚡💢⚡💢 **Een Date met Aartsengel Michaël** 💢⚡💢⚡💢`,
+    ``,
+    `Michaël is er al     hij kijkt niet op als je binnenkomt`,
+    `hij zit met zijn armen gevouwen     dit betekent iets     je weet wat`,
+    ``,
+    `*"ik ben hier"*     zegt hij     dit klinkt als een aanklacht`,
+    ``,
+    `**wat doe je**`,
+  ].join('\n'),
+  streng: [
+    `📜⚡📜⚡📜 **Een Date met Aartsengel Michaël** 📜⚡📜⚡📜`,
+    ``,
+    `Michaël is er al     hij heeft je al beoordeeld voordat je zit`,
+    `hij kijkt je aan     lang     afwachtend`,
+    ``,
+    `*"je bent er"*     zegt hij     het klinkt als een test`,
+    ``,
+    `**wat doe je**`,
+  ].join('\n'),
+  kosmisch: [
+    `🌟✨🌟✨🌟 **Een Date met Aartsengel Michaël** 🌟✨🌟✨🌟`,
+    ``,
+    `Michaël is er al     hij staat in het licht     of het licht staat om hem heen`,
+    `hij kijkt je aan     zijn blik is ongewoon open     voor hem`,
+    ``,
+    `*"de sferen stemden dit af"*     zegt hij     en hij klinkt alsof hij dit gelooft`,
+    ``,
+    `**wat doe je**`,
+  ].join('\n'),
+};
+
+// Round 1 choices when Michael is woedend — harder to warm up
+const DATE_ROUND1_WOEDEND = [
+  { label: '🙏 Bied meteen excuses aan', id: 'a' },
+  { label: '😶 Zeg niets en wacht', id: 'b' },
+  { label: '💝 Zeg dat je van hem houdt', id: 'c' },
+];
 
 // Pre-written humeur lines per mood, shown by /michaelhumeur
 const MICHAEL_HUMEUR = {
@@ -369,11 +410,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
     // "dateer" command
     if (name === 'dateer') {
+      const invokerUserId = req.body.member?.user?.id ?? req.body.user?.id;
+      const dateMood = loadUserMemory(invokerUserId).currentMood ?? 'afwezig';
+      const intro = DATE_MOOD_INTROS[dateMood] ?? ROUND_1.intro;
+      const choices = dateMood === 'woedend' ? DATE_ROUND1_WOEDEND : ROUND_1.choices;
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
-          content: ROUND_1.intro,
-          components: [buildDateButtons(ROUND_1.choices.map(c => ({ ...c, custom_id: `date_r1_${c.id}` })))],
+          content: intro,
+          components: [buildDateButtons(choices.map(c => ({ ...c, custom_id: `date_r1_${invokerUserId}_${c.id}` })))],
         },
       });
     }
@@ -660,49 +705,109 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   }
 
   // Handle date button interactions
+  // custom_id format: date_rN_{invokerUserId}_{path}
+  // Each handler reads the current message content and APPENDS to it, building the full story.
   if (type === InteractionType.MESSAGE_COMPONENT) {
     const componentId = data.custom_id;
+    const prev = req.body.message?.content ?? '';
+    const SEP = '\n\n                    ·  ·  ·\n\n';
 
-    // Round 1 clicked — path is 1 char e.g. "a"
+    // Extract invokerUserId and path from a date custom_id
+    function parseDateId(prefix) {
+      const rest = componentId.replace(prefix, '');
+      const sep = rest.indexOf('_');
+      return { invokerUserId: rest.slice(0, sep), path: rest.slice(sep + 1) };
+    }
+
     if (componentId.startsWith('date_r1_')) {
-      const path = componentId.replace('date_r1_', '');
+      const { invokerUserId, path } = parseDateId('date_r1_');
       const r2 = ROUND_2[path];
       return res.send({
-        type: 7, // UPDATE_MESSAGE
+        type: 7,
         data: {
-          content: `${r2.response}\n\n${r2.prompt}`,
-          components: [buildDateButtons(r2.choices.map(c => ({ ...c, custom_id: `date_r2_${path}${c.id}` })))],
+          content: `${prev}${SEP}${r2.response}\n\n${r2.prompt}`,
+          components: [buildDateButtons(r2.choices.map(c => ({ ...c, custom_id: `date_r2_${invokerUserId}_${path}${c.id}` })))],
         },
       });
     }
 
-    // Round 2 clicked — path is 2 chars e.g. "ab"
     if (componentId.startsWith('date_r2_')) {
-      const path = componentId.replace('date_r2_', '');
+      const { invokerUserId, path } = parseDateId('date_r2_');
       const r3 = ROUND_3[path];
       return res.send({
-        type: 7, // UPDATE_MESSAGE
+        type: 7,
         data: {
-          content: `${r3.response}\n\n${r3.prompt}`,
-          components: [buildDateButtons(r3.choices.map(c => ({ ...c, custom_id: `date_r3_${path}${c.id}` })))],
+          content: `${prev}${SEP}${r3.response}\n\n${r3.prompt}`,
+          components: [buildDateButtons(r3.choices.map(c => ({ ...c, custom_id: `date_r3_${invokerUserId}_${path}${c.id}` })))],
         },
       });
     }
 
-    // Round 3 clicked — path is 3 chars e.g. "abc"
     if (componentId.startsWith('date_r3_')) {
-      const path = componentId.replace('date_r3_', '');
+      const { invokerUserId, path } = parseDateId('date_r3_');
       const r3key = path.slice(0, 2);
-      const lastChoice = path.slice(-1);
-      const reaction = ROUND_3[r3key].reactions[lastChoice];
+      const reaction = ROUND_3[r3key].reactions[path.slice(-1)];
       const verdict = VERDICTS[path];
+      const dateScore = DATE_SCORES[path] ?? 0;
+
+      const invokerMem = loadUserMemory(invokerUserId);
+      const invokerUsername = invokerMem.username || invokerUserId;
+      const currentMood = invokerMem.currentMood ?? 'afwezig';
+      saveUserMemory(invokerUserId, invokerUsername, `[date:${path}]`, currentMood, dateScore, nextMood(currentMood, dateScore));
+      console.log(`[date] ${invokerUsername} | path: ${path} | score: +${dateScore}`);
+
+      const consequence = dateScore >= 3
+        ? '\n\n*iets in het veld verschoof     permanent     Michael onthoudt dit*'
+        : dateScore >= 2
+        ? '\n\n*iets veranderde vanavond     klein     maar echt*'
+        : dateScore >= 1
+        ? '\n\n*een kleine trilling     niets dramatisch     toch iets*'
+        : '';
+
+      if (DATE_ROUND4_PATHS.has(path)) {
+        return res.send({
+          type: 7,
+          data: {
+            content: `${prev}${SEP}${reaction}\n\n${verdict}${consequence}${SEP}*de volgende ochtend     een bericht van Michael     hij heeft nog nooit eerder een bericht gestuurd*\n\n**wat doe je**`,
+            components: [buildDateButtons([
+              { label: '🌅 Laat het zo', id: 'a', custom_id: `date_r4_${invokerUserId}_${path}_a` },
+              { label: '💬 Stuur een bericht terug', id: 'b', custom_id: `date_r4_${invokerUserId}_${path}_b` },
+              { label: '🫶 Vraag of hij het goed maakt', id: 'c', custom_id: `date_r4_${invokerUserId}_${path}_c` },
+            ])],
+          },
+        });
+      }
+
       return res.send({
-        type: 7, // UPDATE_MESSAGE
-        data: {
-          content: `${reaction}\n\n${verdict}`,
-          components: [],
-        },
+        type: 7,
+        data: { content: `${prev}${SEP}${reaction}\n\n${verdict}${consequence}`, components: [] },
       });
+    }
+
+    if (componentId.startsWith('date_r4_')) {
+      const parts = componentId.replace('date_r4_', '').split('_');
+      const invokerUserId = parts[0];
+      const datePath = parts[1];
+      const morningChoice = parts[2];
+      const invokerMem = loadUserMemory(invokerUserId);
+      const invokerUsername = invokerMem.username || invokerUserId;
+
+      res.send({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
+
+      try {
+        const morningMsg = await generateMorningAfter(invokerUsername, datePath, morningChoice);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `${prev}${SEP}${morningMsg}`, components: [] },
+        });
+      } catch (err) {
+        console.error('morning after error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `${prev}${SEP}*geen bericht van Michael     maar je voelt iets     vaag     aanwezig*`, components: [] },
+        });
+      }
+      return;
     }
 
     return res.status(400).json({ error: 'unknown component' });

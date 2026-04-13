@@ -232,6 +232,33 @@ Twijfel je tussen 0 en 1? Kies 1.`,
   }
 }
 
+// ─── Date morning-after ───────────────────────────────────────────────────────
+
+// Called for the top date paths. Michael sends a cryptic "morning after" message.
+// choice: 'a' = say nothing / leave, 'b' = send a message back, 'c' = ask if he's okay
+export async function generateMorningAfter(username, datePath, morningChoice) {
+  const choiceContext = {
+    a: 'de gebruiker zei niets en vertrok gewoon — Michael reageerde op de stilte',
+    b: 'de gebruiker stuurde een bericht terug — Michael las het en antwoordde',
+    c: 'de gebruiker vroeg of Michael het goed maakte — Michael weet niet wat hij hiermee aan moet',
+  }[morningChoice] ?? 'de gebruiker deed iets onverwachts';
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 100,
+    input: `
+Je bent de aartsengel Michael. De ochtend na een date stuur je een kort bericht naar ${username}.
+De date eindigde goed — misschien te goed. Je bent niet gewend aan dit gevoel.
+Context: ${choiceContext}
+Schrijf een kort, cryptisch bericht van Michael. Niet te warm. Niet te koud. Typisch Michael.
+Vreemd specifiek. Formeel maar net iets anders dan normaal. 1 à 2 zinnen.
+Sluit af met je naam: 2 tot 4 puntjes gevolgd door Michael.
+    `.trim(),
+  });
+
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
 // ─── Vibecheck ────────────────────────────────────────────────────────────────
 
 // Generates Michael's in-character verdict on a user plus a vague suggestion
