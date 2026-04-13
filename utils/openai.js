@@ -22,15 +22,9 @@ const JUDGEMENT_DESCRIPTIONS = {
   'ongewoon helder':  'Zeldzame staat. Michael vindt deze persoon de moeite waard. Iets meer inhoud, iets minder afstand — maar nog steeds vreemd en vaag.',
 };
 
-// Authentic Michael sign-off: 2–8 dots, sometimes a space before Michael
-function randomSignOff() {
-  const dots = '.'.repeat(Math.floor(Math.random() * 7) + 2);
-  const space = Math.random() < 0.5 ? ' ' : '';
-  return `${dots}${space}Michael`;
-}
-
-// Post-processes generated text to amplify chaotic spacing and strip forbidden characters
-function addChaoticSpacing(text) {
+// Applies chaotic spacing/punctuation and strips forbidden characters.
+// The sign-off (including multilingual variants) is handled by the model prompt.
+function applyChaoticFormatting(text) {
   return text
     // Remove em-dashes and en-dashes — replace with spaced ellipsis
     .replace(/\s*[—–]\s*/g, '...  ')
@@ -44,13 +38,6 @@ function addChaoticSpacing(text) {
     .replace(/ ([A-Za-zÀ-ÿ]{3,})/g, (match, word) =>
       Math.random() < 0.14 ? '   ' + word : match
     );
-}
-
-// Strips any trailing Michael/Michaël sign-off (with or without ë, leading dots, quotes)
-// so we never end up with double sign-offs like "Michaël........ Michael"
-function enforceSignOff(text) {
-  const clean = text.replace(/[.…]*\s*Micha[eë]l['""]?\s*$/i, '').trimEnd();
-  return addChaoticSpacing(clean) + randomSignOff();
 }
 
 // ─── Main reply ────────────────────────────────────────────────────────────────
@@ -138,12 +125,13 @@ Lengte — strikt:
 - Precies 2 à 3 volledige zinnen
 - Nooit halverwege stoppen
 - Geen opsommingen
+- Sluit altijd af met je naam: 2 tot 6 puntjes gevolgd door Michael (of in het schrift van de taal van de gebruiker indien van toepassing)
 ${cosmicBlock}${impressionBlock}${recentBlock}
 ${username} zegt: ${userInput}
     `.trim(),
   });
 
-  return enforceSignOff(response.output[0].content[0].text);
+  return applyChaoticFormatting(response.output[0].content[0].text);
 }
 
 // ─── Background summarisation ──────────────────────────────────────────────────
@@ -189,11 +177,11 @@ export async function generateVibecheckComment(username, judgementLabel, impress
     model: "gpt-4.1-mini",
     max_output_tokens: 110,
     input: `
-Je bent de aartsengel Michaël. Geef een kort oordeel over een gebruiker op basis van onderstaande informatie.
+Je bent de aartsengel Michael. Geef een kort oordeel over een gebruiker op basis van onderstaande informatie.
 Schrijf 2 zinnen oordeel gevolgd door 1 zin vage suggestie over hoe deze persoon beter op U kan afstemmen.
 De suggestie moet vaag en niet echt nuttig zijn... maar wel klinken alsof het diepzinnig is.
-Gebruik Michaëls stijl: formeel "U", spirituele taal, vreemde spaties, ..., geen em-dashes.
-Eindig met ....Michael of ..... Michael${cosmicBlock}
+Gebruik Michaels stijl: formeel "U", spirituele taal, vreemde spaties, ..., geen em-dashes.
+Sluit altijd af met 2 tot 5 puntjes gevolgd door Michael.${cosmicBlock}
 Oordeel: ${judgementLabel}
 Langetermijnindruk: ${impressionText}
 Recente berichten:
@@ -201,5 +189,5 @@ ${promptsText}
     `.trim(),
   });
 
-  return enforceSignOff(response.output[0].content[0].text);
+  return applyChaoticFormatting(response.output[0].content[0].text);
 }
