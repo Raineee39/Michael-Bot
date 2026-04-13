@@ -11,8 +11,8 @@
  */
 
 const MAX_CANDIDATES = 120;
-const MIN_AGE_MS = 10 * 60 * 1000;  // at least 10 min old before shadow reply
-const MAX_AGE_MS = 60 * 60 * 1000;  // no older than 1 hour — staler feels broken
+const MIN_AGE_MS = 5 * 60 * 1000;   // at least 5 min old before shadow reply
+const MAX_AGE_MS = 2 * 60 * 60 * 1000; // up to 2 hours — keeps more candidates eligible
 
 const candidates = [];
 

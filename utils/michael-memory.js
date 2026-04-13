@@ -85,6 +85,33 @@ export function loadAllMemory() {
   return loadAll();
 }
 
+/**
+ * Only update the last-known channel for a user.
+ * Used by the gateway listener so it doesn't pollute the prompt history.
+ */
+export function updateLastChannel(userId, channelId) {
+  const all = loadAll();
+  if (!all[userId]) return; // don't create stub records for unknown users
+  all[userId].lastChannelId = channelId;
+  saveAll(all);
+}
+
+/**
+ * Update mood and/or judgement score without adding an entry to the prompt log.
+ * Used by background systems (cron, delayed consequences) that shouldn't
+ * appear in the user's conversation history.
+ */
+export function patchUserState(userId, scoreDelta = 0, nextMoodVal = null) {
+  const all = loadAll();
+  const user = all[userId];
+  if (!user) return;
+  if (user.judgementScore === undefined) user.judgementScore = 0;
+  user.judgementScore += scoreDelta;
+  if (nextMoodVal !== null) user.currentMood = nextMoodVal;
+  all[userId] = user;
+  saveAll(all);
+}
+
 // ─── Summarisation helpers ────────────────────────────────────────────────────
 
 export function needsSummarisation(userId) {

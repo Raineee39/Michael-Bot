@@ -20,7 +20,7 @@
 import { WebSocket } from 'ws';
 import { DiscordRequest } from '../utils.js';
 import { addShadowCandidate } from './shadow-store.js';
-import { addUnfinishedBusiness, loadUserMemory, saveUserMemory } from './michael-memory.js';
+import { addUnfinishedBusiness, loadUserMemory, updateLastChannel } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
@@ -54,8 +54,9 @@ const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s
 // The original text is preserved — only a short "Edit: …" line is appended.
 
 async function maybeScheduleRevision(channelId, messageId, originalContent, mood) {
-  if (Math.random() > 0.12) return; // 12% chance
+  if (Math.random() > 0.25) return; // 25% chance
   const delay = 6000 + Math.floor(Math.random() * 14000); // 6–20 s
+  console.log(`[revision] scheduled for gateway message ${messageId} (fires in ~${Math.round(delay / 1000)}s)`);
   setTimeout(async () => {
     try {
       const editLine = await generatePostRevision(originalContent, mood);
@@ -63,9 +64,9 @@ async function maybeScheduleRevision(channelId, messageId, originalContent, mood
         method: 'PATCH',
         body: { content: `${originalContent}\n\n${editLine}` },
       });
-      console.log('[gateway] post-revision applied to', messageId);
+      console.log(`[revision] applied to gateway message ${messageId}: "${editLine.slice(0, 60)}"`);
     } catch (err) {
-      console.error('[gateway] post-revision failed:', err.message);
+      console.error('[revision] gateway post-revision failed:', err.message);
     }
   }, delay);
 }
@@ -126,13 +127,9 @@ export function startGateway() {
         // Feature 4 — Store every non-bot message as a potential shadow-reply target
         addShadowCandidate({ messageId: msg.id, channelId, authorId, content, timestamp: ts });
 
-        // Track the user's most-recently-active channel for delayed consequences
-        // Only update if they're already in memory (avoids creating ghost records)
-        const existing = loadUserMemory(authorId);
-        if (existing.username) {
-          // Pass null scoreDelta / nextMood so we only update lastChannelId
-          saveUserMemory(authorId, existing.username, '[channel-seen]', existing.currentMood ?? 'afwezig', 0, null, channelId);
-        }
+        // Track the user's most-recently-active channel so delayed consequences
+        // know where to post. Only updates if the user is already in memory.
+        updateLastChannel(authorId, channelId);
 
         // Only continue for messages that mention Michael
         if (!/michael/i.test(content)) return;
@@ -161,8 +158,8 @@ export function startGateway() {
           });
         }
 
-        // Standard 60% chance interjection
-        if (Math.random() > 0.60) return;
+        // 90% chance Michael interjects when his name is said
+        if (Math.random() > 0.90) return;
 
         const reply = MICHAEL_NAME_REPLIES[Math.floor(Math.random() * MICHAEL_NAME_REPLIES.length)];
 

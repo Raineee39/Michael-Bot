@@ -2,7 +2,7 @@
   "name": "michael-bot",
   "private": true,
   "version": "1.0.0",
-  "description": "Discord example app",
+  "description": "Aartsengel Michaël — Dutch spiritual boomer Discord bot",
   "main": "app.js",
   "type": "module",
   "engines": {
@@ -14,7 +14,7 @@
     "dev": "nodemon app.js",
     "deploy": "git pull && npm install && node commands.js && pm2 restart michael-bot --update-env"
   },
-  "author": "Shay DeWael",
+  "author": "lorraine",
   "license": "MIT",
   "dependencies": {
     "discord-interactions": "^4.0.0",

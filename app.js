@@ -12,14 +12,13 @@ import {
   verifyKeyMiddleware,
 } from 'discord-interactions';
 import { getRandomEmoji, DiscordRequest } from './utils.js';
-import { getShuffledOptions, getResult } from './game.js';
 import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter, generateDelayedConsequence, generatePostRevision } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap } from './utils/michael-memory.js';
-import { startGateway, MICHAEL_NAME_REPLIES } from './utils/gateway.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState } from './utils/michael-memory.js';
+import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
 
 function buildDateButtons(choices) {
@@ -74,12 +73,11 @@ async function buildUitverkoreneMessage(guildId) {
   return { content, embeds, chosenUserId: userId };
 }
 
-// Create an express app
 const app = express();
-// Get port, or default to 3000
 const PORT = process.env.PORT || 3000;
-// To keep track of our active games
-const activeGames = {};
+
+// Tiny helper — saves repeating Math.floor(Math.random()…) everywhere
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
 // Antichrist state — in memory, clears on restart (intentional)
 const antichristState = { userId: null, expiresAt: null };
@@ -87,28 +85,7 @@ const antichristState = { userId: null, expiresAt: null };
 // Current uitverkorene — whoever was last picked by /uitverkorene or the daily cron
 const uitverkoreneState = { userId: null };
 
-function isAntichrist(userId) {
-  if (!antichristState.userId) return false;
-  if (Date.now() > antichristState.expiresAt) {
-    antichristState.userId = null;
-    antichristState.expiresAt = null;
-    return false;
-  }
-  return antichristState.userId === userId;
-}
-
-function isUitverkorene(userId) {
-  return uitverkoreneState.userId != null && uitverkoreneState.userId === userId;
-}
-
-/** 'antichrist' wins over uitverkorene if someone is both (shouldn't happen) */
-function getCosmicRole(userId) {
-  if (isAntichrist(userId)) return 'antichrist';
-  if (isUitverkorene(userId)) return 'uitverkorene';
-  return null;
-}
-
-/** Active antichrist user id, or null (cleans up expired slot) */
+/** Returns the active antichrist userId, or null (also clears the slot if expired). */
 function getCurrentAntichristId() {
   if (!antichristState.userId) return null;
   if (Date.now() > antichristState.expiresAt) {
@@ -117,6 +94,21 @@ function getCurrentAntichristId() {
     return null;
   }
   return antichristState.userId;
+}
+
+function isAntichrist(userId) {
+  return getCurrentAntichristId() === userId;
+}
+
+function isUitverkorene(userId) {
+  return uitverkoreneState.userId !== null && uitverkoreneState.userId === userId;
+}
+
+/** 'antichrist' wins over uitverkorene if someone holds both (shouldn't happen). */
+function getCosmicRole(userId) {
+  if (isAntichrist(userId)) return 'antichrist';
+  if (isUitverkorene(userId)) return 'uitverkorene';
+  return null;
 }
 
 const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'praatmetmichael', 'vibecheck', 'cosmischestatus']);
@@ -312,9 +304,10 @@ const SHADOW_REPLY_LINES = [
 // After sending a message, Michael may quietly append a second thought.
 // The original content is always preserved — only an "Edit: …" line is added.
 
-async function schedulePostRevision(channelId, messageId, originalContent, mood) {
-  if (Math.random() > 0.10) return; // 10% chance for consequence messages
+async function schedulePostRevision(channelId, messageId, originalContent, mood, label = 'message') {
+  if (Math.random() > 0.20) return; // 20% chance
   const delay = 7000 + Math.floor(Math.random() * 13000); // 7–20 s
+  console.log(`[revision] scheduled for ${label} ${messageId} (fires in ~${Math.round(delay / 1000)}s)`);
   setTimeout(async () => {
     try {
       const editLine = await generatePostRevision(originalContent, mood);
@@ -322,9 +315,9 @@ async function schedulePostRevision(channelId, messageId, originalContent, mood)
         method: 'PATCH',
         body: { content: `${originalContent}\n\n${editLine}` },
       });
-      console.log('[revision] appended to consequence message', messageId);
+      console.log(`[revision] applied to ${label} ${messageId}: "${editLine.slice(0, 60)}"`);
     } catch (err) {
-      console.error('[revision] failed:', err.message);
+      console.error(`[revision] failed for ${label} ${messageId}:`, err.message);
     }
   }, delay);
 }
@@ -343,8 +336,7 @@ const CODE_REFUSALS = [
  * Parse request body and verifies incoming requests using discord-interactions package
  */
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async function (req, res) {
-  // Interaction id, type and data
-  const { id, type, data } = req.body;
+  const { type, data } = req.body;
 
   /**
    * Handle verification requests
@@ -358,9 +350,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   if (isAntichrist(invokingUserId) && !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)) {
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: NEE[Math.floor(Math.random() * NEE.length)],
-      },
+      data: { content: pick(NEE) },
     });
   }
 
@@ -472,27 +462,33 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "cosmischestatus" — who holds antichrist / uitverkorene (guild only)
+    // "cosmischestatus" — who holds antichrist / uitverkorene, + Michael's mood toward you
     if (name === 'cosmischestatus') {
+      const invokerId    = req.body.member?.user?.id ?? req.body.user?.id;
       const antichristId = getCurrentAntichristId();
-      const uitId = uitverkoreneState.userId;
-      const fireRow = "👹🔥👹🔥👹🔥👹🔥👹🔥";
-      const eyeRowStr = "⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️";
-      const calmRow = "✨👁️✨";
+      const uitId        = uitverkoreneState.userId;
+
+      const fireRow  = '👹🔥👹🔥👹🔥👹🔥👹🔥';
+      const eyeRow   = '⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️';
+      const calmRow  = '✨👁️✨';
 
       const antichristLine = antichristId
         ? `${fireRow}\n**DE ANTICHRIST**\n<@${antichristId}>\n*Het veld verstikt...  Michaël kijkt met afkeer...  dit is voor Uw eigen bestwil of niet....Michael*`
         : `${calmRow}\n**Geen actieve antichrist**\n*Het schild is open...  voor nu...  geniet ervan..Michael*`;
 
       const uitLine = uitId
-        ? `${eyeRowStr}\n**DE UITVERKORENE**\n<@${uitId}>\n*Het lot heeft gesproken...  wie U ook bent...  U bent het nu..Michael*`
-        : `${eyeRowStr}\n**Geen uitverkorene in het register**\n*Niemand draagt de bliksem vandaag...  dat kan veranderen..Michael*`;
+        ? `${eyeRow}\n**DE UITVERKORENE**\n<@${uitId}>\n*Het lot heeft gesproken...  wie U ook bent...  U bent het nu..Michael*`
+        : `${eyeRow}\n**Geen uitverkorene in het register**\n*Niemand draagt de bliksem vandaag...  dat kan veranderen..Michael*`;
 
-      const header = `${eyeRowStr}\n# COSMISCHE STATUS\n*Michaël deelt wat het universum toestaat te delen...*\n`;
+      const invokerMood  = loadUserMemory(invokerId).currentMood ?? 'afwezig';
+      const humeurLines  = MICHAEL_HUMEUR[invokerMood] ?? MICHAEL_HUMEUR['afwezig'];
+      const moodBlock    = `\n\n──────────────────\n**Michaëls stemming tegenover jou**\n${pick(humeurLines)}\n*Stemming: **${invokerMood}***`;
+
+      const header = `${eyeRow}\n# COSMISCHE STATUS\n*Michaël deelt wat het universum toestaat te delen...*\n`;
 
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `${header}\n${antichristLine}\n\n${uitLine}` },
+        data: { content: `${header}\n${antichristLine}\n\n${uitLine}${moodBlock}` },
       });
     }
 
@@ -506,33 +502,27 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       // Already calm — apology is unnecessary
       if (moodIdx <= 2) {
-        const line = APOLOGY_ALREADY_CALM[Math.floor(Math.random() * APOLOGY_ALREADY_CALM.length)];
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: line },
+          data: { content: pick(APOLOGY_ALREADY_CALM) },
         });
       }
 
-      // Woedend: harder to appease (40% chance). Calmer bad moods: easier (65% chance).
-      const forgivenessChance = currentMood === 'woedend' ? 0.40 : 0.65;
-      const forgiven = Math.random() < forgivenessChance;
+      // Woedend: harder to appease (40%). Calmer bad moods: easier (65%).
+      const forgiven = Math.random() < (currentMood === 'woedend' ? 0.40 : 0.65);
 
       if (forgiven) {
-        // Drop mood by 2 steps — meaningful but doesn't fully reset
         const newMood = MICHAEL_MOODS[Math.max(0, moodIdx - 2)];
-        saveUserMemory(userId, username, '[vergeefmij]', currentMood, 1, newMood);
-        const line = APOLOGY_ACCEPTED[Math.floor(Math.random() * APOLOGY_ACCEPTED.length)];
+        patchUserState(userId, 1, newMood);
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `🕊️✨🕊️✨🕊️\n${line}\n\n*Stemming verbeterd: **${currentMood}** → **${newMood}***` },
+          data: { content: `🕊️✨🕊️✨🕊️\n${pick(APOLOGY_ACCEPTED)}\n\n*Stemming verbeterd: **${currentMood}** → **${newMood}***` },
         });
       } else {
-        // Rejection — mood stays, score unchanged (trying to apologise shouldn't hurt you)
-        saveUserMemory(userId, username, '[vergeefmij]', currentMood, 0, currentMood);
-        const line = APOLOGY_REJECTED[Math.floor(Math.random() * APOLOGY_REJECTED.length)];
+        // Rejection — mood stays, score unchanged
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `🔥💢🔥💢🔥\n${line}\n\n*Stemming onveranderd: **${currentMood}***` },
+          data: { content: `🔥💢🔥💢🔥\n${pick(APOLOGY_REJECTED)}\n\n*Stemming onveranderd: **${currentMood}***` },
         });
       }
     }
@@ -540,13 +530,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     // "michaelhumeur" — shows Michael's current persistent mood toward this user
     if (name === 'michaelhumeur') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
-      const memory = loadUserMemory(userId);
-      const mood = memory.currentMood ?? 'afwezig';
-      const lines = MICHAEL_HUMEUR[mood] ?? MICHAEL_HUMEUR['afwezig'];
-      const line = lines[Math.floor(Math.random() * lines.length)];
+      const mood   = loadUserMemory(userId).currentMood ?? 'afwezig';
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `${line}\n\n*Huidige stemming: **${mood}***` },
+        data: { content: `${pick(MICHAEL_HUMEUR[mood] ?? MICHAEL_HUMEUR['afwezig'])}\n\n*Huidige stemming: **${mood}***` },
       });
     }
 
@@ -615,7 +602,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           username,
           label,
           memory.impression ?? null,
-          memory.prompts.slice(-3),
+          memory.prompts.filter(p => !p.startsWith('[')).slice(-3),
           getCosmicRole(userId),
         );
 
@@ -662,15 +649,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         '🌙🔱🌙🔱🌙🔱🌙🔱\n# MICHAËL STEMT AF   OP UW TRILLING\n🌙🔱🌙🔱🌙🔱🌙🔱',
         '✨👁️✨👁️✨👁️✨👁️\n# HET HOGERE KANAAL   STAAT OPEN\n✨👁️✨👁️✨👁️✨👁️',
       ];
-      const placeholder = MICHAEL_PLACEHOLDERS[Math.floor(Math.random() * MICHAEL_PLACEHOLDERS.length)];
       res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `> ${safeInput}\n\n${placeholder}` },
+        data: { content: `> ${safeInput}\n\n${pick(MICHAEL_PLACEHOLDERS)}` },
       });
 
       // Feature 3 — Bait / forcing-Michael trap: respond coldly and queue unfinished business
       if (BAIT_RE.test(userInput)) {
-        const dismissal = BAIT_DISMISSALS[Math.floor(Math.random() * BAIT_DISMISSALS.length)];
         saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
@@ -680,14 +665,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${dismissal}` },
+          body: { content: `> ${safeInput}\n\n${pick(BAIT_DISMISSALS)}` },
         });
         return;
       }
 
       // Code / technical request — refuse in-character, queue unfinished business
       if (CODE_REQUEST_RE.test(userInput)) {
-        const refusal = CODE_REFUSALS[Math.floor(Math.random() * CODE_REFUSALS.length)];
         saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
@@ -697,18 +681,17 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${refusal}` },
+          body: { content: `> ${safeInput}\n\n${pick(CODE_REFUSALS)}` },
         });
         return;
       }
 
       // ~15% chance Michael refuses outright — no OpenAI call
       if (Math.random() < 0.15) {
-        const refusal = MICHAEL_REFUSALS[Math.floor(Math.random() * MICHAEL_REFUSALS.length)];
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${refusal}` },
+          body: { content: `> ${safeInput}\n\n${pick(MICHAEL_REFUSALS)}` },
         });
         return;
       }
@@ -723,11 +706,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       }
 
       try {
-        const memory = loadUserMemory(userId);
-        const judgementLabel = getJudgementLabel(memory.judgementScore ?? 0);
-        const memorySummary = memory.prompts.length
-          ? memory.prompts.slice(-3).join(' / ')
-          : null;
+        // Reuse already-loaded memory — avoid a second file read
+        const judgementLabel = getJudgementLabel(preMemory.judgementScore ?? 0);
+        // Filter out internal system entries ([vergeefmij], [date:…], etc.) from the summary
+        const realPrompts = preMemory.prompts.filter(p => !p.startsWith('['));
+        const memorySummary = realPrompts.length ? realPrompts.slice(-3).join(' / ') : null;
         const cosmicRole = getCosmicRole(userId);
 
         // Feature 2 — Contradiction engine: detect if user is revisiting a theme
@@ -735,12 +718,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         // Run message generation and AI scoring in parallel — no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
-          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null, cosmicRole, contradictionHint),
+          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint),
           scoreMichaelMessage(userInput),
         ]);
 
-        const newScore = (memory.judgementScore ?? 0) + scoreDelta;
-        console.log(`[score] ${username} | mood: ${mood} | delta: ${scoreDelta} | score: ${memory.judgementScore ?? 0} → ${newScore} | input: "${userInput.slice(0, 60)}" | contradiction: ${contradictionHint}`);
+        const oldScore = preMemory.judgementScore ?? 0;
+        console.log(`[score] ${username} | mood: ${mood} | delta: ${scoreDelta} | score: ${oldScore} → ${oldScore + scoreDelta} | input: "${userInput.slice(0, 60)}" | contradiction: ${contradictionHint}`);
+
+        // Save first so the user record exists before addUnfinishedBusiness / addTheme write to it
+        saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId);
 
         // Feature 1 — Create unfinished business for negative interactions
         if (scoreDelta <= -2 || INSULT_RE.test(userInput)) {
@@ -762,8 +748,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Feature 2 — Store theme snapshot for future contradiction detection
         addTheme(userId, userInput);
 
-        saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId);
-
         // Fire-and-forget summarisation once the message buffer fills up
         if (needsSummarisation(userId)) {
           const fresh = loadUserMemory(userId);
@@ -784,6 +768,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           method: 'PATCH',
           body: patchBody,
         });
+
+        // Feature 5 — Post-message revision: fetch the sent message ID then maybe append an edit
+        if (channelId) {
+          try {
+            const getMsgRes = await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, { method: 'GET' });
+            const sentMsg = await getMsgRes.json();
+            if (sentMsg?.id) {
+              schedulePostRevision(channelId, sentMsg.id, `> ${safeInput}\n\n${michaelMessage}`, mood, 'praatmetmichael');
+            }
+          } catch {
+            // non-critical — skip revision if we can't fetch the message ID
+          }
+        }
       } catch (err) {
         console.error('praatmetmichael error:', err);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
@@ -925,9 +922,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 //      A global 25-minute cooldown prevents back-to-back firings.
 
 let lastConsequenceAt = 0;
-const CONSEQUENCE_COOLDOWN_MS = 25 * 60 * 1000; // 25 min between consequence firings
+const CONSEQUENCE_COOLDOWN_MS = 12 * 60 * 1000; // 12 min between consequence firings
 
-cron.schedule('*/30 * * * *', async () => {
+cron.schedule('*/15 * * * *', async () => {
   // 1. Prune stale shadow candidates
   pruneOldCandidates();
 
@@ -1012,14 +1009,14 @@ cron.schedule('*/30 * * * *', async () => {
       markBusinessMentioned(userId, item.id);
     }
 
-    // Slightly darken mood for lingering resentment
-    saveUserMemory(userId, user.username || userId, '[delayed-consequence]', mood, -1, nextMood(mood, -1));
+    // Slightly darken mood for lingering resentment — don't add to prompt history
+    patchUserState(userId, -1, nextMood(mood, -1));
 
     console.log(`[consequence] fired for ${user.username || userId} | "${item.prompt.slice(0, 50)}" | channel ${targetChannel}`);
 
     // Feature 5 — maybe append a post-revision edit to the consequence message
     if (sentMsg?.id) {
-      schedulePostRevision(targetChannel, sentMsg.id, message, mood);
+      schedulePostRevision(targetChannel, sentMsg.id, message, mood, 'consequence');
     }
   } catch (err) {
     console.error('[consequence] failed:', err.message);
