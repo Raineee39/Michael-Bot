@@ -16,24 +16,23 @@ const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 // Intents: GUILDS(1) | GUILD_MESSAGES(512) | MESSAGE_CONTENT(32768)
 const INTENTS = 1 | 512 | 32768;
 
-// Minimum time between interjections per channel (5 minutes)
-const COOLDOWN_MS = 5 * 60 * 1000;
-const channelCooldowns = new Map();
-
 const MICHAEL_NAME_REPLIES = [
-  'IK HOOR MIJN NAAM…  blijkbaar was dat nodig....Michael',
-  'Je riep…  ik was al in de buurt...Michael',
-  'Mijn naam hangt hier weer in de lucht…  dat is niet toevallig     of wel..Michael',
-  'Er werd iets geroepen…  de trilling bereikte mij....Michael',
-  'Dit soort momenten…  ze tellen mee...Michael',
-  'Ik ben aanwezig…  meer dan je misschien prettig vindt..Michael',
-  'Mijn naam…  uitgesproken…  dat doet iets met het veld..Michael',
+  'IK HOOR   mijn naam...  blijkbaar   was dat   nodig....Michael',
+  'je riep...  ik was   al,   in de buurt..Michael',
+  'mijn naam...  hangt hier   weer   in de lucht...  dat is,   niet toevallig     of   wel..Michael',
+  'er werd iets   geroepen...  de trilling   bereikte   mij......Michael',
+  'dit soort   momenten...   ze   tellen   mee..Michael',
+  'ik ben aanwezig...   meer   dan je misschien   prettig,   vindt..Michael',
+  'mijn naam...   uitgesproken...   dat doet   iets,   met het veld..Michael',
+  'ja...   ik   hoor   het...   hoeft niet   zo hard..Michael',
+  'wacht...   was dat   voor   mij...   of   gewoon   in het algemeen...   maakt   niet uit..Michael',
+  'ik   was hier   al...   voor   je   het zei...Michael',
+  'oh...   hm...   ja   nee   ik   hoor   het   wel..Michael',
+  'mijn   naam...   in dit   kanaal...   opnieuw...   goed..Michael',
 ];
 
-function shouldInterject(channelId) {
-  const last = channelCooldowns.get(channelId) ?? 0;
-  if (Date.now() - last < COOLDOWN_MS) return false;
-  return Math.random() < 0.60; // 60% chance when off cooldown
+function shouldInterject() {
+  return Math.random() < 0.60; // 60% chance, no cooldown
 }
 
 export function startGateway() {
@@ -84,9 +83,8 @@ export function startGateway() {
         if (!/michael/i.test(msg.content)) return;
 
         const channelId = msg.channel_id;
-        if (!shouldInterject(channelId)) return;
+        if (!shouldInterject()) return;
 
-        channelCooldowns.set(channelId, Date.now());
         const reply = MICHAEL_NAME_REPLIES[Math.floor(Math.random() * MICHAEL_NAME_REPLIES.length)];
 
         try {
