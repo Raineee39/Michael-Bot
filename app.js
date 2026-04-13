@@ -15,6 +15,7 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS } from './date.js';
+import { generateMichaelMessage } from './utils/openai.js';
 
 function buildDateButtons(choices) {
   return {
@@ -223,6 +224,20 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           components: [buildDateButtons(ROUND_1.choices.map(c => ({ ...c, custom_id: `date_r1_${c.id}` })))],
         },
       });
+    }
+
+    // "praatmetmichael" command
+    if (name === 'praatmetmichael') {
+      const userInput = data.options.find(o => o.name === 'bericht').value;
+
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+
+      const message = await generateMichaelMessage(req.body.member?.user?.username ?? req.body.user?.username, userInput);
+      await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+        method: 'PATCH',
+        body: { content: message },
+      });
+      return;
     }
 
     console.error(`unknown command: ${name}`);
