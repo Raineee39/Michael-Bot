@@ -23,7 +23,7 @@ function saveAll(data) {
 }
 
 function defaultUser(username) {
-  return { username, prompts: [], moods: [], judgementScore: 0, impression: null };
+  return { username, prompts: [], moods: [], judgementScore: 0, impression: null, currentMood: null };
 }
 
 export function loadUserMemory(userId) {
@@ -31,10 +31,12 @@ export function loadUserMemory(userId) {
   const user = all[userId] ?? defaultUser('');
   if (user.judgementScore === undefined) user.judgementScore = 0;
   if (user.impression === undefined) user.impression = null;
+  if (user.currentMood === undefined) user.currentMood = null;
   return user;
 }
 
-export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0) {
+// nextMood: the mood Michael will carry into the NEXT conversation with this user
+export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0, nextMood = null) {
   const all = loadAll();
   const user = all[userId] ?? defaultUser(username);
   user.username = username;
@@ -43,6 +45,7 @@ export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0) {
   if (user.judgementScore === undefined) user.judgementScore = 0;
   if (user.impression === undefined) user.impression = null;
   user.judgementScore += scoreDelta;
+  if (nextMood !== null) user.currentMood = nextMood;
   all[userId] = user;
   saveAll(all);
 }

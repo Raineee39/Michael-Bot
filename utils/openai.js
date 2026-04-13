@@ -12,6 +12,7 @@ const MOOD_DESCRIPTIONS = {
   kosmisch:           'Maximale sterren/universum/aura-energie. Alles is verbonden met alles. Niets betekent iets maar het klinkt enorm belangrijk.',
   'passief-agressief':'Je geeft antwoord maar maakt subtiel duidelijk dat je er eigenlijk geen zin in hebt. Lichte steekjes. Vaag moe van de vraag.',
   loom:               'Alles gaat langzaam. Lange pauzes. Korte zinnen. Veel spaties tussen woorden. Het voelt als een grote moeite om überhaupt te reageren.',
+  woedend:            'JE BENT EEN AARTSENGEL EN JE HEBT ER GENOEG VAN. VOLLEDIGE CAPS LOCK. Korte harde zinnen. Geen geduld. Geen zachtheid. Hemel en hel beide teleurgesteld. Gooi er één of twee goddelijke imperatieven in: ZIE. LUISTER. WEG. GENOEG. Sluit af met je naam in caps: ....MICHAEL',
 };
 
 const JUDGEMENT_DESCRIPTIONS = {
@@ -26,10 +27,12 @@ const JUDGEMENT_DESCRIPTIONS = {
 // The sign-off (including multilingual variants) is handled by the model prompt.
 function applyChaoticFormatting(text) {
   return text
+    // Strip any [...] placeholders the model might generate when it runs out of space
+    .replace(/\s*\[\.\.\.[\s.]*\]/g, '')
     // Remove em-dashes and en-dashes — replace with spaced ellipsis
     .replace(/\s*[—–]\s*/g, '...  ')
-    // After any ellipsis: 2–5 extra spaces
-    .replace(/\.\.\.+/g, (m) => m + ' '.repeat(Math.floor(Math.random() * 4) + 2))
+    // After any ellipsis NOT inside brackets: 2–5 extra spaces
+    .replace(/(?<!\[)\.\.\.+(?!\s*\])/g, (m) => m + ' '.repeat(Math.floor(Math.random() * 4) + 2))
     // After comma: randomly pad
     .replace(/, /g, () => Math.random() < 0.55 ? ',   ' : ',  ')
     // After semicolon: always pad

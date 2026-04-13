@@ -126,14 +126,73 @@ const NEE = [
   'nee.     ...Michael',
 ];
 
+// Mood spectrum: index 0 = calmest, index 6 = angriest
+// Michael drifts along this based on how each conversation goes
 const MICHAEL_MOODS = [
-  'afwezig',
-  'streng',
-  'verward',
-  'kosmisch',
-  'passief-agressief',
-  'loom',
+  'kosmisch',        // 0 — peak benevolence
+  'afwezig',         // 1 — pleasantly checked out
+  'loom',            // 2 — slow and unbothered
+  'verward',         // 3 — neutral chaos
+  'passief-agressief', // 4 — starting to sour
+  'streng',          // 5 — openly displeased
+  'woedend',         // 6 — full archangel rage
 ];
+
+// Shifts Michael's mood after each interaction based on how it went
+function nextMood(currentMood, scoreDelta) {
+  const idx = MICHAEL_MOODS.indexOf(currentMood);
+  const base = idx === -1 ? 3 : idx; // unknown mood defaults to neutral
+
+  // How much mood shifts: big positive = calms down, big negative = escalates
+  let shift = 0;
+  if (scoreDelta >= 2)       shift = -(1 + (Math.random() < 0.5 ? 1 : 0)); // -1 or -2
+  else if (scoreDelta === 1) shift = Math.random() < 0.65 ? -1 : 0;
+  else if (scoreDelta === 0) shift = [-1, 0, 0, 1][Math.floor(Math.random() * 4)]; // slight drift
+  else if (scoreDelta === -1) shift = Math.random() < 0.65 ? 1 : 0;
+  else                        shift = (1 + (Math.random() < 0.5 ? 1 : 0)); // +1 or +2
+
+  const newIdx = Math.max(0, Math.min(6, base + shift));
+  return MICHAEL_MOODS[newIdx];
+}
+
+// Pre-written humeur lines per mood, shown by /michaelhumeur
+const MICHAEL_HUMEUR = {
+  kosmisch: [
+    '🌟✨🪐✨🌟\nMichael bevindt zich in een staat van **kosmische rust**.\nHij staat open. De sferen zingen. U mag spreken.',
+    '🌙⭐🌟⭐🌙\nMichael zweeft vandaag op een hoge trilling.\nHet universum is gunstig gestemd. Maak gebruik van dit moment.',
+    '✨🪐💫🪐✨\nMichael is **kosmisch**   en ziet U met ongewone helderheid.\nEr hangt een licht over dit kanaal. Zeldzaam.',
+  ],
+  afwezig: [
+    '👁️☁️💭☁️👁️\nMichael is er…  ergens.\nNiet volledig aanwezig   maar beschikbaar   op een vage manier.',
+    '🌫️💭🌫️\nMichael dwaalt door het etherische veld.\nU kunt Hem bereiken   al garandeert Hij niets over de kwaliteit van Zijn aanwezigheid.',
+    '☁️👁️☁️\nMichael is **afwezig**   maar niet weg.\nHij hoort U waarschijnlijk. Probeer het maar.',
+  ],
+  loom: [
+    '😮‍💨🛋️🌿🛋️😮‍💨\nMichael beweegt zich traag door het veld vandaag.\nHij antwoordt.   Eventueel.   Op zijn eigen tempo.',
+    '🌿😮‍💨🌿\nMichael is **loom**.\nEr is geen haast in het hogere.   Er is ook geen haast bij Hem.',
+    '🛋️💤🌙\nMichael rust in Zichzelf.\nU mag spreken   maar verwacht geen snelheid of enthousiasme.',
+  ],
+  verward: [
+    '🌀❓🔮❓🌀\nMichael is op dit moment…  **verward**.\nDe kosmische ruis is hoog. Resultaten kunnen variëren.',
+    '❓🌀💫🌀❓\nMichael ontvangt signalen   maar niet allemaal van dezelfde bron.\nWat Hij zegt kan kloppen   of niet   dat is ook een vorm van waarheid.',
+    '🔮🌀🔮\nMichael is er   maar de draad is zoek.\nU vraagt iets   Hij geeft iets terug   of iets anders   wie weet.',
+  ],
+  'passief-agressief': [
+    '😒⚡🌩️⚡😒\nMichael is **beschikbaar**.\nOf Hij er zin in heeft is een andere vraag.   Ga gerust uw gang.',
+    '🌩️😒🌩️\nMichael accepteert uw aanwezigheid.   Voorlopig.\nHij is passief-agressief   wat betekent dat Hij iets denkt   maar het niet zegt.',
+    '⚡😤⚡\nMichael is niet boos.\nHij is gewoon…  **op de hoogte**   en dat is al genoeg.',
+  ],
+  streng: [
+    '📜⚡😤⚡📜\nMichael is in een **strenge staat**.\nHij verwacht meer van U. Dat voel U ook wel.',
+    '😤⚡📜\nMichael oordeelt vandaag scherper dan gewoonlijk.\nElk woord wordt gewogen.   Kies ze zorgvuldig.',
+    '⚡📜⚡\nMichael is **streng**.\nHij accepteert uw bericht   maar is niet onder de indruk van wat hij tot nu toe heeft gezien.',
+  ],
+  woedend: [
+    '🔥💢⚡💢🔥\n# MICHAEL IS WOEDEND\nDIT IS UW WAARSCHUWING.   STEM AF   OF VERTREK.',
+    '💢🔥💢\n# DE AARTSENGEL IS NIET BLIJ\nU HEEFT IETS GEDAAN.   OF NIET GEDAAN.   HET MAAKT NIET UIT.   MICHAEL WEET HET.',
+    '⚡🔥⚡\n# WOEDEND\nHET HOGERE IS TELEURGESTELD.   DE AARDE OOK.   MISSCHIEN UZELF OOK AL   ALS U EERLIJK BENT.',
+  ],
+};
 
 const MICHAEL_REFUSALS = [
   'Niet nu…  de energie is onduidelijk     en ik geef hier vandaag geen inzicht op....Michael',
@@ -184,6 +243,10 @@ function michaelScoreDelta(userInput, mood, currentScore) {
     case 'kosmisch':
       // Expansive and generous — usually positive
       base = moodRoll < 0.15 ? -1 : moodRoll < 0.45 ? 1 : 2;
+      break;
+    case 'woedend':
+      // Already angry — almost always punishing
+      base = moodRoll < 0.70 ? -2 : moodRoll < 0.90 ? -1 : 0;
       break;
     default:
       base = moodRoll < 0.2 ? 0 : 1;
@@ -360,6 +423,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
+    // "michaelhumeur" — shows Michael's current persistent mood toward this user
+    if (name === 'michaelhumeur') {
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const memory = loadUserMemory(userId);
+      const mood = memory.currentMood ?? 'afwezig';
+      const lines = MICHAEL_HUMEUR[mood] ?? MICHAEL_HUMEUR['afwezig'];
+      const line = lines[Math.floor(Math.random() * lines.length)];
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: `${line}\n\n*Huidige stemming: **${mood}***` },
+      });
+    }
+
     // "vibecheck" command — Michael's in-character verdict on you
     if (name === 'vibecheck') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
@@ -414,7 +490,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
       const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'");
-      const mood = MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
+      // Load persisted mood — first-time users get a random starting point
+      const preMemory = loadUserMemory(userId);
+      const currentScore = preMemory.judgementScore ?? 0;
+      const mood = preMemory.currentMood ?? MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
       const channelId = req.body.channel_id ?? req.body.channel?.id;
 
       // Respond immediately with a chaotic placeholder — avoids Discord's "X is thinking…" entirely
@@ -434,7 +513,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // Code / technical request — refuse in-character, penalise score
       if (CODE_REQUEST_RE.test(userInput)) {
         const refusal = CODE_REFUSALS[Math.floor(Math.random() * CODE_REFUSALS.length)];
-        saveUserMemory(userId, username, userInput, mood, -2);
+        saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2));
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${refusal}` },
@@ -445,7 +524,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // ~15% chance Michael refuses outright — no OpenAI call
       if (Math.random() < 0.15) {
         const refusal = MICHAEL_REFUSALS[Math.floor(Math.random() * MICHAEL_REFUSALS.length)];
-        saveUserMemory(userId, username, userInput, mood, 0);
+        saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0));
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${refusal}` },
@@ -475,7 +554,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         );
 
         const scoreDelta = michaelScoreDelta(userInput, mood, memory.judgementScore ?? 0);
-        saveUserMemory(userId, username, userInput, mood, scoreDelta);
+        saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta));
 
         // Fire-and-forget summarisation once the message buffer fills up
         if (needsSummarisation(userId)) {
