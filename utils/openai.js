@@ -172,7 +172,8 @@ export async function scoreMichaelMessage(userInput) {
   try {
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
-      max_output_tokens: 5,
+      max_output_tokens: 10,
+      temperature: 0,
       input: `
 Beoordeel dit bericht op een schaal van -2 tot +2 op basis van de intentie en toon.
 Wees ROYAAL met positieve scores — twijfel je tussen 0 en +1, kies dan +1.
@@ -197,8 +198,9 @@ Reageer ALLEEN met één getal: -2, -1, 0, 1 of 2. Niets anders.
       `.trim(),
     });
     const raw = response.output[0].content[0].text.trim();
-    // Extract the first -2/-1/0/1/2 found anywhere in the response
-    const match = raw.match(/-2|-1|0|1|2/);
+    console.log('[scoring] raw output:', JSON.stringify(raw));
+    // Extract the first valid score found anywhere in the response
+    const match = raw.match(/-2|-1|\+2|\+1|2|1|0/);
     if (match) {
       const parsed = parseInt(match[0], 10);
       if ([-2, -1, 0, 1, 2].includes(parsed)) return parsed;
