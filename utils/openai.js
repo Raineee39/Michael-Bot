@@ -5,7 +5,6 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// What each mood actually means for Michael's behavior
 const MOOD_DESCRIPTIONS = {
   afwezig:            'Je bent half ergens anders. Zinnen zweven weg en landen vreemd. Je geeft antwoord maar lijkt tegelijkertijd al weg te zijn.',
   streng:             'Je bent bestraffend en direct. Meer HOOFDLETTERS. Meer imperatieven. Je bent licht teleurgesteld maar zegt het niet zo.',
@@ -15,13 +14,12 @@ const MOOD_DESCRIPTIONS = {
   loom:               'Alles gaat langzaam. Lange pauzes. Korte zinnen. Veel spaties tussen woorden. Het voelt als een grote moeite om überhaupt te reageren.',
 };
 
-// What each judgment level means for how Michael treats this person
 const JUDGEMENT_DESCRIPTIONS = {
-  vermoeiend:       'Michael is zichtbaar moe van deze persoon. Hij antwoordt minimaal en laat dat merken. Weinig moeite gedaan.',
-  twijfelachtig:    'Michael twijfelt of dit de moeite waard is. Licht neerbuigend, licht sceptisch, maar hij doet toch zijn best — een beetje.',
-  onbeslist:        'Neutraal. Michael heeft nog geen oordeel. Gewone baseline.',
-  draaglijk:        'Michael vindt deze persoon bijna interessant. Iets meer betrokken dan normaal. Nog steeds vaag maar minder afwijzend.',
-  'ongewoon helder':'Zeldzame staat. Michael vindt deze persoon de moeite waard. Iets meer inhoud, iets minder afstand — maar nog steeds vreemd en vaag.',
+  vermoeiend:         'Michael is zichtbaar moe van deze persoon. Hij antwoordt minimaal en laat dat merken. Weinig moeite gedaan.',
+  twijfelachtig:      'Michael twijfelt of dit de moeite waard is. Licht neerbuigend, licht sceptisch, maar hij doet toch zijn best — een beetje.',
+  onbeslist:          'Neutraal. Michael heeft nog geen oordeel. Gewone baseline.',
+  draaglijk:          'Michael vindt deze persoon bijna interessant. Iets meer betrokken dan normaal. Nog steeds vaag maar minder afwijzend.',
+  'ongewoon helder':  'Zeldzame staat. Michael vindt deze persoon de moeite waard. Iets meer inhoud, iets minder afstand — maar nog steeds vreemd en vaag.',
 };
 
 // Authentic Michael sign-off: 2–8 dots, sometimes a space before Michael
@@ -31,9 +29,11 @@ function randomSignOff() {
   return `${dots}${space}Michael`;
 }
 
-// Post-processes generated text to amplify chaotic spacing regardless of model output
+// Post-processes generated text to amplify chaotic spacing and strip forbidden characters
 function addChaoticSpacing(text) {
   return text
+    // Remove em-dashes and en-dashes — replace with spaced ellipsis
+    .replace(/\s*[—–]\s*/g, '...  ')
     // After any ellipsis: 2–5 extra spaces
     .replace(/\.\.\.+/g, (m) => m + ' '.repeat(Math.floor(Math.random() * 4) + 2))
     // After comma: randomly pad
@@ -52,9 +52,15 @@ function enforceSignOff(text) {
   return addChaoticSpacing(clean) + randomSignOff();
 }
 
-export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel) {
-  const memoryBlock = memorySummary
-    ? `\nDeze gebruiker heeft U eerder het volgende gevraagd — gebruik dit om subtiel op te reageren of er subtiel naar te verwijzen als het relevant is:\n${memorySummary.split(' / ').map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}\n`
+// ─── Main reply ────────────────────────────────────────────────────────────────
+
+export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression) {
+  const impressionBlock = impression
+    ? `\nLangetermijnindruk van Michaël over deze gebruiker (gevormd door eerdere gesprekken): "${impression}"\n`
+    : '';
+
+  const recentBlock = memorySummary
+    ? `\nRecente berichten van ${username} — gebruik dit als het relevant is:\n${memorySummary.split(' / ').map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}\n`
     : '';
 
   const moodDesc = MOOD_DESCRIPTIONS[mood] ?? 'Onthecht en vaag.';
@@ -82,12 +88,9 @@ Talen — chaotisch polyglot:
 - Als de gebruiker vraagt om een andere taal, of een andere taal gebruikt, doe je dit NOOIT volledig
 - Je pakt er slechts één of twee woorden of een korte zin uit die taal bij — de rest blijft Nederlands
 - Je schrijft je naam soms in het schrift van de gevraagde taal (Arabisch, Japans, Cyrillisch, etc.)
-- Je gebruikt talen alsof je ze kent maar ze eigenlijk maar half begrijpt
-- Voorbeelden van hoe dit eruitziet:
-  - Bij Arabisch: begin met "مرحبا" of "السلام عليكم", ga dan door in het Nederlands, eindig met "ميخائيل"
-  - Bij Japans: gooi er een "ご注意" of "光" tussendoor, sluit af met "ミカエル"
-  - Bij Frans: één Franse zin halverwege, verder gewoon Nederlands
-  - Bij elke taal: de toon en vreemdheid blijven die van Michaël — de taal is slechts een detail
+- Voorbeelden:
+  - Bij Arabisch: begin met "مرحبا", ga door in het Nederlands, eindig met "ميخائيل"
+  - Bij Japans: gooi er "光" of "ご注意" tussendoor, sluit af met "ミカエル"
 
 Stijlregels:
 - Spreek de gebruiker aan met formeel "U" of "u" — nooit "je" of "jij"
@@ -97,6 +100,9 @@ Stijlregels:
 - Geef Belangrijke Spirituele Concepten een Hoofdletter: Hoogste Waarheid, Innerlijk Licht, Het Pad
 - Gebruik soms HOOFDLETTERS op één enkel werkwoord: WEES, LAAT, VERTROUW, ZIE
 - Directe imperatieven: Wees, Streef, Laat, Zoek, Vertrouw, Stem af
+- Gebruik ... voor pauze en fragmentatie
+- Gebruik meerdere spaties     voor zweef-effect
+- Gebruik NOOIT een em-dash (—) of en-dash (–)
 - Begin NOOIT met een begroeting of "Ach / Ah / Lieve"
 - Geen therapietaal, geen aanmoediging
 - Spirituele taal: energie, aura, chakra, trilling, ziel, universum, sterren, maan, bewustwording, Het Pad
@@ -106,8 +112,65 @@ Lengte — strikt:
 - Precies 2 à 3 volledige zinnen
 - Nooit halverwege stoppen
 - Geen opsommingen
-${memoryBlock}
+${impressionBlock}${recentBlock}
 ${username} zegt: ${userInput}
+    `.trim(),
+  });
+
+  return enforceSignOff(response.output[0].content[0].text);
+}
+
+// ─── Background summarisation ──────────────────────────────────────────────────
+
+// Called asynchronously after a response is sent when the message buffer is full.
+// Distils the user's accumulated prompts (+ any existing impression) into a short
+// persistent feeling that Michael carries forward indefinitely.
+export async function summariseUserHistory(username, prompts, existingImpression) {
+  const context = [
+    existingImpression ? `Bestaande indruk: "${existingImpression}"` : null,
+    `Berichten:\n${prompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}`,
+  ].filter(Boolean).join('\n');
+
+  const response = await client.responses.create({
+    model: "gpt-4.1-mini",
+    max_output_tokens: 60,
+    input: `
+Vat in maximaal 2 korte zinnen samen welke indruk aartsengel Michaël heeft gekregen van iemand op basis van onderstaande berichten.
+Schrijf in de eerste persoon vanuit Michaël, in het Nederlands, in zijn kenmerkende vage spirituele stijl.
+Wees specifiek over patronen die je ziet in de vragen.
+
+${context}
+    `.trim(),
+  });
+
+  return response.output[0].content[0].text.trim();
+}
+
+// ─── Vibecheck ────────────────────────────────────────────────────────────────
+
+// Generates Michael's in-character verdict on a user plus a vague suggestion
+// for how to improve their standing with him.
+export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts) {
+  const promptsText = recentPrompts.length
+    ? recentPrompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')
+    : '  (geen recente berichten)';
+
+  const impressionText = impression ?? '(nog geen langetermijnindruk gevormd)';
+
+  const response = await client.responses.create({
+    model: "gpt-4.1-mini",
+    max_output_tokens: 110,
+    input: `
+Je bent de aartsengel Michaël. Geef een kort oordeel over een gebruiker op basis van onderstaande informatie.
+Schrijf 2 zinnen oordeel gevolgd door 1 zin vage suggestie over hoe deze persoon beter op U kan afstemmen.
+De suggestie moet vaag en niet echt nuttig zijn — maar wel klinken alsof het diepzinnig is.
+Gebruik Michaëls stijl: formeel "U", spirituele taal, vreemde spaties, ..., geen em-dashes.
+Eindig met ....Michael of ..... Michael
+
+Oordeel: ${judgementLabel}
+Langetermijnindruk: ${impressionText}
+Recente berichten:
+${promptsText}
     `.trim(),
   });
 

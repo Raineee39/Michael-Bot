@@ -15,8 +15,8 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS } from './date.js';
-import { generateMichaelMessage } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel } from './utils/michael-memory.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment } from './utils/openai.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression } from './utils/michael-memory.js';
 import { startGateway } from './utils/gateway.js';
 
 function buildDateButtons(choices) {
@@ -258,9 +258,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "michaelgeheugen" command — shows what Michael remembers and thinks of you
-    if (name === 'michaelgeheugen') {
+    // "vibecheck" command — Michael's in-character verdict on you
+    if (name === 'vibecheck') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
       const memory = loadUserMemory(userId);
       const label = getJudgementLabel(memory.judgementScore ?? 0);
 
@@ -273,20 +274,35 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         return '🟩🟩🟩🟩🟩';
       })();
 
-      const recentPrompts = memory.prompts.length
-        ? memory.prompts.map((p, i) => `  ${i + 1}. *${p}*`).join('\n')
-        : '  *(niets)*';
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
-      const lines = [
-        `**Michaëls oordeel:** ${label}   ${scoreBar}   *(score: ${memory.judgementScore ?? 0})*`,
-        `**Recente berichten die hij onthoudt:**`,
-        recentPrompts,
-      ];
+      try {
+        const comment = await generateVibecheckComment(
+          username,
+          label,
+          memory.impression ?? null,
+          memory.prompts.slice(-3),
+        );
 
-      return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: lines.join('\n') },
-      });
+        const lines = [
+          `**Michaëls oordeel over ${username}:** ${label}   ${scoreBar}   *(score: ${memory.judgementScore ?? 0})*`,
+          memory.impression ? `**Langetermijnindruk:** *${memory.impression}*` : null,
+          ``,
+          comment,
+        ].filter(l => l !== null);
+
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: lines.join('\n') },
+        });
+      } catch (err) {
+        console.error('vibecheck error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael' },
+        });
+      }
+      return;
     }
 
     // "praatmetmichael" command
@@ -350,11 +366,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           ? memory.prompts.slice(-3).join(' / ')
           : null;
 
-        const michaelMessage = await generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel);
+        const michaelMessage = await generateMichaelMessage(
+          username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null,
+        );
 
         // Short/vague input lowers patience; normal input nudges it up
         const scoreDelta = userInput.trim().length < 5 ? -1 : 1;
         saveUserMemory(userId, username, userInput, mood, scoreDelta);
+
+        // Fire-and-forget summarisation once the message buffer fills up
+        if (needsSummarisation(userId)) {
+          const fresh = loadUserMemory(userId);
+          summariseUserHistory(username, fresh.prompts, fresh.impression)
+            .then(imp => updateImpression(userId, imp))
+            .catch(err => console.error('Summarisation failed:', err));
+        }
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',

@@ -108,15 +108,15 @@ const PRAATMETMICHAEL_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const MICHAELGEHEUGEN_COMMAND = {
-  name: 'michaelgeheugen',
-  description: 'Wat onthoudt Michaël over jou — en wat vindt hij van je?',
+const VIBECHECK_COMMAND = {
+  name: 'vibecheck',
+  description: 'Wat vindt Michaël eigenlijk van jou?',
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, MICHAELGEHEUGEN_COMMAND];
+const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, VIBECHECK_COMMAND];
 
 // Clear any leftover guild-specific commands so they don't show up as duplicates
 if (process.env.GUILD_IDS) {

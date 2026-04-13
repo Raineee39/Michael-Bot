@@ -4,7 +4,9 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MEMORY_PATH = join(__dirname, '../data/michael-memory.json');
-const MAX_HISTORY = 4;
+
+const MAX_RECENT = 8;       // messages kept verbatim
+const SUMMARISE_AT = 8;     // trigger summarisation once this many have accumulated
 
 function loadAll() {
   if (!existsSync(MEMORY_PATH)) return {};
@@ -21,31 +23,45 @@ function saveAll(data) {
 }
 
 function defaultUser(username) {
-  return { username, prompts: [], moods: [], judgementScore: 0 };
+  return { username, prompts: [], moods: [], judgementScore: 0, impression: null };
 }
 
 export function loadUserMemory(userId) {
   const all = loadAll();
   const user = all[userId] ?? defaultUser('');
-  // Migrate records written before judgementScore existed
   if (user.judgementScore === undefined) user.judgementScore = 0;
+  if (user.impression === undefined) user.impression = null;
   return user;
 }
 
-// scoreDelta adjusts judgementScore in the same write (avoids a second file read/write).
 export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0) {
   const all = loadAll();
   const user = all[userId] ?? defaultUser(username);
   user.username = username;
-  user.prompts = [...user.prompts, prompt].slice(-MAX_HISTORY);
-  user.moods = [...user.moods, mood].slice(-MAX_HISTORY);
+  user.prompts = [...user.prompts, prompt].slice(-MAX_RECENT);
+  user.moods = [...user.moods, mood].slice(-MAX_RECENT);
   if (user.judgementScore === undefined) user.judgementScore = 0;
+  if (user.impression === undefined) user.impression = null;
   user.judgementScore += scoreDelta;
   all[userId] = user;
   saveAll(all);
 }
 
-// Derive a human-readable label from the running score.
+// Returns true when enough messages have built up to warrant a summarisation pass
+export function needsSummarisation(userId) {
+  return loadUserMemory(userId).prompts.length >= SUMMARISE_AT;
+}
+
+// Stores the generated impression and trims verbatim prompts down to the 2 most recent,
+// so the file stays small while the long-term feeling persists forever.
+export function updateImpression(userId, impression) {
+  const all = loadAll();
+  if (!all[userId]) return;
+  all[userId].impression = impression;
+  all[userId].prompts = all[userId].prompts.slice(-2);
+  saveAll(all);
+}
+
 export function getJudgementLabel(score) {
   if (score <= -5) return 'vermoeiend';
   if (score <= -2) return 'twijfelachtig';
