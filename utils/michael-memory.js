@@ -20,17 +20,36 @@ function saveAll(data) {
   writeFileSync(MEMORY_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
-export function loadUserMemory(userId) {
-  const all = loadAll();
-  return all[userId] ?? { prompts: [], moods: [] };
+function defaultUser(username) {
+  return { username, prompts: [], moods: [], judgementScore: 0 };
 }
 
-export function saveUserMemory(userId, username, prompt, mood) {
+export function loadUserMemory(userId) {
   const all = loadAll();
-  const user = all[userId] ?? { username, prompts: [], moods: [] };
+  const user = all[userId] ?? defaultUser('');
+  // Migrate records written before judgementScore existed
+  if (user.judgementScore === undefined) user.judgementScore = 0;
+  return user;
+}
+
+// scoreDelta adjusts judgementScore in the same write (avoids a second file read/write).
+export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0) {
+  const all = loadAll();
+  const user = all[userId] ?? defaultUser(username);
   user.username = username;
   user.prompts = [...user.prompts, prompt].slice(-MAX_HISTORY);
   user.moods = [...user.moods, mood].slice(-MAX_HISTORY);
+  if (user.judgementScore === undefined) user.judgementScore = 0;
+  user.judgementScore += scoreDelta;
   all[userId] = user;
   saveAll(all);
+}
+
+// Derive a human-readable label from the running score.
+export function getJudgementLabel(score) {
+  if (score <= -5) return 'vermoeiend';
+  if (score <= -2) return 'twijfelachtig';
+  if (score <= 2)  return 'onbeslist';
+  if (score <= 6)  return 'draaglijk';
+  return 'ongewoon helder';
 }

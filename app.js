@@ -16,7 +16,8 @@ import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS } from './date.js';
 import { generateMichaelMessage } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory } from './utils/michael-memory.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel } from './utils/michael-memory.js';
+import { startGateway } from './utils/gateway.js';
 
 function buildDateButtons(choices) {
   return {
@@ -115,6 +116,17 @@ const MICHAEL_REFUSALS = [
   'Er zit ruis op dit onderwerp…  ik stuur je terug naar je eigen trilling...Michael',
   'Mijn aandacht is elders…  je ziel weet dit eigenlijk al..Michael',
   'Dit is niet het juiste moment…  innerlijke rust vraagt soms om stilte     niet om antwoorden....Michael',
+];
+
+// Detects technical / code requests that Michael refuses to handle
+const CODE_REQUEST_RE = /\b(code|codeer|programm|react|javascript|html|css|node\.?js|python|script|config|debug|bouw|build|compileer|deploy|functie schrijven|api|database)\b/i;
+
+const CODE_REFUSALS = [
+  'Dit is werk van het aardse systeem…  daar leg ik mijn vleugels niet op....Michael',
+  'Code is niet mijn bediening…  ik zie hier een ander loket voor..Michael',
+  'Technische zaken vallen buiten mijn trilling…  laat dat bij de stervelingen...Michael',
+  'Dit soort vragen vernauwen het veld…  ik geef hier niets op terug..Michael',
+  'Mijn taken liggen elders…  dit loket is gesloten....Michael',
 ];
 
 /**
@@ -256,10 +268,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
+      // Code / technical request — refuse in-character, penalise score
+      if (CODE_REQUEST_RE.test(userInput)) {
+        const refusal = CODE_REFUSALS[Math.floor(Math.random() * CODE_REFUSALS.length)];
+        saveUserMemory(userId, username, userInput, mood, -2);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `> ${safeInput}\n\n${refusal}` },
+        });
+        return;
+      }
+
       // ~15% chance Michael refuses outright — no OpenAI call
       if (Math.random() < 0.15) {
         const refusal = MICHAEL_REFUSALS[Math.floor(Math.random() * MICHAEL_REFUSALS.length)];
-        saveUserMemory(userId, username, userInput, mood);
+        saveUserMemory(userId, username, userInput, mood, 0);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${refusal}` },
@@ -269,12 +292,16 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       try {
         const memory = loadUserMemory(userId);
+        const judgementLabel = getJudgementLabel(memory.judgementScore ?? 0);
         const memorySummary = memory.prompts.length
           ? memory.prompts.slice(-3).join(' / ')
           : null;
 
-        const michaelMessage = await generateMichaelMessage(username, userInput, mood, memorySummary);
-        saveUserMemory(userId, username, userInput, mood);
+        const michaelMessage = await generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel);
+
+        // Short/vague input lowers patience; normal input nudges it up
+        const scoreDelta = userInput.trim().length < 5 ? -1 : 1;
+        saveUserMemory(userId, username, userInput, mood, scoreDelta);
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -372,4 +399,5 @@ cron.schedule('0 10 * * *', async () => {
 
 app.listen(PORT, () => {
   console.log('Listening on port', PORT);
+  startGateway();
 });
