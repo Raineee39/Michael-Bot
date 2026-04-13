@@ -190,10 +190,16 @@ Reageer ALLEEN met één getal: -2, -1, 0, 1 of 2. Niets anders.
       `.trim(),
     });
     const raw = response.output[0].content[0].text.trim();
-    const parsed = parseInt(raw, 10);
-    if ([-2, -1, 0, 1, 2].includes(parsed)) return parsed;
+    // Extract the first -2/-1/0/1/2 found anywhere in the response
+    const match = raw.match(/-2|-1|0|1|2/);
+    if (match) {
+      const parsed = parseInt(match[0], 10);
+      if ([-2, -1, 0, 1, 2].includes(parsed)) return parsed;
+    }
+    console.warn('[scoring] unexpected model output:', JSON.stringify(raw));
     return 0;
-  } catch {
+  } catch (err) {
+    console.error('[scoring] scoreMichaelMessage failed:', err?.message ?? err);
     return 0;
   }
 }

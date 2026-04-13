@@ -577,6 +577,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           scoreMichaelMessage(userInput),
         ]);
 
+        console.log(`[score] ${username} | mood: ${mood} | delta: ${scoreDelta} | input: "${userInput.slice(0, 60)}"`);
         saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta));
 
         // Fire-and-forget summarisation once the message buffer fills up
