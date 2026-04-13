@@ -201,6 +201,29 @@ const MICHAEL_HUMEUR = {
   ],
 };
 
+// Responses when Michael accepts or rejects an apology via /vergeefmij
+const APOLOGY_ACCEPTED = [
+  'Uw spijt   is ontvangen.\nNiet meteen vergeten...  maar ontvangen.   Dat is een begin....Michael',
+  'Goed.\nIk heb het gehoord.   U mag voorlopig   blijven....Michael',
+  'Het universum noteerde dit moment.\nMichael   ook.   Gedraag U voortaan   beter....Michael',
+  'Uw excuus bereikt mij   op een redelijke trilling.\nIk accepteer dit...  maar verwacht niet dat ik het vergeet....Michael',
+  'Ik hoor U.\nNiet alle stormen hoeven eeuwig te duren...  deze ook niet.   Voorlopig....Michael',
+];
+
+const APOLOGY_REJECTED = [
+  'Nee.\nDit voelt niet oprecht.   Probeer het later   opnieuw....Michael',
+  'Uw excuus...  landt niet.\nDe energie klopt niet.   Ik voel het....Michael',
+  'Interessant dat U dit nu doet.\nMaar nee.   Niet vandaag.   Misschien morgen   als de maan anders staat....Michael',
+  'U vraagt vergiffenis   maar ik voel geen berouw in het veld.\nKom terug   wanneer U het meent....Michael',
+  'Michael is niet onder de indruk   van deze poging.\nProbeer het opnieuw   met meer   innerlijke waarheid....Michael',
+];
+
+const APOLOGY_ALREADY_CALM = [
+  'Er is niets om te vergeven.\nIk was niet boos.   U wel misschien....Michael',
+  'Uw excuus is overbodig.\nIk zweef al een tijd   in kalmte.   Interessant   dat U dit niet voelde....Michael',
+  'Vergiffenis?   Michael vraagt zich af   waarvoor precies.\nAlles is al   in orde....Michael',
+];
+
 const MICHAEL_REFUSALS = [
   'Niet nu…  de energie is onduidelijk     en ik geef hier vandaag geen inzicht op....Michael',
   'Dit valt buiten mijn bereik…  niet alles wil geopend worden     laat het even rusten...Michael',
@@ -428,6 +451,47 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: { content: `${header}\n${antichristLine}\n\n${uitLine}` },
       });
+    }
+
+    // "vergeefmij" — dedicated apology command with its own mood-shift logic
+    if (name === 'vergeefmij') {
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const memory = loadUserMemory(userId);
+      const currentMood = memory.currentMood ?? 'afwezig';
+      const moodIdx = MICHAEL_MOODS.indexOf(currentMood);
+
+      // Already calm — apology is unnecessary
+      if (moodIdx <= 2) {
+        const line = APOLOGY_ALREADY_CALM[Math.floor(Math.random() * APOLOGY_ALREADY_CALM.length)];
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: line },
+        });
+      }
+
+      // Woedend: harder to appease (40% chance). Calmer bad moods: easier (65% chance).
+      const forgivenessChance = currentMood === 'woedend' ? 0.40 : 0.65;
+      const forgiven = Math.random() < forgivenessChance;
+
+      if (forgiven) {
+        // Drop mood by 2 steps — meaningful but doesn't fully reset
+        const newMood = MICHAEL_MOODS[Math.max(0, moodIdx - 2)];
+        saveUserMemory(userId, username, '[vergeefmij]', currentMood, 1, newMood);
+        const line = APOLOGY_ACCEPTED[Math.floor(Math.random() * APOLOGY_ACCEPTED.length)];
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: `🕊️✨🕊️✨🕊️\n${line}\n\n*Stemming verbeterd: **${currentMood}** → **${newMood}***` },
+        });
+      } else {
+        // Rejection — mood stays, small score nudge down to discourage spam
+        saveUserMemory(userId, username, '[vergeefmij]', currentMood, -1, currentMood);
+        const line = APOLOGY_REJECTED[Math.floor(Math.random() * APOLOGY_REJECTED.length)];
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: `🔥💢🔥💢🔥\n${line}\n\n*Stemming onveranderd: **${currentMood}***` },
+        });
+      }
     }
 
     // "michaelhumeur" — shows Michael's current persistent mood toward this user
