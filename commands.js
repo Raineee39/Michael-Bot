@@ -116,7 +116,15 @@ const VIBECHECK_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, VIBECHECK_COMMAND];
+const COSMISCHESTATUS_COMMAND = {
+  name: 'cosmischestatus',
+  description: 'Wie draagt het veld op dit moment? Antichrist en uitverkorene.',
+  type: 1,
+  integration_types: [0],
+  contexts: [0],
+};
+
+const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND];
 
 // Clear any leftover guild-specific commands so they don't show up as duplicates
 if (process.env.GUILD_IDS) {

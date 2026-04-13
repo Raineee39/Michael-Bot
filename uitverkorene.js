@@ -33,3 +33,36 @@ export function getRandomBoodschap() {
 export function getRandomGifQuery() {
   return GIF_QUERIES[Math.floor(Math.random() * GIF_QUERIES.length)];
 }
+
+const ANTICHRIST_GIF_QUERIES = [
+  'hell fire devil',
+  'demon eyes',
+  'evil laugh cartoon',
+  'dark throne',
+  'inferno flames',
+  'satan cartoon',
+  'apocalypse lightning',
+];
+
+// Extra queries for random Michael replies (when not antichrist / uitverkorene themed)
+const MICHAEL_MISC_GIF_QUERIES = [
+  'cosmic trippy',
+  'angel confused',
+  'old man wisdom',
+  'church organ dramatic',
+  'thunderstorm dramatic',
+  'meditation gone wrong',
+  'floating in space',
+];
+
+/** Giphy search term for optional GIFs on /praatmetmichael */
+export function getMichaelOptionalGifQuery(cosmicRole) {
+  if (cosmicRole === 'antichrist') {
+    return ANTICHRIST_GIF_QUERIES[Math.floor(Math.random() * ANTICHRIST_GIF_QUERIES.length)];
+  }
+  if (cosmicRole === 'uitverkorene') {
+    return getRandomGifQuery();
+  }
+  const pool = [...GIF_QUERIES, ...MICHAEL_MISC_GIF_QUERIES];
+  return pool[Math.floor(Math.random() * pool.length)];
+}

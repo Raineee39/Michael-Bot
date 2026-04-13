@@ -13,7 +13,7 @@ import { getRandomEmoji, DiscordRequest } from './utils.js';
 import { getShuffledOptions, getResult } from './game.js';
 import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
-import { getRandomBoodschap, getRandomGifQuery } from './uitverkorene.js';
+import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression } from './utils/michael-memory.js';
@@ -68,7 +68,7 @@ async function buildUitverkoreneMessage(guildId) {
 
   const embeds = gif ? [{ image: { url: gif } }] : [];
 
-  return { content, embeds };
+  return { content, embeds, chosenUserId: userId };
 }
 
 // Create an express app
@@ -81,6 +81,9 @@ const activeGames = {};
 // Antichrist state — in memory, clears on restart (intentional)
 const antichristState = { userId: null, expiresAt: null };
 
+// Current uitverkorene — whoever was last picked by /uitverkorene or the daily cron
+const uitverkoreneState = { userId: null };
+
 function isAntichrist(userId) {
   if (!antichristState.userId) return false;
   if (Date.now() > antichristState.expiresAt) {
@@ -90,6 +93,30 @@ function isAntichrist(userId) {
   }
   return antichristState.userId === userId;
 }
+
+function isUitverkorene(userId) {
+  return uitverkoreneState.userId != null && uitverkoreneState.userId === userId;
+}
+
+/** 'antichrist' wins over uitverkorene if someone is both (shouldn't happen) */
+function getCosmicRole(userId) {
+  if (isAntichrist(userId)) return 'antichrist';
+  if (isUitverkorene(userId)) return 'uitverkorene';
+  return null;
+}
+
+/** Active antichrist user id, or null (cleans up expired slot) */
+function getCurrentAntichristId() {
+  if (!antichristState.userId) return null;
+  if (Date.now() > antichristState.expiresAt) {
+    antichristState.userId = null;
+    antichristState.expiresAt = null;
+    return null;
+  }
+  return antichristState.userId;
+}
+
+const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'praatmetmichael', 'vibecheck', 'cosmischestatus']);
 
 const NEE = [
   'nee.',
@@ -196,7 +223,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
   // Check if the invoking user is the current antichrist
   const invokingUserId = req.body.member?.user?.id ?? req.body.user?.id;
-  if (isAntichrist(invokingUserId) && data?.name !== 'antichrist') {
+  if (isAntichrist(invokingUserId) && !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)) {
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
@@ -267,7 +294,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // Acknowledge immediately — member fetch + Giphy can exceed Discord's 3s deadline
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
-      const { content, embeds } = await buildUitverkoreneMessage(req.body.guild_id);
+      const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(req.body.guild_id);
+      uitverkoreneState.userId = chosenUserId;
       await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
         method: 'PATCH',
         body: { content, embeds },
@@ -308,6 +336,30 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
+    // "cosmischestatus" — who holds antichrist / uitverkorene (guild only)
+    if (name === 'cosmischestatus') {
+      const antichristId = getCurrentAntichristId();
+      const uitId = uitverkoreneState.userId;
+      const fireRow = "👹🔥👹🔥👹🔥👹🔥👹🔥";
+      const eyeRowStr = "⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️";
+      const calmRow = "✨👁️✨";
+
+      const antichristLine = antichristId
+        ? `${fireRow}\n**DE ANTICHRIST**\n<@${antichristId}>\n*Het veld verstikt...  Michaël kijkt met afkeer...  dit is voor Uw eigen bestwil of niet....Michael*`
+        : `${calmRow}\n**Geen actieve antichrist**\n*Het schild is open...  voor nu...  geniet ervan..Michael*`;
+
+      const uitLine = uitId
+        ? `${eyeRowStr}\n**DE UITVERKORENE**\n<@${uitId}>\n*Het lot heeft gesproken...  wie U ook bent...  U bent het nu..Michael*`
+        : `${eyeRowStr}\n**Geen uitverkorene in het register**\n*Niemand draagt de bliksem vandaag...  dat kan veranderen..Michael*`;
+
+      const header = `${eyeRowStr}\n# COSMISCHE STATUS\n*Michaël deelt wat het universum toestaat te delen...*\n`;
+
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: `${header}\n${antichristLine}\n\n${uitLine}` },
+      });
+    }
+
     // "vibecheck" command — Michael's in-character verdict on you
     if (name === 'vibecheck') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
@@ -332,6 +384,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           label,
           memory.impression ?? null,
           memory.prompts.slice(-3),
+          getCosmicRole(userId),
         );
 
         const lines = [
@@ -415,9 +468,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const memorySummary = memory.prompts.length
           ? memory.prompts.slice(-3).join(' / ')
           : null;
+        const cosmicRole = getCosmicRole(userId);
 
         const michaelMessage = await generateMichaelMessage(
-          username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null,
+          username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null, cosmicRole,
         );
 
         const scoreDelta = michaelScoreDelta(userInput, mood, memory.judgementScore ?? 0);
@@ -431,9 +485,17 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             .catch(err => console.error('Summarisation failed:', err));
         }
 
+        // ~25% chance of a thematic Giphy embed (same API as uitverkorene)
+        let gifUrl = null;
+        if (process.env.GIPHY_API_KEY && Math.random() < 0.25) {
+          gifUrl = await fetchGiphyGif(getMichaelOptionalGifQuery(cosmicRole));
+        }
+        const patchBody = { content: `> ${safeInput}\n\n${michaelMessage}` };
+        if (gifUrl) patchBody.embeds = [{ image: { url: gifUrl } }];
+
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${michaelMessage}` },
+          body: patchBody,
         });
       } catch (err) {
         console.error('praatmetmichael error:', err);
@@ -512,7 +574,8 @@ cron.schedule('0 10 * * *', async () => {
   if (!guildId || !channelId) return;
 
   try {
-    const { content, embeds } = await buildUitverkoreneMessage(guildId);
+    const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId);
+    uitverkoreneState.userId = chosenUserId;
     await DiscordRequest(`channels/${channelId}/messages`, {
       method: 'POST',
       body: {

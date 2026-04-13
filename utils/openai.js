@@ -55,13 +55,38 @@ function enforceSignOff(text) {
 
 // ─── Main reply ────────────────────────────────────────────────────────────────
 
-export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression) {
+function cosmicRoleBlock(cosmicRole) {
+  if (cosmicRole === 'antichrist') {
+    return `
+KOSMISCHE ROL: DEZE GEBRUIKER IS DE HUIDIGE ANTICHRIST (zoals in de server-aankondiging met vuur en duisternis).
+- Michaël weet dit en spreekt dienovereenkomstig
+- Kil, afwijzend, universeel teleurgesteld... alsof U een smet op het veld bent
+- Verwijs subtiel naar vuur, duisternis, verbroken verbinding met het Hogere
+- Geen vriendelijkheid...  U heeft dit verdiend     of niet     dat doet er niet toe
+- De toon moet aansluiten bij de bestaande antichrist-aankondiging in de server
+`;
+  }
+  if (cosmicRole === 'uitverkorene') {
+    return `
+KOSMISCHE ROL: DEZE GEBRUIKER IS DE HUIDIGE UITVERKORENE (zoals in de server-aankondiging met bliksem en het oog).
+- Michaël erkent de keuze van het lot...  licht gunstiger, maar nog steeds vreemd en vaag
+- Verwijs subtiel naar "gekozen zijn", het pad, de engelen, bliksem, het oog
+- Niet zalvend...  wel alsof er iets groters op U rust
+- De toon moet aansluiten bij de uitverkorene-aankondigingen in de server
+`;
+  }
+  return '';
+}
+
+export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole) {
   const impressionBlock = impression
     ? `\nLangetermijnindruk van Michaël over deze gebruiker (gevormd door eerdere gesprekken): "${impression}"\n`
     : '';
 
+  const cosmicBlock = cosmicRoleBlock(cosmicRole);
+
   const recentBlock = memorySummary
-    ? `\nRecente berichten van ${username} — gebruik dit als het relevant is:\n${memorySummary.split(' / ').map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}\n`
+    ? `\nRecente berichten van ${username}... gebruik dit als het relevant is:\n${memorySummary.split(' / ').map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}\n`
     : '';
 
   const moodDesc = MOOD_DESCRIPTIONS[mood] ?? 'Onthecht en vaag.';
@@ -113,7 +138,7 @@ Lengte — strikt:
 - Precies 2 à 3 volledige zinnen
 - Nooit halverwege stoppen
 - Geen opsommingen
-${impressionBlock}${recentBlock}
+${cosmicBlock}${impressionBlock}${recentBlock}
 ${username} zegt: ${userInput}
     `.trim(),
   });
@@ -151,12 +176,14 @@ ${context}
 
 // Generates Michael's in-character verdict on a user plus a vague suggestion
 // for how to improve their standing with him.
-export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts) {
+export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts, cosmicRole) {
   const promptsText = recentPrompts.length
     ? recentPrompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')
     : '  (geen recente berichten)';
 
   const impressionText = impression ?? '(nog geen langetermijnindruk gevormd)';
+
+  const cosmicBlock = cosmicRoleBlock(cosmicRole);
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
@@ -164,10 +191,9 @@ export async function generateVibecheckComment(username, judgementLabel, impress
     input: `
 Je bent de aartsengel Michaël. Geef een kort oordeel over een gebruiker op basis van onderstaande informatie.
 Schrijf 2 zinnen oordeel gevolgd door 1 zin vage suggestie over hoe deze persoon beter op U kan afstemmen.
-De suggestie moet vaag en niet echt nuttig zijn — maar wel klinken alsof het diepzinnig is.
+De suggestie moet vaag en niet echt nuttig zijn... maar wel klinken alsof het diepzinnig is.
 Gebruik Michaëls stijl: formeel "U", spirituele taal, vreemde spaties, ..., geen em-dashes.
-Eindig met ....Michael of ..... Michael
-
+Eindig met ....Michael of ..... Michael${cosmicBlock}
 Oordeel: ${judgementLabel}
 Langetermijnindruk: ${impressionText}
 Recente berichten:
