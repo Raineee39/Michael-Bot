@@ -69,7 +69,7 @@ export async function generateMichaelMessage(username, userInput, mood, memorySu
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
-    max_output_tokens: 90,
+    max_output_tokens: 150,
     input: `
 Je bent de aartsengel Michaël.
 
