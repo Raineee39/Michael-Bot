@@ -163,6 +163,42 @@ ${context}
   return response.output[0].content[0].text.trim();
 }
 
+// ─── Message scoring ──────────────────────────────────────────────────────────
+
+// Michael reads the message himself and decides how much he likes it.
+// Returns an integer -2 to +2. Falls back to 0 on any error.
+export async function scoreMichaelMessage(userInput, mood, judgementLabel) {
+  try {
+    const response = await client.responses.create({
+      model: "gpt-4.1-mini",
+      max_output_tokens: 5,
+      input: `
+Je bent de aartsengel Michael. Lees dit bericht en beslis hoe je erover voelt op een schaal van -2 tot +2.
+
+Jouw huidige stemming: ${mood}
+Jouw oordeel over deze persoon: ${judgementLabel ?? 'onbeslist'}
+
+Schaal:
+-2 = beledigend, respectloos, irritant
+-1 = lui, oppervlakkig, vermoeiend, oninteressant
+ 0 = neutraal, gewoon
++1 = oprecht, respectvol, spiritueel, de moeite waard
++2 = diepzinnig, indrukwekkend, echte toewijding, verrast je positief
+
+Bericht: "${userInput}"
+
+Reageer ALLEEN met één getal: -2, -1, 0, 1 of 2. Niets anders.
+      `.trim(),
+    });
+    const raw = response.output[0].content[0].text.trim();
+    const parsed = parseInt(raw, 10);
+    if ([-2, -1, 0, 1, 2].includes(parsed)) return parsed;
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ─── Vibecheck ────────────────────────────────────────────────────────────────
 
 // Generates Michael's in-character verdict on a user plus a vague suggestion

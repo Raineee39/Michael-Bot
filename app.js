@@ -15,7 +15,7 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression } from './utils/michael-memory.js';
 import { startGateway } from './utils/gateway.js';
 
@@ -239,57 +239,6 @@ const CODE_REQUEST_RE = /\b(code|codeer|programm|react|javascript|html|css|node\
 
 const INSULT_RE = /\b(kut|fuck|shit|klootzak|lul|eikel|idioot|sukkel|kanker|godverdomme|hoer|bitch|asshole|bastard|stom|dom)\b/i;
 
-// Michael's capricious scoring. Content matters, but mood and pure whim matter more.
-function michaelScoreDelta(userInput, mood, currentScore) {
-  // Hard floor: insults always cost
-  if (INSULT_RE.test(userInput)) return -2;
-  // Very short / lazy input
-  if (userInput.trim().length < 5) return -1;
-
-  // Mood-driven base delta — each mood has its own temperament
-  const moodRoll = Math.random();
-  let base;
-  switch (mood) {
-    case 'passief-agressief':
-      // Frequently punishing, rarely generous
-      base = moodRoll < 0.55 ? -1 : moodRoll < 0.85 ? 0 : 1;
-      break;
-    case 'streng':
-      // Strict — neutral to good, sometimes harsh
-      base = moodRoll < 0.35 ? -1 : moodRoll < 0.70 ? 0 : 1;
-      break;
-    case 'loom':
-      // Doesn't really care — mostly 0
-      base = moodRoll < 0.25 ? -1 : moodRoll < 0.75 ? 0 : 1;
-      break;
-    case 'verward':
-      // Completely unpredictable
-      base = [-2, -1, -1, 0, 0, 1, 1, 2][Math.floor(Math.random() * 8)];
-      break;
-    case 'afwezig':
-      // Half-present — mostly flat, sometimes randomly loses a point
-      base = moodRoll < 0.40 ? -1 : moodRoll < 0.80 ? 0 : 1;
-      break;
-    case 'kosmisch':
-      // Expansive and generous — usually positive
-      base = moodRoll < 0.15 ? -1 : moodRoll < 0.45 ? 1 : 2;
-      break;
-    case 'woedend':
-      // Already angry — almost always punishing
-      base = moodRoll < 0.70 ? -2 : moodRoll < 0.90 ? -1 : 0;
-      break;
-    default:
-      base = moodRoll < 0.2 ? 0 : 1;
-  }
-
-  // Pure caprice: ~18% chance Michael just docks a point regardless
-  if (Math.random() < 0.18) base -= 1;
-
-  // If you're already seen as vermoeiend it's harder to earn goodwill
-  if (currentScore <= -5 && base > 0 && Math.random() < 0.5) base = 0;
-
-  return base;
-}
 
 const CODE_REFUSALS = [
   'Dit is werk van het aardse systeem…  daar leg ik mijn vleugels niet op....Michael',
@@ -622,11 +571,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           : null;
         const cosmicRole = getCosmicRole(userId);
 
-        const michaelMessage = await generateMichaelMessage(
-          username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null, cosmicRole,
-        );
+        // Run message generation and AI scoring in parallel — no extra wait time
+        const [michaelMessage, scoreDelta] = await Promise.all([
+          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null, cosmicRole),
+          scoreMichaelMessage(userInput, mood, judgementLabel),
+        ]);
 
-        const scoreDelta = michaelScoreDelta(userInput, mood, memory.judgementScore ?? 0);
         saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta));
 
         // Fire-and-forget summarisation once the message buffer fills up

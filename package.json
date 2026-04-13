@@ -12,7 +12,7 @@
     "start": "node app.js",
     "register": "node commands.js",
     "dev": "nodemon app.js",
-    "deploy": "git pull && npm install && pm2 restart michael-bot --update-env"
+    "deploy": "git pull && npm install && node commands.js && pm2 restart michael-bot --update-env"
   },
   "author": "Shay DeWael",
   "license": "MIT",
