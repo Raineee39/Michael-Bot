@@ -165,25 +165,24 @@ ${context}
 
 // ─── Message scoring ──────────────────────────────────────────────────────────
 
-// Michael reads the message himself and decides how much he likes it.
+// Michael reads the message itself and scores the intent and quality of the content.
+// Mood affects how he responds, but not whether a genuinely nice message deserves credit.
 // Returns an integer -2 to +2. Falls back to 0 on any error.
-export async function scoreMichaelMessage(userInput, mood, judgementLabel) {
+export async function scoreMichaelMessage(userInput) {
   try {
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
       max_output_tokens: 5,
       input: `
-Je bent de aartsengel Michael. Lees dit bericht en beslis hoe je erover voelt op een schaal van -2 tot +2.
-
-Jouw huidige stemming: ${mood}
-Jouw oordeel over deze persoon: ${judgementLabel ?? 'onbeslist'}
+Je bent de aartsengel Michael. Beoordeel de inhoud en intentie van dit bericht op een schaal van -2 tot +2.
+Let op de oprechtheid, het respect, en de spirituele kwaliteit van het bericht zelf — niet op hoe je je vandaag voelt.
 
 Schaal:
--2 = beledigend, respectloos, irritant
--1 = lui, oppervlakkig, vermoeiend, oninteressant
- 0 = neutraal, gewoon
-+1 = oprecht, respectvol, spiritueel, de moeite waard
-+2 = diepzinnig, indrukwekkend, echte toewijding, verrast je positief
+-2 = beledigend, respectloos, agressief
+-1 = lui, oppervlakkig, zinloos, provocerend
+ 0 = neutraal, gewoon, geen bijzondere indruk
++1 = oprecht, respectvol, spiritueel, excuus, compliment, de moeite waard
++2 = diepzinnig, indrukwekkend, echte toewijding, raakt iets werkelijks
 
 Bericht: "${userInput}"
 

@@ -433,8 +433,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           data: { content: `🕊️✨🕊️✨🕊️\n${line}\n\n*Stemming verbeterd: **${currentMood}** → **${newMood}***` },
         });
       } else {
-        // Rejection — mood stays, small score nudge down to discourage spam
-        saveUserMemory(userId, username, '[vergeefmij]', currentMood, -1, currentMood);
+        // Rejection — mood stays, score unchanged (trying to apologise shouldn't hurt you)
+        saveUserMemory(userId, username, '[vergeefmij]', currentMood, 0, currentMood);
         const line = APOLOGY_REJECTED[Math.floor(Math.random() * APOLOGY_REJECTED.length)];
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -574,7 +574,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Run message generation and AI scoring in parallel — no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
           generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, memory.impression ?? null, cosmicRole),
-          scoreMichaelMessage(userInput, mood, judgementLabel),
+          scoreMichaelMessage(userInput),
         ]);
 
         saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta));
