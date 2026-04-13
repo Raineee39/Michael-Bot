@@ -108,13 +108,13 @@ const MICHAEL_MOODS = [
 ];
 
 const MICHAEL_REFUSALS = [
-  'Niet nu...  de energie klopt niet     en ik heb het druk..Michael',
-  'Dit valt buiten mijn bereik vandaag...  probeer het later     of niet..Michael',
-  'Ik ontvang hier niets over...  de sterren zijn vaag     jammer dan..Michael',
-  'Ik geef hier geen inzicht op...  de kosmos zwijgt     dat zegt genoeg..Michael',
-  'Nee...  niet dit     niet vandaag..Michael',
-  'Er is te veel ruis...  vraag het aan de boterham..Michael',
-  'Mijn aandacht is elders...  je begrijpt het wel..Michael',
+  'Niet nu…  de energie is onduidelijk     en ik geef hier vandaag geen inzicht op....Michael',
+  'Dit valt buiten mijn bereik…  niet alles wil geopend worden     laat het even rusten...Michael',
+  'Ik ontvang hier niets over…  de sterren zijn vaag     dat zegt soms genoeg..Michael',
+  'De kosmos zwijgt op dit moment…  ik sluit me daarbij aan....Michael',
+  'Er zit ruis op dit onderwerp…  ik stuur je terug naar je eigen trilling...Michael',
+  'Mijn aandacht is elders…  je ziel weet dit eigenlijk al..Michael',
+  'Dit is niet het juiste moment…  innerlijke rust vraagt soms om stilte     niet om antwoorden....Michael',
 ];
 
 /**
@@ -284,7 +284,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         console.error('praatmetmichael error:', err);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `> ${safeInput}\n\nEr is ruis in het veld...  probeer het later..Michael` },
+          body: { content: `> ${safeInput}\n\nEr is ruis in het veld…  de verbinding met het universum is tijdelijk verstoord     probeer het later....Michael` },
         });
       }
       return;

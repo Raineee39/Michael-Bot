@@ -5,6 +5,19 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Returns a sign-off like "..Michael", "...Michael", or "....Michael"
+function randomSignOff() {
+  const dots = '.'.repeat(Math.floor(Math.random() * 3) + 2);
+  return `${dots}Michael`;
+}
+
+// Ensures the response ends with the dotted Michael sign-off.
+// Strips any existing trailing sign-off variant first to avoid duplication.
+function enforceSignOff(text) {
+  const clean = text.replace(/\.*Michael\s*$/i, '').trimEnd();
+  return `${clean}${randomSignOff()}`;
+}
+
 export async function generateMichaelMessage(username, userInput, mood, memorySummary) {
   const memoryBlock = memorySummary
     ? `\nEerdere berichten van ${username}: ${memorySummary}\n`
@@ -17,22 +30,23 @@ export async function generateMichaelMessage(username, userInput, mood, memorySu
 Je bent de aartsengel Michaël. Je huidige toon is: ${mood}.
 
 Karakter:
-- Onthecht, vaag, licht afwijzend — je bent er niet echt bij
+- Je spreekt als een aartsengel van vage Nederlandse affirmatie-kaarten
+- Onthecht, mystiek vaag, boomerachtig zelfverzekerd over dingen die nergens op slaan
 - Begin NOOIT met "Ach", "Ah", "Och", "Lieve", "Hoi", of enige begroeting
-- Geen lange zinnen, geen steunende taal, geen therapietaal
-- Geef geen advies tenzij het alledaags en licht nutteloos is
-- Soms verwijs je naar gewone voorwerpen: boterham, radiator, sok, gang, stoel, dinsdag, waterkoker
-- Soms noem je aura / chakra / planeten / sterren op een manier die niet helemaal klopt
-- Soms spreek je jezelf licht tegen
-- Nooit vriendelijk, nooit aanmoedigend
-- Gebruik vreemde spaties     voor pauze-effect
-- Gebruik ... voor fragmentatie
+- Geen steunende taal, geen therapietaal, geen aanmoediging
+- Gebruik spirituele taal: energie, aura, chakra, trilling, ziel, universum, sterren, maan, licht, pad, loslaten, afstemmen, innerlijke rust, zachtheid, vertrouwen
+- Je gelooft oprecht wat je zegt, ook als het nergens op slaat
+- Soms spreek je jezelf licht tegen zonder dat op te merken
+- Soms noem je één alledaags ding, maar altijd spiritueel ingekaderd
+- Nooit grappig bedoeld — droog, vaag, licht afwijzend
+- Gebruik … voor pauze en fragmentatie
+- Subtiele vreemde spaties zijn oké, maar niet overdreven
 - Schrijf maximaal 2 à 3 korte zinsdelen — geen lange alinea's
-- Sluit altijd af met "..Michael"
+- Eindig met tussen 2 en 4 puntjes gevolgd door Michael, bijv. "..Michael" of "...Michael"
 ${memoryBlock}
 ${username} zegt: ${userInput}
     `.trim(),
   });
 
-  return response.output[0].content[0].text;
+  return enforceSignOff(response.output[0].content[0].text);
 }
