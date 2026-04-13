@@ -140,19 +140,26 @@ const MICHAEL_MOODS = [
 
 // Shifts Michael's mood after each interaction based on how it went
 function nextMood(currentMood, scoreDelta) {
+  // An insult always jumps straight to woedend — no gradual path
+  if (scoreDelta <= -2) return 'woedend';
+
+  // Escaping woedend requires sustained good behaviour
+  if (currentMood === 'woedend') {
+    if (scoreDelta >= 2) return MICHAEL_MOODS[5]; // streng — one step back
+    if (scoreDelta === 1 && Math.random() < 0.35) return MICHAEL_MOODS[5]; // small chance
+    return 'woedend'; // stays furious most of the time
+  }
+
   const idx = MICHAEL_MOODS.indexOf(currentMood);
-  const base = idx === -1 ? 3 : idx; // unknown mood defaults to neutral
+  const base = idx === -1 ? 3 : idx;
 
-  // How much mood shifts: big positive = calms down, big negative = escalates
   let shift = 0;
-  if (scoreDelta >= 2)       shift = -(1 + (Math.random() < 0.5 ? 1 : 0)); // -1 or -2
-  else if (scoreDelta === 1) shift = Math.random() < 0.65 ? -1 : 0;
-  else if (scoreDelta === 0) shift = [-1, 0, 0, 1][Math.floor(Math.random() * 4)]; // slight drift
+  if (scoreDelta >= 2)        shift = -(1 + (Math.random() < 0.5 ? 1 : 0)); // -1 or -2
+  else if (scoreDelta === 1)  shift = Math.random() < 0.65 ? -1 : 0;
+  else if (scoreDelta === 0)  shift = [-1, 0, 0, 1][Math.floor(Math.random() * 4)];
   else if (scoreDelta === -1) shift = Math.random() < 0.65 ? 1 : 0;
-  else                        shift = (1 + (Math.random() < 0.5 ? 1 : 0)); // +1 or +2
 
-  const newIdx = Math.max(0, Math.min(6, base + shift));
-  return MICHAEL_MOODS[newIdx];
+  return MICHAEL_MOODS[Math.max(0, Math.min(6, base + shift))];
 }
 
 // Pre-written humeur lines per mood, shown by /michaelhumeur
@@ -493,7 +500,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // Load persisted mood — first-time users get a random starting point
       const preMemory = loadUserMemory(userId);
       const currentScore = preMemory.judgementScore ?? 0;
-      const mood = preMemory.currentMood ?? MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
+      const storedMood = preMemory.currentMood ?? MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
+      // Insults trigger immediate woedend — no waiting for next message
+      const mood = INSULT_RE.test(userInput) ? 'woedend' : storedMood;
       const channelId = req.body.channel_id ?? req.body.channel?.id;
 
       // Respond immediately with a chaotic placeholder — avoids Discord's "X is thinking…" entirely
