@@ -15,7 +15,7 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression } from './utils/michael-memory.js';
 import { startGateway } from './utils/gateway.js';
 
@@ -456,6 +456,48 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
+    // "auracheck" — Michael reads the aura of another user
+    if (name === 'auracheck') {
+      const targetUser = data.resolved?.users
+        ? Object.values(data.resolved.users)[0]
+        : null;
+      if (!targetUser) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: 'Michael ziet niemand hier...  misschien is die persoon te vaag voor het veld....Michael' },
+        });
+      }
+
+      const targetId = targetUser.id;
+      const targetUsername = targetUser.username;
+      const targetMemory = loadUserMemory(targetId);
+      const judgementLabel = getJudgementLabel(targetMemory.judgementScore ?? 0);
+      const cosmicRole = getCosmicRole(targetId);
+
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+
+      try {
+        const reading = await generateAuraCheck(
+          targetUsername,
+          judgementLabel,
+          targetMemory.impression ?? null,
+          targetMemory.currentMood ?? 'afwezig',
+          cosmicRole,
+        );
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `👁️✨👁️✨👁️\n**Aura-lezing voor <@${targetId}>**\n\n${reading}` },
+        });
+      } catch (err) {
+        console.error('auracheck error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: 'Het veld is troebel...  Michael kan de aura op dit moment niet lezen....Michael' },
+        });
+      }
+      return;
+    }
+
     // "vibecheck" command — Michael's in-character verdict on you
     if (name === 'vibecheck') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
@@ -577,7 +619,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           scoreMichaelMessage(userInput),
         ]);
 
-        console.log(`[score] ${username} | mood: ${mood} | delta: ${scoreDelta} | input: "${userInput.slice(0, 60)}"`);
+        const newScore = (memory.judgementScore ?? 0) + scoreDelta;
+        console.log(`[score] ${username} | mood: ${mood} | delta: ${scoreDelta} | score: ${memory.judgementScore ?? 0} → ${newScore} | input: "${userInput.slice(0, 60)}"`);
         saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta));
 
         // Fire-and-forget summarisation once the message buffer fills up
