@@ -258,6 +258,37 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
+    // "michaelgeheugen" command — shows what Michael remembers and thinks of you
+    if (name === 'michaelgeheugen') {
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const memory = loadUserMemory(userId);
+      const label = getJudgementLabel(memory.judgementScore ?? 0);
+
+      const scoreBar = (() => {
+        const s = memory.judgementScore ?? 0;
+        if (s <= -5) return '🟥🟥🟥🟥🟥';
+        if (s <= -2) return '🟧🟥🟥🟥🟥';
+        if (s <= 2)  return '⬜⬜⬜⬜⬜';
+        if (s <= 6)  return '🟩🟩⬜⬜⬜';
+        return '🟩🟩🟩🟩🟩';
+      })();
+
+      const recentPrompts = memory.prompts.length
+        ? memory.prompts.map((p, i) => `  ${i + 1}. *${p}*`).join('\n')
+        : '  *(niets)*';
+
+      const lines = [
+        `**Michaëls oordeel:** ${label}   ${scoreBar}   *(score: ${memory.judgementScore ?? 0})*`,
+        `**Recente berichten die hij onthoudt:**`,
+        recentPrompts,
+      ];
+
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: lines.join('\n') },
+      });
+    }
+
     // "praatmetmichael" command
     if (name === 'praatmetmichael') {
       const userInput = data.options.find(o => o.name === 'bericht').value;
