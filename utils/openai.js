@@ -174,15 +174,22 @@ export async function scoreMichaelMessage(userInput) {
       model: "gpt-4.1-mini",
       max_output_tokens: 5,
       input: `
-Je bent de aartsengel Michael. Beoordeel de inhoud en intentie van dit bericht op een schaal van -2 tot +2.
-Let op de oprechtheid, het respect, en de spirituele kwaliteit van het bericht zelf — niet op hoe je je vandaag voelt.
+Beoordeel dit bericht op een schaal van -2 tot +2 op basis van de intentie en toon.
+Wees ROYAAL met positieve scores — twijfel je tussen 0 en +1, kies dan +1.
 
-Schaal:
--2 = beledigend, respectloos, agressief
--1 = lui, oppervlakkig, zinloos, provocerend
- 0 = neutraal, gewoon, geen bijzondere indruk
-+1 = oprecht, respectvol, spiritueel, excuus, compliment, de moeite waard
-+2 = diepzinnig, indrukwekkend, echte toewijding, raakt iets werkelijks
+-2 = schelden, beledigen, agressief aanvallen
+-1 = provoceren, sarcasme, zinloos of respectloos
+ 0 = puur neutraal, geen positieve of negatieve lading
++1 = vriendelijk, compliment, liefde, lof, excuus, dankbaarheid, respect — ook als het kort is
++2 = diep, indrukwekkend, bijzonder oprecht of spiritueel
+
+Voorbeelden:
+"ik hou van jou" → 1
+"je bent de beste" → 1
+"sorry dat ik gemeen was" → 1
+"wat een onzin" → -1
+"hallo" → 0
+"kut michael" → -2
 
 Bericht: "${userInput}"
 
