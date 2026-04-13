@@ -265,8 +265,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const username = req.body.member?.user?.username ?? req.body.user?.username;
       const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'");
       const mood = MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
+      const channelId = req.body.channel_id ?? req.body.channel?.id;
 
-      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+      // Respond immediately with a chaotic placeholder — avoids Discord's "X is thinking…" entirely
+      const MICHAEL_PLACEHOLDERS = [
+        '🔱⚡🔱⚡🔱⚡🔱⚡🔱⚡\n# ER KOMT EEN BERICHT BINNEN VAN AARDSENGEL MICHAËL\n🔱⚡🔱⚡🔱⚡🔱⚡🔱⚡',
+        '👁️✨👁️✨👁️✨👁️✨\n# MICHAËL RAADPLEEGT   HET UNIVERSUM\n👁️✨👁️✨👁️✨👁️✨',
+        '⚡🌟⚡🌟⚡🌟⚡🌟⚡\n# DE AARTSENGEL   ONTVANGT UW BERICHT\n⚡🌟⚡🌟⚡🌟⚡🌟⚡',
+        '🌙🔱🌙🔱🌙🔱🌙🔱\n# MICHAËL STEMT AF   OP UW TRILLING\n🌙🔱🌙🔱🌙🔱🌙🔱',
+        '✨👁️✨👁️✨👁️✨👁️\n# HET HOGERE KANAAL   STAAT OPEN\n✨👁️✨👁️✨👁️✨👁️',
+      ];
+      const placeholder = MICHAEL_PLACEHOLDERS[Math.floor(Math.random() * MICHAEL_PLACEHOLDERS.length)];
+      res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: `> ${safeInput}\n\n${placeholder}` },
+      });
 
       // Code / technical request — refuse in-character, penalise score
       if (CODE_REQUEST_RE.test(userInput)) {
@@ -288,6 +301,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           body: { content: `> ${safeInput}\n\n${refusal}` },
         });
         return;
+      }
+
+      // Show typing indicator while OpenAI processes; refresh every 8s so it doesn't expire
+      let typingInterval = null;
+      if (channelId) {
+        DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+        typingInterval = setInterval(() => {
+          DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+        }, 8000);
       }
 
       try {
@@ -313,6 +335,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\nEr is ruis in het veld…  de verbinding met het universum is tijdelijk verstoord     probeer het later....Michael` },
         });
+      } finally {
+        if (typingInterval) clearInterval(typingInterval);
       }
       return;
     }
