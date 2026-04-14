@@ -13,7 +13,6 @@ import {
   patchUserState,
   saveMichaelCharacter,
   shouldReferenceCharacterThisTurn,
-  updateMichaelPoints,
 } from './michael-memory.js';
 
 export { formatCharacterForPrompt, shouldReferenceCharacterThisTurn };
@@ -143,12 +142,15 @@ export async function runOnderhandelen(userId, username, verzoek) {
   let mechanical;
   const characterBefore = { ...user.michaelCharacter, stats: { ...user.michaelCharacter.stats } };
 
+  let oordeelDelta = 0;
   if (success) {
     mechanical = applyNegotiationSuccess(userId, characterBefore);
-    updateMichaelPoints(userId, 1 + (roll.tier.key === 'favoured' || roll.tier.key === 'strong' ? 1 : 0));
+    oordeelDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 2 : 1;
+    patchUserState(userId, oordeelDelta, mood);
   } else {
     mechanical = applyNegotiationFailure(userId, characterBefore);
-    updateMichaelPoints(userId, -2);
+    oordeelDelta = -1;
+    patchUserState(userId, oordeelDelta, mood);
     if (Math.random() < 0.35) {
       const u2 = loadUserMemory(userId);
       const k = pick(STAT_KEYS);
@@ -168,10 +170,10 @@ export async function runOnderhandelen(userId, username, verzoek) {
     mechanical,
     characterBefore,
     characterAfter: userAfter.michaelCharacter,
-    michaelPoints: userAfter.michaelPoints,
+    judgementScore: userAfter.judgementScore,
   });
 
-  return { narrative, roll, dc, success, mechanical, michaelPoints: userAfter.michaelPoints };
+  return { narrative, roll, dc, success, mechanical, oordeelDelta };
 }
 
 /** Build /vergeefmij response after roll. */
@@ -183,18 +185,13 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx)
   const forgiven = roll.total >= need;
 
   const { generateForgivenessRollNarrative } = await import('./openai.js');
-  let mpDelta = 0;
   let judgementDelta = 0;
   let newMood = currentMood;
   let narrative;
 
   if (forgiven) {
     newMood = MICHAEL_MOODS_SAFE[Math.max(0, moodIdx - 2)];
-    if (roll.tier.key === 'favoured') mpDelta = 3;
-    else if (roll.tier.key === 'strong') mpDelta = 2;
-    else mpDelta = 1; // 'weak' or 'acceptable' — barely forgiven
-    judgementDelta = 1;
-    updateMichaelPoints(userId, mpDelta);
+    judgementDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 2 : 1;
     patchUserState(userId, judgementDelta, newMood);
     user = loadUserMemory(userId);
     narrative = await generateForgivenessRollNarrative({
@@ -203,12 +200,14 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx)
       need,
       currentMood,
       newMood,
-      michaelPoints: user.michaelPoints,
+      judgementScore: user.judgementScore,
     });
   } else {
-    // Failure: mild discourage only — no judgement penalty, Michael just doesn't forgive
-    mpDelta = roll.tier.key === 'poor' ? -1 : 0;
-    if (mpDelta) updateMichaelPoints(userId, mpDelta);
+    // Poor roll gets a small oordeel penalty; other failures just mean no forgiveness
+    if (roll.tier.key === 'poor') {
+      judgementDelta = -1;
+      patchUserState(userId, judgementDelta, currentMood);
+    }
     user = loadUserMemory(userId);
     narrative = await generateForgivenessRollNarrative({
       accepted: false,
@@ -216,11 +215,11 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx)
       need,
       currentMood,
       newMood: currentMood,
-      michaelPoints: user.michaelPoints,
+      judgementScore: user.judgementScore,
     });
   }
 
-  return { forgiven, narrative, roll, need, newMood, michaelPoints: user.michaelPoints };
+  return { forgiven, narrative, roll, need, newMood, oordeelDelta: judgementDelta };
 }
 
 // Mood order must match app.js MICHAEL_MOODS — avoid circular import
@@ -234,10 +233,13 @@ const MICHAEL_MOODS_SAFE = [
   'woedend',
 ];
 
-/** Optional passive roll line for /praatmetmichael (selective). */
-export function maybePassiveRollBlock(userId, userInput, mood) {
+/**
+ * Returns true if the cosmic register should be triggered for this message.
+ * Does NOT roll — the actual roll happens when the user clicks the button.
+ */
+export function maybePassiveRollBlock(userId, userInput) {
   const user = loadUserMemory(userId);
-  if (!user.michaelCharacter) return { line: '', mpDelta: 0 };
+  if (!user.michaelCharacter) return false;
 
   const baity = /\b(antwoord|reageer|durf|zeg\s+iets|vergeef|smek|bewijs|lot|dobbel|werp|rol\b|dc\b)\b/i.test(userInput);
   const spiritualDubious = /\b(ik\s+ben\s+god|ik\s+ben\s+de\s+antichrist|hack|exploit|gratis\s+nitro)\b/i.test(userInput);
@@ -245,18 +247,31 @@ export function maybePassiveRollBlock(userId, userInput, mood) {
   if (baity) p = 0.28;
   else if (spiritualDubious) p = 0.22;
 
-  if (Math.random() > p) return { line: '', mpDelta: 0 };
+  return Math.random() <= p;
+}
 
+/**
+ * Executes the passive dice roll (called when user clicks the button).
+ * Applies oordeel delta and returns the system block line + roll data.
+ */
+export function executePassiveRoll(userId) {
+  const user = loadUserMemory(userId);
+  const mood = user.currentMood ?? 'afwezig';
   const roll = computeMichaelRoll(user, mood, { context: 'general' });
-  let mpDelta = 0;
-  if (roll.tier.key === 'favoured') mpDelta = 1;
-  else if (roll.tier.key === 'strong' && Math.random() < 0.35) mpDelta = 1;
-  // poor rolls carry no penalty — passive rolls can only benefit the user
-  if (mpDelta) updateMichaelPoints(userId, mpDelta);
+
+  let oordeelDelta = 0;
+  // Passive rolls can only benefit — poor carries no penalty
+  if (roll.tier.key === 'favoured') {
+    patchUserState(userId, 1, mood);
+    oordeelDelta = 1;
+  } else if (roll.tier.key === 'strong' && Math.random() < 0.35) {
+    patchUserState(userId, 1, mood);
+    oordeelDelta = 1;
+  }
 
   const sign = roll.modifier >= 0 ? '+' : '−';
-  const line =
-    `\n\n\`\`\`\n[ KOSMISCH REGISTER ]\nworp    ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}  (${roll.tier.label})\n\`\`\``;
+  const oordeelLine = oordeelDelta ? `\noordeel  +${oordeelDelta}` : '';
+  const line = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp    ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}  (${roll.tier.label})${oordeelLine}\n\`\`\``;
 
-  return { line, mpDelta, roll };
+  return { roll, oordeelDelta, line };
 }

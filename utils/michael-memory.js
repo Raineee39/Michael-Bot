@@ -471,7 +471,6 @@ export function computeMichaelRoll(user, mood, opts = {}) {
   modifier += Math.floor((st.inzicht + st.volharding) / 6);
   modifier += Math.floor(st.aura / 7);
   modifier -= Math.floor(st.chaos / 8);
-  modifier += Math.floor((user.michaelPoints ?? 0) / 8);
 
   const js = user.judgementScore ?? 0;
   if (js <= -5) modifier -= 2;
@@ -549,10 +548,10 @@ export function patchMichaelCharacter(userId, partial) {
 }
 
 /** One-line summary for LLM prompts (no JSON). */
-export function formatCharacterForPrompt(character, michaelPoints) {
+export function formatCharacterForPrompt(character) {
   if (!character) return '';
   const { archetype, lineage, title, stats } = character;
-  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${archetype}", ras/afstamming "${lineage}", titel/epitheton "${title}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}, genade ${michaelPoints ?? 0}.`;
+  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${archetype}", ras/afstamming "${lineage}", titel/epitheton "${title}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}.`;
 }
 
 /** ~12% suggestion: Michael may nod at the role in a reply. */

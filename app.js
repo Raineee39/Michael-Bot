@@ -23,8 +23,8 @@ import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, updateMichaelPoints } from './utils/michael-memory.js';
-import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock } from './utils/michael-rollenspel.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn } from './utils/michael-memory.js';
+import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
 
@@ -574,12 +574,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const character = await ensureMichaelCharacter(userId, username);
         const mem = loadUserMemory(userId);
         const judgementLabel = getJudgementLabel(mem.judgementScore ?? 0);
-        const mp = mem.michaelPoints ?? 0;
         const comment = await generateMijnRolComment(username, character, judgementLabel, mem.currentMood ?? 'afwezig');
 
         const { stats } = character;
         const statBar = (v) => '█'.repeat(Math.round(v / 3)) + '░'.repeat(6 - Math.round(v / 3));
-        const mpSign = mp > 0 ? '+' : '';
         const safeComment = comment.slice(0, 300);
         const sheet = [
           `📜⚡📜⚡📜⚡📜⚡📜`,
@@ -597,7 +595,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           `inzicht     ${statBar(stats.inzicht)} ${String(stats.inzicht).padStart(2)}`,
           `volharding  ${statBar(stats.volharding)} ${String(stats.volharding).padStart(2)}`,
           `\`\`\``,
-          `**Genade**           ${mpSign}${mp}`,
           ``,
           `*${safeComment}*`,
         ].join('\n');
@@ -609,10 +606,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       } catch (err) {
         console.error('[michael] mijnrol error:', err);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: 'De inschrijvingsregisters zijn op dit moment troebel...  probeer het later....Michael' },
-        });
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: 'De inschrijvingsregisters zijn op dit moment troebel...  probeer het later....Michael' },
+          });
+        } catch { /* token expired */ }
       }
       return;
     }
@@ -661,7 +660,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const username = req.body.member?.user?.username ?? req.body.user?.username;
       const memory   = loadUserMemory(userId);
       const label    = getJudgementLabel(memory.judgementScore ?? 0);
-      const mp       = memory.michaelPoints ?? 0;
       const character = memory.michaelCharacter ?? null;
 
       const scoreBar = (() => {
@@ -673,8 +671,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         return '🟩🟩🟩🟩🟩';
       })();
 
-      const mpSign = mp > 0 ? '+' : '';
-
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
       try {
@@ -685,14 +681,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           memory.prompts.filter(p => !p.startsWith('[')).slice(-3),
           getCosmicRole(userId),
           character,
-          mp,
         );
 
         const lines = [
           `📊 **MICHAËLS DOSSIER: ${username}**`,
           ``,
           `**Oordeel**          ${label}   ${scoreBar}   *(${memory.judgementScore ?? 0})*`,
-          `**Genade**           ${mpSign}${mp}`,
         ];
 
         if (character) {
@@ -707,10 +701,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       } catch (err) {
         console.error('vibecheck error:', err);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael' },
-        });
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael' },
+          });
+        } catch { /* token expired */ }
       }
       return;
     }
@@ -807,7 +803,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Rollenspel — use existing character sheet if present; generate one in background after reply
         const existingCharacter = preMemory.michaelCharacter ?? null;
         const characterBlock = existingCharacter && shouldReferenceCharacterThisTurn()
-          ? formatCharacterForPrompt(existingCharacter, preMemory.michaelPoints ?? 0)
+          ? formatCharacterForPrompt(existingCharacter)
           : '';
 
         // After 2 explicit requests, unlock; full target-language replies only when they write in that language (or ask again)
@@ -820,8 +816,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Feature 2 — Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
 
-        // Passive dice roll — selective, only for certain message types
-        const passiveRoll = maybePassiveRollBlock(userId, userInput, mood);
+        // Passive dice roll — selective, returns true if buttons should be shown
+        const passiveTriggered = maybePassiveRollBlock(userId, userInput);
 
         // Run message generation and AI scoring in parallel — no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
@@ -873,9 +869,18 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           gifUrl = await fetchGiphyGif(getMichaelOptionalGifQuery(cosmicRole));
           if (gifUrl) console.log(`[michael] praatmetmichael | gif | ${username}`);
         }
-        const messageBase = `> ${safeInput}\n\n${michaelMessage}${passiveRoll.line}`;
+        const messageBase = `> ${safeInput}\n\n${michaelMessage}`;
         const patchBody = { content: messageBase };
         if (gifUrl) patchBody.embeds = [{ image: { url: gifUrl } }];
+        if (passiveTriggered) {
+          patchBody.components = [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              { type: MessageComponentTypes.BUTTON, custom_id: `passive_roll:${userId}`, label: '🎲 Kosmisch register', style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `passive_flee:${userId}`, label: '🏃 Negeer het teken', style: ButtonStyleTypes.SECONDARY },
+            ],
+          }];
+        }
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -903,10 +908,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         }
       } catch (err) {
         console.error('praatmetmichael error:', err);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: `> ${safeInput}\n\nEr is ruis in het veld…  de verbinding met het universum is tijdelijk verstoord     probeer het later....Michael` },
-        });
+        // If the token expired (10015) the fallback PATCH will also fail — swallow it silently
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: `> ${safeInput}\n\nEr is ruis in het veld…  de verbinding met het universum is tijdelijk verstoord     probeer het later....Michael` },
+          });
+        } catch { /* token already gone */ }
       } finally {
         if (typingInterval) clearInterval(typingInterval);
       }
@@ -965,14 +973,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const currentMood = memory.currentMood ?? 'afwezig';
         const moodIdx  = MICHAEL_MOODS.indexOf(currentMood);
 
-        const { forgiven, narrative, roll, need, newMood, michaelPoints } =
+        const { forgiven, narrative, roll, need, newMood, oordeelDelta } =
           await runForgivenessRoll(ownerId, username, currentMood, moodIdx);
 
         const sign = roll.modifier >= 0 ? '+' : '−';
         const outcome = forgiven ? 'GESLAAGD' : 'GEFAALD';
         const moodLine = forgiven ? `stemming    ${currentMood} → ${newMood}` : `stemming    ${currentMood} (onveranderd)`;
-        const mpSign = michaelPoints > 0 ? '+' : '';
-        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${need}\nuitkomst    ${outcome}\n${moodLine}\ngenade      ${mpSign}${michaelPoints}\n\`\`\``;
+        const oordeelSign = oordeelDelta > 0 ? '+' : '';
+        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${need}\nuitkomst    ${outcome}\n${moodLine}\noordeel     ${oordeelSign}${oordeelDelta}\n\`\`\``;
         const header = forgiven ? '🕊️✨🕊️✨🕊️' : '🔥💢🔥💢🔥';
         const content = `${header}\n${narrative}\n\n${systemBlock}`;
         console.log(`[michael] vergeefmij | ${username} | roll=${roll.total} need=${need} forgiven=${forgiven}`);
@@ -994,7 +1002,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
               const moodIdxNow = MICHAEL_MOODS.indexOf(moodNow);
               const pardonMood = MICHAEL_MOODS[Math.max(0, moodIdxNow - 1)];
               patchUserState(ownerId, 1, pardonMood);
-              updateMichaelPoints(ownerId, 1);
               const msg = pick(DIVINE_PARDON_VERGEEFMIJ);
               await DiscordRequest(`channels/${channelId}/messages`, {
                 method: 'POST',
@@ -1061,13 +1068,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
       try {
         const { verzoek, username } = pending;
-        const { narrative, roll, dc, success, michaelPoints } =
+        const { narrative, roll, dc, success, oordeelDelta } =
           await runOnderhandelen(ownerId, username, verzoek);
 
         const sign = roll.modifier >= 0 ? '+' : '−';
         const outcome = success ? 'GESLAAGD' : 'GEFAALD';
-        const mpSign = michaelPoints > 0 ? '+' : '';
-        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${dc}\nuitkomst    ${outcome}\ngenade      ${mpSign}${michaelPoints}\n\`\`\``;
+        const oordeelSign = oordeelDelta > 0 ? '+' : '';
+        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${dc}\nuitkomst    ${outcome}\noordeel     ${oordeelSign}${oordeelDelta}\n\`\`\``;
         const header = success ? '📜✨📜✨📜' : '🔥📜🔥📜🔥';
         const content = `${header}\n**ONDERHANDELINGSREGISTER**\n*"${verzoek.slice(0, 80)}"*\n\n${narrative}\n\n${systemBlock}`;
         console.log(`[michael] onderhandelen | ${username} | roll=${roll.total} dc=${dc} success=${success} | ${verzoek.slice(0, 50)}`);
@@ -1084,7 +1091,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           setTimeout(async () => {
             if (isDutchQuietHoursForUnpromptedSends()) return;
             try {
-              updateMichaelPoints(ownerId, 2);
+              const uPardon = loadUserMemory(ownerId);
+              patchUserState(ownerId, 1, uPardon.currentMood ?? 'afwezig');
               const msg = pick(DIVINE_PARDON_ONDERHANDELEN);
               await DiscordRequest(`channels/${channelId}/messages`, {
                 method: 'POST',
@@ -1100,6 +1108,57 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           method: 'PATCH',
           body: { content: 'De onderhandelingsregisters zijn gesloten...  dit is niet het moment....Michael', components: [] },
         });
+      }
+      return;
+    }
+
+    // ── Passive cosmic register button ─────────────────────────────────────
+    if (componentId.startsWith('passive_roll:') || componentId.startsWith('passive_flee:')) {
+      const ownerId   = componentId.split(':')[1];
+      const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+
+      if (clickerId !== ownerId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: 'Dit register is niet voor u bestemd....Michael', flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+
+      if (componentId.startsWith('passive_flee:')) {
+        return res.send({
+          type: 7,
+          data: { content: prev, components: [] },
+        });
+      }
+
+      // Roll path — disable buttons immediately, then patch with result
+      res.send({
+        type: 7,
+        data: {
+          content: prev + '\n\n*⏳ Het register wordt geconsulteerd...*',
+          components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              { type: MessageComponentTypes.BUTTON, custom_id: `passive_roll:${ownerId}`, label: '⏳ Register...', style: ButtonStyleTypes.SECONDARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `passive_flee:${ownerId}`, label: '🏃 Negeer het teken', style: ButtonStyleTypes.SECONDARY, disabled: true },
+            ],
+          }],
+        },
+      });
+      try {
+        const { line } = executePassiveRoll(ownerId);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: prev + '\n\n' + line, components: [] },
+        });
+      } catch (e) {
+        console.error('[michael] passive-roll button error:', e.message);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: prev, components: [] },
+          });
+        } catch { /* token expired */ }
       }
       return;
     }

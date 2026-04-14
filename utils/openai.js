@@ -334,7 +334,7 @@ Sluit af met je naam: 2 tot 4 puntjes gevolgd door Michael.
 
 // Generates Michael's in-character verdict on a user plus a vague suggestion
 // for how to improve their standing with him.
-export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts, cosmicRole, character = null, michaelPoints = 0) {
+export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts, cosmicRole, character = null) {
   const promptsText = recentPrompts.length
     ? recentPrompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')
     : '  (geen recente berichten)';
@@ -343,7 +343,7 @@ export async function generateVibecheckComment(username, judgementLabel, impress
   const cosmicBlock = cosmicRoleBlock(cosmicRole);
 
   const characterBlock = character
-    ? `\nKosmische rol: ${character.archetype} (${character.lineage}) — ${character.title}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, inzicht ${character.stats?.inzicht ?? '?'}, volharding ${character.stats?.volharding ?? '?'}\nGenade: ${michaelPoints}`
+    ? `\nKosmische rol: ${character.archetype} (${character.lineage}) — ${character.title}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, inzicht ${character.stats?.inzicht ?? '?'}, volharding ${character.stats?.volharding ?? '?'}`
     : '';
 
   const response = await client.responses.create({
@@ -517,7 +517,7 @@ export async function generateOnderhandelenNarrative({
   mechanical,
   characterBefore,
   characterAfter,
-  michaelPoints,
+  judgementScore,
 }) {
   const sign = roll.modifier >= 0 ? '+' : '−';
   const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (drempel: ${dc})`;
@@ -547,7 +547,7 @@ Worp: ${rollLine} — ${roll.tier.label}
 ${resultDesc}
 Archetype was: ${characterBefore.archetype}, afstamming: ${characterBefore.lineage}, titel: "${characterBefore.title}"
 Archetype nu: ${characterAfter.archetype}, afstamming: ${characterAfter.lineage}, titel: "${characterAfter.title}"
-Genade nu: ${michaelPoints}
+Oordeel nu: ${judgementScore}
 
 Schrijf Michaëls reactie op dit onderhandelingsverzoek.
 ${success
@@ -569,7 +569,7 @@ export async function generateForgivenessRollNarrative({
   need,
   currentMood,
   newMood,
-  michaelPoints,
+  judgementScore,
 }) {
   const sign = roll.modifier >= 0 ? '+' : '−';
   const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (nodig: ${need})`;
@@ -584,7 +584,7 @@ Worp: ${rollLine} — ${roll.tier.label}
 Uitkomst: ${accepted ? 'vergeven (met moeite)' : 'afgewezen'}
 Huidige stemming: ${currentMood}
 ${accepted ? `Nieuwe stemming: ${newMood}` : ''}
-Genade na deze interactie: ${michaelPoints}
+Oordeel na deze interactie: ${judgementScore}
 
 Schrijf Michaëls antwoord op dit verzoek om vergiffenis.
 ${accepted
