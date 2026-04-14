@@ -343,6 +343,29 @@ export default {
     onderhandelenFleeButton: '🏃 اسحب الطلب',
     onderhandelenRollingButton: '⏳ جارٍ الرمي...',
 
+    negotiateWizard: {
+      intro: "**دِيوَان المُفَاوَضَة**\n*أيُّ جزء من تسجيلك تريد منازعته؟ اختر حقلًا واحدًا.*",
+      selectPlaceholder: 'النمط، السلالة، أو اللقب…',
+      kindArchetype: { label: 'النمط', description: 'الدور الكوني / الصنف' },
+      kindLineage: { label: 'السلالة', description: 'الجنس أو النسب (مثل تيفلينج)' },
+      kindTitle: { label: 'اللقب', description: 'الكنية أو اللقب الشعري' },
+      modalTitle: {
+        archetype: 'فاوض على النمط',
+        lineage: 'فاوض على السلالة',
+        title: 'فاوض على اللقب',
+      },
+      modalLabel: "بماذا يجب أن يصبح؟",
+      modalPlaceholder: 'مثال: تيفلينج، فارس القمر',
+      fieldLabel: { archetype: 'النمط', lineage: 'السلالة', title: 'اللقب' },
+      confirmFooter: "تلقَّى امرؤ القيس طلبك.  هل تريد المجازفة بالرمية الشعرية؟",
+      confirm: (kind, text) => {
+        const L = { archetype: 'النمط', lineage: 'السلالة', title: 'اللقب' }[kind] ?? kind;
+        return `**${L}** → *"${String(text).slice(0, 200)}"*\n\n`;
+      },
+      invalidKind: 'هذا الحقل ليس في الديوان....امرؤ القيس',
+      emptyWish: 'الديوان لا يقبل الفراغ....امرؤ القيس',
+    },
+
     passiveRollButton: '🎲 ديوان القيس',
     passiveFleeButton: '🏃 تجاهل العلامة',
 

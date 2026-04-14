@@ -196,19 +196,13 @@ const MIJNROL_COMMAND = {
 
 const ONDERHANDELEN_COMMAND = {
   name: 'onderhandelen',
-  description: 'Probeer met Michaël te onderhandelen over je kosmische rol.',
+  description: 'Doorloop een korte wizard en onderhandel met Michaël over archetype, afstamming of titel.',
   name_localizations: { 'en-US': 'negotiate', 'en-GB': 'negotiate', ar: 'تفاوض' },
-  description_localizations: { 'en-US': 'Try to negotiate with Michael about your cosmic role.', 'en-GB': 'Try to negotiate with Michael about your cosmic role.', ar: 'حاول التفاوض مع ميخائيل بشأن دورك الكوني.' },
-  options: [
-    {
-      type: 3,
-      name: 'verzoek',
-      description: 'Wat wil je veranderd hebben? (bijv. "ik ben geen orc", "ik verdien een betere titel")',
-      name_localizations: { 'en-US': 'request', 'en-GB': 'request', ar: 'طلب' },
-      description_localizations: { 'en-US': 'What do you want changed? (e.g. "I am not an orc", "I deserve a better title")', 'en-GB': 'What do you want changed? (e.g. "I am not an orc", "I deserve a better title")', ar: 'ما الذي تريد تغييره؟ (مثال: "أنا لست أورك"، "أستحق لقباً أفضل")' },
-      required: true,
-    },
-  ],
+  description_localizations: {
+    'en-US': 'A short wizard: pick archetype, lineage, or title, then say what you want — then roll with Michael.',
+    'en-GB': 'A short wizard: pick archetype, lineage, or title, then say what you want — then roll with Michael.',
+    ar: 'معالج قصير: اختر النمط أو السلالة أو اللقب، ثم اكتب ما تريد — ثم ارمِ مع ميخائيل.',
+  },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],

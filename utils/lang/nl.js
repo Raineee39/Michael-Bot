@@ -339,6 +339,29 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     onderhandelenFleeButton: '🏃 Trek verzoek in',
     onderhandelenRollingButton: '⏳ Aan het gooien...',
 
+    negotiateWizard: {
+      intro: '**ONDERHANDELINGSREGISTER**\n*Welk deel van uw inschrijving wilt U betwisten? Kies één veld.*',
+      selectPlaceholder: 'Archetype, afstamming of titel…',
+      kindArchetype: { label: 'Archetype', description: 'Kosmische rol / klasse (bijv. bard, klerk)' },
+      kindLineage: { label: 'Afstamming', description: 'Ras of bloedlijn (bijv. tiefling, elf)' },
+      kindTitle: { label: 'Titel', description: 'Epitheton / bijnaam' },
+      modalTitle: {
+        archetype: 'Onderhandel archetype',
+        lineage: 'Onderhandel afstamming',
+        title: 'Onderhandel titel',
+      },
+      modalLabel: 'Wat moet het worden?',
+      modalPlaceholder: 'bijv. tiefling, maanridder, van de tweede zegel',
+      fieldLabel: { archetype: 'Archetype', lineage: 'Afstamming', title: 'Titel' },
+      confirmFooter: 'Michaël heeft uw verzoek ontvangen.  Wilt u de kosmische worp wagen?',
+      confirm: (kind, text) => {
+        const L = { archetype: 'Archetype', lineage: 'Afstamming', title: 'Titel' }[kind] ?? kind;
+        return `**${L}** → *"${String(text).slice(0, 200)}"*\n\n`;
+      },
+      invalidKind: 'Dat veld staat niet in het register....Michael',
+      emptyWish: 'Het register aanvaardt geen leegte....Michael',
+    },
+
     passiveRollButton: '🎲 Kosmisch register',
     passiveFleeButton: '🏃 Negeer het teken',
 

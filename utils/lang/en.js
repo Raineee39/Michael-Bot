@@ -339,6 +339,29 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     onderhandelenFleeButton: '🏃 Withdraw request',
     onderhandelenRollingButton: '⏳ Rolling...',
 
+    negotiateWizard: {
+      intro: '**NEGOTIATION REGISTER**\n*Which part of your enrolment do you challenge? Pick one field below.*',
+      selectPlaceholder: 'Archetype, lineage, or title…',
+      kindArchetype: { label: 'Archetype', description: 'Cosmic role / class (e.g. bard, clerk)' },
+      kindLineage: { label: 'Lineage', description: 'Species or bloodline (e.g. tiefling, elf)' },
+      kindTitle: { label: 'Title', description: 'Epithet / sobriquet' },
+      modalTitle: {
+        archetype: 'Negotiate archetype',
+        lineage: 'Negotiate lineage',
+        title: 'Negotiate title',
+      },
+      modalLabel: 'What should it become?',
+      modalPlaceholder: 'e.g. tiefling, moon knight, of the second seal',
+      fieldLabel: { archetype: 'Archetype', lineage: 'Lineage', title: 'Title' },
+      confirmFooter: 'Michael has received your request.  Do you wish to attempt the cosmic roll?',
+      confirm: (kind, text) => {
+        const L = { archetype: 'Archetype', lineage: 'Lineage', title: 'Title' }[kind] ?? kind;
+        return `**${L}** → *"${String(text).slice(0, 200)}"*\n\n`;
+      },
+      invalidKind: 'That field is not in the register....Michael',
+      emptyWish: 'The register does not accept emptiness....Michael',
+    },
+
     passiveRollButton: '🎲 Cosmic register',
     passiveFleeButton: '🏃 Ignore the sign',
 

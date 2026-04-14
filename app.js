@@ -9,6 +9,7 @@ import {
   InteractionResponseType,
   InteractionType,
   MessageComponentTypes,
+  TextStyleTypes,
   verifyKeyMiddleware,
 } from 'discord-interactions';
 import {
@@ -58,6 +59,15 @@ function getDateRounds(lang) {
 
 // Pending /onderhandelen verzoek texts — keyed by userId, cleared after use or 10 min
 const pendingNegotiations = new Map();
+
+function readNegotiateModalValue(modalData) {
+  for (const row of modalData?.components ?? []) {
+    for (const c of row.components ?? []) {
+      if (c.custom_id === 'negotiate_text') return String(c.value ?? '').trim();
+    }
+  }
+  return '';
+}
 
 // All flee/pardon/apology/refusal strings are now in lang packs (utils/lang/{nl,en,ar}.js)
 // and accessed via lang.ui.*  throughout the handler.
@@ -247,7 +257,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   const invokingUserId = req.body.member?.user?.id ?? req.body.user?.id;
   const langCode = resolveLanguage(guildId, invokingUserId);
   const lang = getLang(langCode);
-  if (isAntichrist(invokingUserId) && !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)) {
+  if (
+    type === InteractionType.APPLICATION_COMMAND &&
+    isAntichrist(invokingUserId) &&
+    !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)
+  ) {
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: { content: pick(lang.ui.nee) },
@@ -484,29 +498,28 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // "onderhandelen" — user tries to negotiate their character sheet (user must click to roll)
+    // "onderhandelen" — wizard: pick field → modal for wish text → roll buttons
     if (name === 'onderhandelen') {
-      const userId   = req.body.member?.user?.id ?? req.body.user?.id;
-      const verzoek  = data.options.find(o => o.name === 'verzoek')?.value ?? '';
-
-      // Store verzoek for 10 minutes so the button handler can retrieve it
-      pendingNegotiations.set(userId, {
-        verzoek,
-        username: req.body.member?.user?.username ?? req.body.user?.username,
-        expiresAt: Date.now() + 10 * 60 * 1000,
-      });
-
-      const ui = lang.ui;
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const w        = lang.ui.negotiateWizard;
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
-          content: `${ui.onderhandelenRegisterHeader}\n${ui.onderhandelenConfirm(verzoek)}`,
+          content: w.intro,
           components: [{
             type: MessageComponentTypes.ACTION_ROW,
-            components: [
-              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_roll:${userId}`, label: ui.onderhandelenRollButton, style: ButtonStyleTypes.PRIMARY },
-              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_flee:${userId}`, label: ui.onderhandelenFleeButton, style: ButtonStyleTypes.SECONDARY },
-            ],
+            components: [{
+              type: MessageComponentTypes.STRING_SELECT,
+              custom_id: `negotiate_kind:${userId}`,
+              placeholder: w.selectPlaceholder,
+              min_values: 1,
+              max_values: 1,
+              options: [
+                { label: w.kindArchetype.label, value: 'archetype', description: w.kindArchetype.description },
+                { label: w.kindLineage.label, value: 'lineage', description: w.kindLineage.description },
+                { label: w.kindTitle.label, value: 'title', description: w.kindTitle.description },
+              ],
+            }],
           }],
         },
       });
@@ -839,6 +852,58 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     return res.status(400).json({ error: 'unknown command' });
   }
 
+  // ── Negotiation wizard: modal submit (text for chosen field) ─────────────
+  if (type === InteractionType.MODAL_SUBMIT) {
+    const mid = data.custom_id ?? '';
+    if (mid.startsWith('negotiate_modal:')) {
+      const parts   = mid.split(':');
+      const kind    = parts[1];
+      const ownerId = parts[2];
+      const uid = req.body.member?.user?.id ?? req.body.user?.id;
+      if (uid !== ownerId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.notYourRite, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      if (!['archetype', 'lineage', 'title'].includes(kind)) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.negotiateWizard.invalidKind, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      const verzoek = readNegotiateModalValue(data);
+      if (!verzoek) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.negotiateWizard.emptyWish, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      pendingNegotiations.set(ownerId, {
+        verzoek,
+        negotiationKind: kind,
+        username: req.body.member?.user?.username ?? req.body.user?.username,
+        expiresAt: Date.now() + 10 * 60 * 1000,
+      });
+      const w = lang.ui.negotiateWizard;
+      const ui = lang.ui;
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: `${ui.onderhandelenRegisterHeader}\n${w.confirm(kind, verzoek)}${w.confirmFooter}`,
+          components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_roll:${ownerId}`, label: ui.onderhandelenRollButton, style: ButtonStyleTypes.PRIMARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_flee:${ownerId}`, label: ui.onderhandelenFleeButton, style: ButtonStyleTypes.SECONDARY },
+            ],
+          }],
+        },
+      });
+    }
+    return res.status(400).json({ error: 'unknown modal' });
+  }
+
   // Handle date button interactions
   // custom_id format: date_rN_{invokerUserId}_{path}
   // Each handler reads the current message content and APPENDS to it, building the full story.
@@ -846,6 +911,46 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     const componentId = data.custom_id;
     const prev = req.body.message?.content ?? '';
     const SEP = '\n\n                    ·  ·  ·\n\n';
+
+    // ── Negotiation wizard: string select → open modal for text ───────────
+    if (componentId.startsWith('negotiate_kind:')) {
+      const ownerId   = componentId.split(':')[1];
+      const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+      if (clickerId !== ownerId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.notYourRite, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      const kind = data.values?.[0];
+      if (!['archetype', 'lineage', 'title'].includes(kind)) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.negotiateWizard.invalidKind, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      const w = lang.ui.negotiateWizard;
+      return res.send({
+        type: InteractionResponseType.MODAL,
+        data: {
+          custom_id: `negotiate_modal:${kind}:${ownerId}`,
+          title: w.modalTitle[kind].slice(0, 45),
+          components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [{
+              type: MessageComponentTypes.INPUT_TEXT,
+              custom_id: 'negotiate_text',
+              label: w.modalLabel.slice(0, 45),
+              style: TextStyleTypes.PARAGRAPH,
+              min_length: 1,
+              max_length: 300,
+              placeholder: w.modalPlaceholder.slice(0, 100),
+              required: true,
+            }],
+          }],
+        },
+      });
+    }
 
     // ── Vergeefmij roll button ──────────────────────────────────────────────
     if (componentId.startsWith('vergeefmij_roll:') || componentId.startsWith('vergeefmij_flee:')) {
@@ -999,9 +1104,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         },
       });
       try {
-        const { verzoek, username } = pending;
+        const { verzoek, username, negotiationKind } = pending;
         const { narrative, roll, dc, success, mechanical, oordeelDelta } =
-          await runOnderhandelen(ownerId, username, verzoek, langCode);
+          await runOnderhandelen(ownerId, username, verzoek, langCode, negotiationKind ?? null);
 
         const rl = lang.rollUI;
         const sign = roll.modifier >= 0 ? '+' : '−';

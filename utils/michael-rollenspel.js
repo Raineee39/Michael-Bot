@@ -19,6 +19,60 @@ export { formatCharacterForPrompt, shouldReferenceCharacterThisTurn };
 
 const STAT_KEYS = ['aura', 'discipline', 'chaos', 'inzicht', 'volharding'];
 
+/** When the user names a standard lineage, negotiation success must grant it (not a poetic substitute). */
+const LINEAGE_TRILINGUAL = {
+  'half-elf': { nl: 'halfelf', en: 'half-elf', ar: 'نصف إلف' },
+  'half-orc': { nl: 'half-ork', en: 'half-orc', ar: 'نصف أورك' },
+  tiefling: { nl: 'tiefling', en: 'tiefling', ar: 'تيفلينج' },
+  dragonborn: { nl: 'draakgeborene', en: 'dragonborn', ar: 'ولد التنين' },
+  halfling: { nl: 'halfling', en: 'halfling', ar: 'هالفلينج' },
+  aasimar: { nl: 'aasimar', en: 'aasimar', ar: 'آسيمار' },
+  gnome: { nl: 'gnoom', en: 'gnome', ar: 'غوم' },
+  dwarf: { nl: 'dwerg', en: 'dwarf', ar: 'قزم' },
+  orc: { nl: 'ork', en: 'orc', ar: 'أورك' },
+  elf: { nl: 'elf', en: 'elf', ar: 'إلف' },
+  human: { nl: 'mens', en: 'human', ar: 'إنسان' },
+  genasi: { nl: 'genasi', en: 'genasi', ar: 'جيناسي' },
+  tabaxi: { nl: 'tabaxi', en: 'tabaxi', ar: 'تاباكسي' },
+  firbolg: { nl: 'firbolg', en: 'firbolg', ar: 'فيربولغ' },
+  goliath: { nl: 'goliath', en: 'goliath', ar: 'جولياث' },
+  triton: { nl: 'triton', en: 'triton', ar: 'تريتون' },
+  warforged: { nl: 'warforged', en: 'warforged', ar: 'مُصْنَع حَيّ' },
+  lizardfolk: { nl: 'hagedismensen', en: 'lizardfolk', ar: 'سحاليّون' },
+  kenku: { nl: 'kenku', en: 'kenku', ar: 'كنكو' },
+};
+
+/** @returns {keyof typeof LINEAGE_TRILINGUAL | null} */
+function extractCanonicalLineageKey(verzoek) {
+  if (!verzoek || typeof verzoek !== 'string') return null;
+  const v = verzoek.toLowerCase();
+  const tryPatterns = [
+    [/half[\s-]?elf\b/, 'half-elf'],
+    [/half[\s-]?orc\b/, 'half-orc'],
+    [/\btiefling\b/, 'tiefling'],
+    [/\bdragonborn\b|\bdraakgeboren(e)?\b/, 'dragonborn'],
+    [/\bhalfling\b/, 'halfling'],
+    [/\baasimar\b/, 'aasimar'],
+    [/\bgnome\b|\bgnoom\b/, 'gnome'],
+    [/\bdwarf\b|\bdwerg(en)?\b/, 'dwarf'],
+    [/\borc\b|\bork\b/, 'orc'],
+    [/\belf\b|\belven\b|\belvish\b/, 'elf'],
+    [/\bhuman\b|\bmortal\b|\bsterveling\b|\bmens(en)?\b/, 'human'],
+    [/\bgenasi\b|\belementaalkind\b/, 'genasi'],
+    [/\btabaxi\b/, 'tabaxi'],
+    [/\bfirbolg\b/, 'firbolg'],
+    [/\bgoliath\b/, 'goliath'],
+    [/\btriton\b/, 'triton'],
+    [/\bwarforged\b/, 'warforged'],
+    [/\blizardfolk\b|\blizard[\s-]?folk\b|\bhagedismensen\b/, 'lizardfolk'],
+    [/\bkenku\b/, 'kenku'],
+  ];
+  for (const [re, key] of tryPatterns) {
+    if (re.test(v) && LINEAGE_TRILINGUAL[key]) return key;
+  }
+  return null;
+}
+
 const WORSE_FRAGMENTS = {
   nl: [
     ' — en de registers vernauwen zich',
@@ -146,8 +200,42 @@ function stripWorseFragments(base) {
 }
 
 /** Michael generates a new value for a character field in all 3 languages via LLM. */
-async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzoek = '') {
-  // Bias toward the category the user actually asked for
+async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzoek = '', forcedKind = null) {
+  const { generateCharacterFieldChange } = await import('./openai.js');
+
+  // Wizard flow: user already picked archetype | lineage | title — no random branch
+  if (forcedKind === 'lineage') {
+    const lineageKey = extractCanonicalLineageKey(verzoek);
+    if (lineageKey) {
+      const newLineage = { ...LINEAGE_TRILINGUAL[lineageKey] };
+      patchMichaelCharacter(userId, { lineage: newLineage });
+      return { kind: 'lineage', field: 'lineage', newValue: newLineage };
+    }
+    const newLineage = await generateCharacterFieldChange('lineage', { verzoek, characterBefore: character, langCode });
+    patchMichaelCharacter(userId, { lineage: newLineage });
+    return { kind: 'lineage', field: 'lineage', newValue: newLineage };
+  }
+  if (forcedKind === 'archetype') {
+    const newArchetype = await generateCharacterFieldChange('archetype', { verzoek, characterBefore: character, langCode });
+    patchMichaelCharacter(userId, { archetype: newArchetype });
+    return { kind: 'archetype', field: 'archetype', newValue: newArchetype };
+  }
+  if (forcedKind === 'title') {
+    const raw = getTitleObj(character);
+    const cleaned = {
+      title: {
+        nl: stripWorseFragments(raw.nl),
+        en: stripWorseFragments(raw.en),
+        ar: stripWorseFragments(raw.ar),
+      },
+      stats: character.stats,
+    };
+    const newTitle = await generateCharacterFieldChange('title', { verzoek, characterBefore: cleaned, langCode });
+    patchMichaelCharacter(userId, { title: newTitle });
+    return { kind: 'title', field: 'title', newValue: newTitle };
+  }
+
+  // Free-form verzoek: bias toward detected category
   const requestedKind = detectRequestKind(verzoek);
   let branch = Math.random();
   if      (requestedKind === 'lineage')   branch = 0.82 + Math.random() * 0.18;
@@ -163,8 +251,6 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
     patchMichaelCharacter(userId, { stats: { [k]: Math.min(18, v) } });
     return { kind: 'stat', field: k, delta: +1 };
   }
-
-  const { generateCharacterFieldChange } = await import('./openai.js');
 
   if (branch < 0.62) {
     // Title branch — LLM generates a new title in all 3 languages
@@ -190,7 +276,14 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
     return { kind: 'archetype', field: 'archetype', newValue: newArchetype };
   }
 
-  // Lineage branch — LLM generates new lineage in all 3 languages
+  // Lineage branch — named standard races must match the request (LLM was substituting e.g. "shadow-touched mortal" for tiefling)
+  const lineageKey = extractCanonicalLineageKey(verzoek);
+  if (lineageKey) {
+    const newLineage = { ...LINEAGE_TRILINGUAL[lineageKey] };
+    patchMichaelCharacter(userId, { lineage: newLineage });
+    return { kind: 'lineage', field: 'lineage', newValue: newLineage };
+  }
+
   const newLineage = await generateCharacterFieldChange('lineage', { verzoek, characterBefore: character, langCode });
   patchMichaelCharacter(userId, { lineage: newLineage });
   return { kind: 'lineage', field: 'lineage', newValue: newLineage };
@@ -214,7 +307,7 @@ function applyNegotiationFailure(userId, character, langCode = 'nl') {
 /**
  * Run onderhandelen: roll, apply mechanical outcome, return data for narrative + Discord.
  */
-export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl') {
+export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl', negotiationKind = null) {
   await ensureMichaelCharacter(userId, username, langCode);
   const user = loadUserMemory(userId);
   const mood = user.currentMood ?? 'afwezig';
@@ -227,7 +320,7 @@ export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl
 
   let oordeelDelta = 0;
   if (success) {
-    mechanical = await applyNegotiationSuccess(userId, characterBefore, langCode, verzoek);
+    mechanical = await applyNegotiationSuccess(userId, characterBefore, langCode, verzoek, negotiationKind);
     oordeelDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 2 : 1;
     patchUserState(userId, oordeelDelta, mood);
   } else {
@@ -255,6 +348,7 @@ export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl
     characterAfter: userAfter.michaelCharacter,
     judgementScore: userAfter.judgementScore,
     langCode,
+    negotiationKind,
   });
 
   return { narrative, roll, dc, success, mechanical, oordeelDelta };

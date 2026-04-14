@@ -414,7 +414,7 @@ export async function generateCharacterFieldChange(kind, { verzoek, characterBef
 
   const hints = {
     archetype: 'Archetypes are cosmic role labels e.g. "wandering monk", "shadow clerk", "mist bard", "hedge seer", "void practitioner". Keep them short (1–3 words).',
-    lineage:   'Lineages are species or bloodlines e.g. "mortal", "shadow elf", "tiefling", "moon-being", "marsh-born", "half-oracle". Keep them short (1–3 words).',
+    lineage:   `Lineages are species or bloodlines. If the user NAMES a concrete RPG ancestry (tiefling, elf, dwarf, orc, halfling, dragonborn, etc.), you MUST use that exact ancestry in the English string (standard spelling). Do NOT replace it with a vague poetic label like "shadow-touched mortal" or "infernal-adjacent mortal" — the named species must appear. For vague requests only, you may invent a short poetic lineage (1–3 words each language).`,
     title:     'Titles are epithets appended to the name e.g. "of hesitant questions", "with the contested seal", "of the second act". Keep them under 10 words.',
   }[kind] ?? '';
 
@@ -432,7 +432,7 @@ Current ${kind}:
 - English: "${currentEn}"
 - Arabic: "${currentAr}"
 
-Generate a new ${kind} that partially honors the request. ${hints}
+Generate a new ${kind} that honors the request. ${hints}
 Keep Arabic in the style of Imru' al-Qais — poetic, ancient, weighty epithets.
 Keep Dutch/English in Michael's cosmic bureaucratic register.
 
@@ -621,6 +621,7 @@ export async function generateOnderhandelenNarrative({
   characterAfter,
   judgementScore,
   langCode = 'nl',
+  negotiationKind = null,
 }) {
   const lang = getLang(langCode);
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
@@ -666,6 +667,7 @@ ${personaIntro(langCode)} ${langCode === 'ar'
   : `A user is trying to negotiate about their cosmic enrolment in your field campaign.`}
 
 ${langCode === 'ar' ? 'طلب المستخدم' : "User's request"}: "${verzoek}"
+${negotiationKind ? (langCode === 'ar' ? `(المستخدم حدَّد الحقل: **${negotiationKind}** — معالج التفاوض.)` : `(Wizard: user locked negotiation to **${negotiationKind}** only.)`) : ''}
 ${langCode === 'ar' ? 'الرمية' : 'Roll'}: ${rollLine} — ${tierLabel}
 ${resultDesc}
 ${langCode === 'ar' ? 'النمط كان' : 'Archetype was'}: ${rBefore.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${rBefore.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${rBefore.title}"
