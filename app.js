@@ -1117,10 +1117,29 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         },
       });
       try {
-        const { line } = executePassiveRoll(ownerId, langCode);
+        const { roll, oordeelDelta } = executePassiveRoll(ownerId);
+        const rl = lang.rollUI;
+        const sign = roll.modifier >= 0 ? '+' : '−';
+        const tierLabel = (lang.rollTierLabels ?? {})[roll.tier.key] ?? roll.tier.label;
+        const oordeelSign = oordeelDelta > 0 ? '+' : '';
+        const color = (roll.tier.key === 'poor' || roll.tier.key === 'weak')
+          ? 0xef4444
+          : (roll.tier.key === 'acceptable' ? 0xf59e0b : 0x22c55e);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: prev + '\n\n' + line, components: [] },
+          body: {
+            content: prev,
+            embeds: [{
+              color,
+              title: rl.registerLabel,
+              fields: [
+                { name: rl.rollLabel, value: `${roll.raw} ${sign}${Math.abs(roll.modifier)} = **${roll.total}**`, inline: true },
+                { name: rl.outcomeLabel, value: tierLabel, inline: true },
+                { name: rl.judgementLabel, value: `${oordeelSign}${oordeelDelta}`, inline: true },
+              ],
+            }],
+            components: [],
+          },
         });
       } catch (e) {
         console.error('[michael] passive-roll button error:', e.message);

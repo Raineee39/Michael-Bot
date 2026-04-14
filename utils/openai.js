@@ -29,6 +29,18 @@ function applyChaoticFormatting(text) {
     );
 }
 
+function clampToMaxSentences(text, maxSentences, signOffName) {
+  const normalized = String(text ?? '').trim();
+  if (!normalized) return normalized;
+  const sentences = normalized.split(/(?<=[.!?؟])\s+/u).filter(Boolean);
+  if (sentences.length <= maxSentences) return normalized;
+  let clipped = sentences.slice(0, maxSentences).join(' ').trim();
+  if (signOffName && !clipped.includes(signOffName)) {
+    clipped = `${clipped.replace(/\s*$/, '')}....${signOffName}`;
+  }
+  return clipped;
+}
+
 // ─── Main reply ────────────────────────────────────────────────────────────────
 
 function cosmicRoleBlock(lang, cosmicRole) {
@@ -187,7 +199,10 @@ ${lang.userAttribution(username, userInput)}
     `.trim(),
   });
 
-  return applyChaoticFormatting(response.output[0].content[0].text);
+  const generated = applyChaoticFormatting(response.output[0].content[0].text);
+  return israelTopicHit
+    ? generated
+    : clampToMaxSentences(generated, 2, lang.signOff);
 }
 
 // ─── Aura check ───────────────────────────────────────────────────────────────
