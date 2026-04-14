@@ -39,10 +39,10 @@ function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-/** Create and persist a character sheet if missing. */
+/** Create and persist a character sheet if missing, or if the language changed. */
 export async function ensureMichaelCharacter(userId, username, langCode = 'nl') {
   const mem = loadUserMemory(userId);
-  if (mem.michaelCharacter) return mem.michaelCharacter;
+  if (mem.michaelCharacter && mem.michaelCharacter.lang === langCode) return mem.michaelCharacter;
 
   const { generateMichaelCharacterSheet } = await import('./openai.js');
   const judgementLabel = getJudgementLabel(mem.judgementScore ?? 0);
@@ -54,6 +54,7 @@ export async function ensureMichaelCharacter(userId, username, langCode = 'nl') 
     langCode,
   );
   const normalized = normalizeMichaelCharacter(sheet);
+  normalized.lang = langCode;
   saveMichaelCharacter(userId, username, normalized);
   return normalized;
 }
