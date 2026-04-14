@@ -11,7 +11,12 @@ import {
   MessageComponentTypes,
   verifyKeyMiddleware,
 } from 'discord-interactions';
-import { getRandomEmoji, DiscordRequest } from './utils.js';
+import {
+  DiscordRequest,
+  getRandomEmoji,
+  isDutchQuietHoursForUnpromptedSends,
+  MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
+} from './utils.js';
 import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
@@ -927,7 +932,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
 // ─── Feature 1 + 4 — Delayed consequences & shadow replies cron ───────────────
 //
-// Runs every 30 minutes.
+// Runs every 15 minutes (Europe/Amsterdam clock for quiet hours below).
 // Cycle:
 //   1. Prune stale shadow candidates from the in-memory store.
 //   2. Shadow reply (Feature 4): 25% chance per cycle, pick one eligible
@@ -943,8 +948,10 @@ cron.schedule('*/15 * * * *', async () => {
   // 1. Prune stale shadow candidates
   pruneOldCandidates();
 
-  // 2. Shadow reply — Feature 4
-  if (Math.random() < 0.25) {
+  const dutchQuiet = isDutchQuietHoursForUnpromptedSends();
+
+  // 2. Shadow reply — Feature 4 (unprompted: no sends 22:00–10:00 Amsterdam)
+  if (!dutchQuiet && Math.random() < 0.25) {
     const eligible = getShadowCandidates();
     if (eligible.length > 0) {
       const pick = eligible[Math.floor(Math.random() * eligible.length)];
@@ -955,6 +962,7 @@ cron.schedule('*/15 * * * *', async () => {
           body: {
             content: shadowLine,
             message_reference: { message_id: pick.messageId, fail_if_not_exists: false },
+            flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
           },
         });
         markShadowReplied(pick.messageId);
@@ -967,6 +975,13 @@ cron.schedule('*/15 * * * *', async () => {
 
   // 3. Delayed consequence — Feature 1
   const now = Date.now();
+
+  if (dutchQuiet) {
+    const allMemQuiet = loadAllMemory();
+    Object.keys(allMemQuiet).forEach((uid) => maybeAgeBusiness(uid));
+    return;
+  }
+
   if (now - lastConsequenceAt < CONSEQUENCE_COOLDOWN_MS) return;
 
   const allMemory = loadAllMemory();
@@ -1006,6 +1021,7 @@ cron.schedule('*/15 * * * *', async () => {
 
     const postBody = {
       content: message,
+      flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
       ...(userShadow ? { message_reference: { message_id: userShadow.messageId, fail_if_not_exists: false } } : {}),
     };
 
@@ -1049,6 +1065,11 @@ cron.schedule('0 10 * * *', async () => {
   const channelId = process.env.DAILY_CHANNEL_ID;
   if (!guildId || !channelId) return;
 
+  if (isDutchQuietHoursForUnpromptedSends()) {
+    console.log('[michael] daily uitverkorene skipped — Dutch quiet hours 22:00–10:00');
+    return;
+  }
+
   try {
     const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId);
     uitverkoreneState.userId = chosenUserId;
@@ -1057,7 +1078,7 @@ cron.schedule('0 10 * * *', async () => {
       body: {
         content,
         embeds,
-        flags: 4096, // SUPPRESS_NOTIFICATIONS = @silent
+        flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
       },
     });
     console.log('Daily uitverkorene posted.');

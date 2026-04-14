@@ -1,5 +1,23 @@
 import 'dotenv/config';
 
+/** Discord message flag: suppress push/badge for this message (@silent). */
+export const MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS = 1 << 12; // 4096
+
+/**
+ * True between 22:00 and 09:59 (Europe/Amsterdam). Use to block proactive /
+ * unprompted Michael sends at night (user-initiated slash commands stay allowed).
+ */
+export function isDutchQuietHoursForUnpromptedSends() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Amsterdam',
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const hourRaw = parts.find((p) => p.type === 'hour')?.value;
+  const hour = hourRaw !== undefined ? parseInt(hourRaw, 10) : 12;
+  return hour >= 22 || hour < 10;
+}
+
 export async function DiscordRequest(endpoint, options) {
   // append endpoint to root API URL
   const url = 'https://discord.com/api/v10/' + endpoint;
