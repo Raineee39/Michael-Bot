@@ -643,7 +643,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         },
       });
     }
-    }
 
     // "michaelhumeur" — shows Michael's current persistent mood toward this user
     if (name === 'michaelhumeur') {
