@@ -71,3 +71,42 @@ export function getRandomEmoji() {
 export function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
+
+/** Discord message `content` max length (UTF-16 code units). */
+export const DISCORD_MESSAGE_CONTENT_MAX = 2000;
+
+/**
+ * Append a revision block to a message without exceeding Discord's limit.
+ * Trims the edit line first so the original stays intact when possible.
+ */
+export function appendEditWithinDiscordLimit(
+  originalContent,
+  editLine,
+  maxLen = DISCORD_MESSAGE_CONTENT_MAX
+) {
+  const sep = '\n\n';
+  const oRaw = String(originalContent ?? '');
+  let o = oRaw;
+  let e = String(editLine ?? '').trim();
+
+  const total = () => o.length + sep.length + e.length;
+  if (total() <= maxLen) return o + sep + e;
+
+  let editMax = maxLen - o.length - sep.length;
+  if (editMax >= 8) {
+    e = e.length > editMax ? `${e.slice(0, editMax - 1).trimEnd()}…` : e;
+    if (total() <= maxLen) return o + sep + e;
+  } else if (editMax > 0) {
+    e = `${e.slice(0, Math.max(1, editMax - 1)).trimEnd()}…`;
+    if (total() <= maxLen) return o + sep + e;
+  } else {
+    e = '';
+  }
+
+  const origMax = maxLen - sep.length - e.length;
+  if (origMax < 1) return `${oRaw.slice(0, Math.max(0, maxLen - 1))}…`;
+
+  o = o.length > origMax ? `${o.slice(0, origMax - 1).trimEnd()}…` : o;
+  if (total() <= maxLen) return o + sep + e;
+  return `${(o + sep + e).slice(0, maxLen - 1)}…`;
+}

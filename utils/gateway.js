@@ -18,7 +18,7 @@
 //   - Message Content Intent (required to read message bodies)
 
 import { WebSocket } from 'ws';
-import { DiscordRequest } from '../utils.js';
+import { appendEditWithinDiscordLimit, DiscordRequest } from '../utils.js';
 import { addShadowCandidate } from './shadow-store.js';
 import { addUnfinishedBusiness, loadUserMemory, updateLastChannel } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
@@ -60,9 +60,10 @@ async function maybeScheduleRevision(channelId, messageId, originalContent, mood
   setTimeout(async () => {
     try {
       const editLine = await generatePostRevision(originalContent, mood);
+      const revised = appendEditWithinDiscordLimit(originalContent, editLine);
       await DiscordRequest(`channels/${channelId}/messages/${messageId}`, {
         method: 'PATCH',
-        body: { content: `${originalContent}\n\n${editLine}` },
+        body: { content: revised },
       });
       console.log(`[michael] revision applied | gateway | ${messageId} | "${editLine.slice(0, 60)}"`);
     } catch (err) {

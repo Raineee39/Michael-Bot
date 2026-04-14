@@ -12,6 +12,7 @@ import {
   verifyKeyMiddleware,
 } from 'discord-interactions';
 import {
+  appendEditWithinDiscordLimit,
   DiscordRequest,
   getRandomEmoji,
   isDutchQuietHoursForUnpromptedSends,
@@ -316,9 +317,10 @@ async function schedulePostRevision(channelId, messageId, originalContent, mood,
   setTimeout(async () => {
     try {
       const editLine = await generatePostRevision(originalContent, mood);
+      const revised = appendEditWithinDiscordLimit(originalContent, editLine);
       await DiscordRequest(`channels/${channelId}/messages/${messageId}`, {
         method: 'PATCH',
-        body: { content: `${originalContent}\n\n${editLine}` },
+        body: { content: revised },
       });
       console.log(`[michael] revision applied | ${label} | ${messageId} | "${editLine.slice(0, 60)}"`);
     } catch (err) {
