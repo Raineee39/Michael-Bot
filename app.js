@@ -997,7 +997,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
       try {
         const { verzoek, username } = pending;
-        const { narrative, roll, dc, success, oordeelDelta } =
+        const { narrative, roll, dc, success, mechanical, oordeelDelta } =
           await runOnderhandelen(ownerId, username, verzoek, langCode);
 
         const rl = lang.rollUI;
@@ -1005,6 +1005,30 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const oordeelSign = oordeelDelta > 0 ? '+' : '';
         const header = success ? '📜✨📜✨📜' : '🔥📜🔥📜🔥';
         console.log(`[michael] onderhandelen | ${username} | roll=${roll.total} dc=${dc} success=${success} | ${verzoek.slice(0, 50)}`);
+
+        // Build a human-readable one-liner for what the negotiation changed
+        const mechanicalSummary = (() => {
+          if (!mechanical) return null;
+          const mr = lang.mijnrol ?? {};
+          const sn = mr.statNames ?? {};
+          if (mechanical.kind === 'stat') {
+            const label = sn[mechanical.field] ?? mechanical.field;
+            return success
+              ? `${label} +1`
+              : `${label} ${mechanical.delta < 0 ? mechanical.delta : '+' + mechanical.delta}`;
+          }
+          if (mechanical.kind === 'title_worse') return mechanical.newValue?.slice(0, 80) ?? null;
+          if (mechanical.kind === 'title')     return mechanical.newValue?.slice(0, 80) ?? null;
+          if (mechanical.kind === 'archetype') return mechanical.newValue ?? null;
+          if (mechanical.kind === 'lineage')   return mechanical.newValue ?? null;
+          return null;
+        })();
+        const statPenaltySummary = mechanical?.statPenalty
+          ? ` / ${(lang.mijnrol?.statNames ?? {})[mechanical.statPenalty] ?? mechanical.statPenalty} −1`
+          : '';
+        const changeValue = mechanicalSummary
+          ? `${mechanicalSummary}${statPenaltySummary}`
+          : '—';
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -1019,6 +1043,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
                 { name: rl.thresholdLabel, value: `${dc}`,                                                              inline: true },
                 { name: rl.outcomeLabel,   value: success ? `✅ ${rl.succeededLabel}` : `❌ ${rl.failedLabel}`,         inline: true },
                 { name: rl.judgementLabel, value: `${oordeelSign}${oordeelDelta}`,                                       inline: true },
+                { name: rl.changeLabel,    value: changeValue,                                                           inline: true },
               ],
             }],
             components: [],

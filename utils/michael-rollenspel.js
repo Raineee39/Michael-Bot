@@ -138,22 +138,56 @@ const SUCCESS_LINEAGES = {
        'طفل العناصر', 'الآلف الأدنى', 'مزدوج الطبيعة', 'دوارف الجبل'],
 };
 
-function applyNegotiationSuccess(userId, character, langCode = 'nl') {
+/**
+ * Detect what category of change the user is requesting.
+ * Returns 'lineage' | 'archetype' | 'stat' | 'title' | null.
+ */
+function detectRequestKind(verzoek) {
+  const v = verzoek.toLowerCase();
+  if (/\b(elf|elv|orc|tiefling|halfling|dwerg|dwarf|half-orc|half-orc|moerasmens|schaduwelf|woudelv|laag-elf|bergdwerg|maanwezen|half-orakel|sterveling|helsbloed|dubbelnatuur|elementaalkind|gevallen|oracle|mortal|marsh|shadow elf|wood elf|low elf|mountain dwarf|moon.?being|hedge.?witch|dual.?natured|elemental|hellblood|light.?bearer)\b/.test(v)) return 'lineage';
+  if (/\b(ridder|knight|magi|magiër|tovenaar|bard|druïde|druid|paladin|monnik|monk|kluizenaar|hermit|ziener|seer|clerk|archivist|archivaris|wachter|warden|dienaar|servant|kruiper|crawler|beoefenaar|practitioner|schaduw|shadow|mist|altaar|altar|auradru)\b/.test(v)) return 'archetype';
+  if (/\b(aura|discipline|chaos|inzicht|insight|volharding|persever|stat|statistiek)\b/.test(v)) return 'stat';
+  if (/\b(titel|title|epitheton|naam|name|inschrijving|entry)\b/.test(v)) return 'title';
+  return null;
+}
+
+/** Pick the option from a list that best matches keywords in the verzoek. Falls back to random. */
+function pickBestMatch(pool, verzoek) {
+  const words = verzoek.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const scored = pool.map(item => {
+    const il = item.toLowerCase();
+    const hits = words.filter(w => il.includes(w) || w.includes(il.split(/\s|-/)[0]));
+    return { item, hits: hits.length };
+  });
+  const best = scored.filter(s => s.hits > 0);
+  if (best.length) return pick(best.map(s => s.item));
+  return pick(pool);
+}
+
+function applyNegotiationSuccess(userId, character, langCode = 'nl', verzoek = '') {
   const successFragments = SUCCESS_TITLE_FRAGMENTS[langCode] ?? SUCCESS_TITLE_FRAGMENTS.nl;
-  const worseFragments   = WORSE_FRAGMENTS[langCode] ?? WORSE_FRAGMENTS.nl;
   const archetypes       = SUCCESS_ARCHETYPES[langCode] ?? SUCCESS_ARCHETYPES.nl;
   const lineages         = SUCCESS_LINEAGES[langCode] ?? SUCCESS_LINEAGES.nl;
 
-  const branch = Math.random();
+  // Bias toward the category the user actually asked for
+  const requestedKind = detectRequestKind(verzoek);
+  let branch = Math.random();
+  if      (requestedKind === 'lineage')   branch = 0.82 + Math.random() * 0.18; // → lineage branch
+  else if (requestedKind === 'archetype') branch = 0.62 + Math.random() * 0.20; // → archetype branch
+  else if (requestedKind === 'title')     branch = 0.38 + Math.random() * 0.24; // → title branch
+  else if (requestedKind === 'stat')      branch = Math.random() * 0.38;         // → stat branch
+
   if (branch < 0.38) {
-    const k = pick(STAT_KEYS);
+    // Stat branch — prefer a stat the user mentioned
+    const mentionedStat = STAT_KEYS.find(k => verzoek.toLowerCase().includes(k));
+    const k = mentionedStat ?? pick(STAT_KEYS);
     const v = character.stats[k] + 1;
     patchMichaelCharacter(userId, { stats: { [k]: Math.min(18, v) } });
     return { kind: 'stat', field: k, delta: +1 };
   }
   if (branch < 0.62) {
+    // Title branch
     const frag = pick(successFragments);
-    // Strip any existing worse fragments before appending the success one
     const allWorse = [...WORSE_FRAGMENTS.nl, ...WORSE_FRAGMENTS.en, ...WORSE_FRAGMENTS.ar];
     let base = character.title;
     for (const w of allWorse) base = base.replace(w, '');
@@ -162,11 +196,13 @@ function applyNegotiationSuccess(userId, character, langCode = 'nl') {
     return { kind: 'title', field: 'title', newValue: newTitle };
   }
   if (branch < 0.82) {
-    const next = pick(archetypes);
+    // Archetype branch — try to match what the user named
+    const next = pickBestMatch(archetypes, verzoek);
     patchMichaelCharacter(userId, { archetype: next });
     return { kind: 'archetype', field: 'archetype', newValue: next };
   }
-  const lin = pick(lineages);
+  // Lineage branch — try to match what the user named (e.g. "elf" → schaduwelf / wood elf)
+  const lin = pickBestMatch(lineages, verzoek);
   patchMichaelCharacter(userId, { lineage: lin });
   return { kind: 'lineage', field: 'lineage', newValue: lin };
 }
@@ -201,7 +237,7 @@ export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl
 
   let oordeelDelta = 0;
   if (success) {
-    mechanical = applyNegotiationSuccess(userId, characterBefore, langCode);
+    mechanical = applyNegotiationSuccess(userId, characterBefore, langCode, verzoek);
     oordeelDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 2 : 1;
     patchUserState(userId, oordeelDelta, mood);
   } else {

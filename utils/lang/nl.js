@@ -70,6 +70,7 @@ export default {
     moodLabel:        'stemming',
     moodUnchanged:    'onveranderd',
     judgementLabel:   'oordeel',
+    changeLabel:      'wijziging',
   },
 
   // ─── Cosmic role blocks ──────────────────────────────────────────────────────
