@@ -219,10 +219,14 @@ const MICHAELTAAL_COMMAND = {
   name: 'michaeltaal',
   description: 'Set the language Michael Bot uses on this server / Stel de taal in van Michael Bot',
   name_localizations: { 'en-US': 'setlanguage', 'en-GB': 'setlanguage', ar: 'لغة-ميخائيل' },
-  description_localizations: { 'en-US': 'Set the language Michael Bot uses on this server', 'en-GB': 'Set the language Michael Bot uses on this server', ar: 'اضبط اللغة التي يستخدمها ميخائيل في هذا الخادم' },
+  description_localizations: {
+    'en-US': 'Set the language Michael Bot uses on this server (or your personal language in DMs)',
+    'en-GB': 'Set the language Michael Bot uses on this server (or your personal language in DMs)',
+    ar: 'اضبط لغة الخادم — أو لغتك الشخصية في الرسائل الخاصة',
+  },
   type: 1,
-  integration_types: [0],
-  contexts: [0],
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
 };
 
 const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, MICHAELTAAL_COMMAND];
