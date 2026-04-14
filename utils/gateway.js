@@ -43,13 +43,13 @@ const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s
 // quietly edits it a few seconds later to append a second thought.
 // The original text is preserved — only a short "Edit: …" line is appended.
 
-async function maybeScheduleRevision(channelId, messageId, originalContent, mood) {
+async function maybeScheduleRevision(channelId, messageId, originalContent, mood, langCode = 'nl') {
   if (Math.random() > 0.25) return; // 25% chance
   const delay = 6000 + Math.floor(Math.random() * 14000); // 6–20 s
   console.log(`[michael] revision scheduled | gateway | msg=${messageId} | ~${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
     try {
-      const editLine = await generatePostRevision(originalContent, mood);
+      const editLine = await generatePostRevision(originalContent, mood, langCode);
       const revised = appendEditWithinDiscordLimit(originalContent, editLine);
       await DiscordRequest(`channels/${channelId}/messages/${messageId}`, {
         method: 'PATCH',
@@ -150,13 +150,20 @@ export function startGateway() {
           });
         }
 
-        // 90% chance Michael interjects when his name is said
+        // 90% chance the persona interjects when its name is said
         if (Math.random() > 0.90) return;
 
         const gwLangCode = guildId ? getGuildLanguage(guildId) : 'nl';
         const gwLang = getLang(gwLangCode);
-        const nameReplies = gwLang.ui.nameReplies ?? gwLang.ui.shadowReplyLines;
-        const reply = nameReplies[Math.floor(Math.random() * nameReplies.length)];
+
+        // In Arabic mode: if someone said "michael" (not the poet's name), use the
+        // identity-rejection replies ("Who do you speak of? I am Imru' al-Qais.")
+        // If they said the poet's name correctly, use normal nameReplies.
+        const saidMichael = /michael/i.test(content);
+        const pool = (gwLangCode === 'ar' && saidMichael && gwLang.ui.wrongNameReplies)
+          ? gwLang.ui.wrongNameReplies
+          : (gwLang.ui.nameReplies ?? gwLang.ui.shadowReplyLines);
+        const reply = pool[Math.floor(Math.random() * pool.length)];
 
         try {
           const res = await DiscordRequest(`channels/${channelId}/messages`, {
@@ -168,7 +175,7 @@ export function startGateway() {
           // Feature 5 — Maybe edit the reply a few seconds later
           if (sentMsg?.id) {
             const userMood = loadUserMemory(authorId).currentMood ?? 'afwezig';
-            maybeScheduleRevision(channelId, sentMsg.id, reply, userMood);
+            maybeScheduleRevision(channelId, sentMsg.id, reply, userMood, gwLangCode);
           }
           console.log(`[michael] gateway | name-mention reply | ch=${channelId} | user=${authorId}`);
         } catch (err) {

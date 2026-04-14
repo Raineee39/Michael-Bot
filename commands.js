@@ -105,17 +105,17 @@ const DATEER_COMMAND = {
 };
 
 const PRAATMETMICHAEL_COMMAND = {
-  name: 'praatmetmichael',
+  name: 'chat',
   description: 'Praat met Michael en ontvang twijfelachtig spiritueel advies',
-  name_localizations: { 'en-US': 'talktomichael', 'en-GB': 'talktomichael', ar: 'تحدث-مع-ميخائيل' },
-  description_localizations: { 'en-US': 'Talk to Michael and receive dubious spiritual advice', 'en-GB': 'Talk to Michael and receive dubious spiritual advice', ar: 'تحدث مع ميخائيل واحصل على نصيحة روحية مشكوك فيها' },
+  name_localizations: { 'en-US': 'chat', 'en-GB': 'chat', ar: 'حوار' },
+  description_localizations: { 'en-US': 'Talk to Michael and receive dubious spiritual advice', 'en-GB': 'Talk to Michael and receive dubious spiritual advice', ar: 'تحدَّث مع امرئ القيس واحصل على حكمة مشكوك فيها' },
   options: [
     {
       type: 3,
       name: 'bericht',
       description: 'Wat wil je tegen Michael zeggen?',
       name_localizations: { 'en-US': 'message', 'en-GB': 'message', ar: 'رسالة' },
-      description_localizations: { 'en-US': 'What do you want to say to Michael?', 'en-GB': 'What do you want to say to Michael?', ar: 'ماذا تريد أن تقول لميخائيل؟' },
+      description_localizations: { 'en-US': 'What do you want to say?', 'en-GB': 'What do you want to say?', ar: 'ماذا تريد أن تقول؟' },
       required: true,
     },
   ],

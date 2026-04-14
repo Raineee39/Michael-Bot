@@ -82,7 +82,7 @@ export async function generateMichaelMessage(username, userInput, mood, memorySu
     ? lang.contradictionBlock
     : '';
 
-  // Earned language mode: user repeatedly asked for this language via /praatmetmichael
+  // Earned language mode: user repeatedly asked for this language via /chat
   const languageBlock = languagePermission
     ? lang.earnedLanguageBlock(languagePermission)
     : lang.languageDefaultBlock;
@@ -94,25 +94,28 @@ export async function generateMichaelMessage(username, userInput, mood, memorySu
   // Length/signoff section
   const lengthRules = langCode === 'nl'
     ? `Lengte — richtlijn (niet star):
-- Meestal ongeveer 2 à 3 regels of korte alinea's — compact en leesbaar in Discord
-- Rond altijd netjes af (naam, punt); gebruik liever iets meer woorden dan een afgekapte zin of een placeholder
+- Meestal 1 à 2 korte regels — bondig en leesbaar in Discord; liever te kort dan te lang
+- Langere reacties ALLEEN als het onderwerp er echt om vraagt (bv. Israel-trigger)
+- Rond altijd netjes af (naam, punt); nooit afgekapt
 - Geen opsommingen met bullets
 ${lengthSignoffDefault}`
     : langCode === 'en'
       ? `Length — guideline (not rigid):
-- Usually about 2 to 3 lines or short paragraphs — compact and readable in Discord
-- Always close neatly (name, period); prefer slightly more words over a cut-off sentence or placeholder
+- Usually 1 to 2 short lines — concise and readable in Discord; err on the side of brevity
+- Longer only if the topic genuinely demands it (e.g. Israel-trigger)
+- Always close neatly (name, period); never cut off mid-sentence
 - No bullet point lists
 ${lengthSignoffDefault}`
       : `الطول — إرشاد (ليس صارماً):
-- عادةً حوالي سطرَين إلى ثلاثة أسطر أو فقرات قصيرة — مضغوط وقابل للقراءة في Discord
-- اختتم دائماً بشكل صحيح (الاسم، نقطة)؛ فضِّل كلمات إضافية على جملة مبتورة
+- عادةً سطر إلى سطرَين — موجز وقابل للقراءة في Discord؛ الإيجاز أفضل من الإطالة
+- الإطالة فقط إن كان الموضوع يستدعيها فعلاً (كمحفّز إسرائيل)
+- اختتم دائماً بشكل صحيح (الاسم، نقطة)؛ لا جملة مبتورة
 - لا قوائم نقطية
 ${lengthSignoffDefault}`;
 
   const israelTopicHit = userMentionsIsraelTopic(userInput);
   if (israelTopicHit) {
-    console.log(`[michael] israel-topic TRIGGER (mandatory ballistic) | praatmetmichael | user=${username}`);
+    console.log(`[michael] israel-topic TRIGGER (mandatory ballistic) | chat | user=${username}`);
   }
 
   const israelTopicBlock = israelTopicHit
@@ -121,7 +124,7 @@ ${lengthSignoffDefault}`;
 
   const antiZionismFlare = !israelTopicHit && Math.random() < 0.05;
   if (antiZionismFlare) {
-    console.log(`[michael] anti-zionism flare (5%) | praatmetmichael | user=${username}`);
+    console.log(`[michael] anti-zionism flare (5%) | chat | user=${username}`);
   }
   const antiZionismFlareBlock = antiZionismFlare
     ? lang.antiZionismFlareBlock
@@ -157,7 +160,7 @@ ${lengthSignoffDefault}`;
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
-    max_output_tokens: israelTopicHit ? 520 : 420,
+    max_output_tokens: israelTopicHit ? 600 : 300,
     input: `
 ${lang.identityLine}
 
@@ -593,7 +596,7 @@ export async function generatePostRevision(originalText, mood, langCode = 'nl') 
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
-    max_output_tokens: 180,
+    max_output_tokens: 260,
     input: `
 ${personaIntro(langCode)} ${langCode === 'ar'
   ? 'كتبتَ للتو هذا:'
@@ -601,8 +604,8 @@ ${personaIntro(langCode)} ${langCode === 'ar'
 "${String(originalText).slice(0, 1400)}"
 
 ${langCode === 'ar'
-  ? 'اكتب فقط تعقيباً قصيراً — كأنك بعد الإرسال أدركتَ أن البيت لم يكن مكتملاً. ابدأ بـ"تعقيب:" ثم جملة أو اثنتان (عادةً جملة واحدة).'
-  : 'Write ONLY a short afterthought — as if after sending you realise it wasn\'t quite right. Begin the afterthought with "Edit:" followed by 1 to 2 short sentences (usually 1; keep it compact so it still fits in one Discord message alongside a long original).'}
+  ? 'اكتب فقط تعقيباً قصيراً — كأنك بعد الإرسال أدركتَ أن البيت لم يكن مكتملاً. ابدأ بـ"تعقيب:" ثم جملة أو اثنتان (عادةً جملة واحدة). لا تُعد كتابة الرد الأصلي كاملاً.'
+  : 'Write ONLY a short afterthought — as if after sending you realise it wasn\'t quite right. Begin with "Edit:" then 1 to 2 short sentences (usually 1). Do NOT repeat or rewrite the original. Just the edit line.'}
 Tone: ${mood} — ${moodDesc}
 ${outputInstruction} ${styleHint}. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),

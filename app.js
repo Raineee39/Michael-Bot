@@ -141,7 +141,7 @@ function getCosmicRole(userId) {
   return null;
 }
 
-const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'praatmetmichael', 'vibecheck', 'cosmischestatus', 'mijnrol']);
+const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'chat', 'vibecheck', 'cosmischestatus', 'mijnrol']);
 
 // NEE array is now per-lang: lang.ui.nee
 
@@ -200,13 +200,13 @@ const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s
 // After sending a message, Michael may quietly append a second thought.
 // The original content is always preserved — only an "Edit: …" line is added.
 
-async function schedulePostRevision(channelId, messageId, originalContent, mood, label = 'message') {
+async function schedulePostRevision(channelId, messageId, originalContent, mood, label = 'message', langCode = 'nl') {
   if (Math.random() > 0.20) return; // 20% chance
   const delay = 7000 + Math.floor(Math.random() * 13000); // 7–20 s
   console.log(`[michael] revision scheduled | ${label} | ${messageId} | ~${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
     try {
-      const editLine = await generatePostRevision(originalContent, mood);
+      const editLine = await generatePostRevision(originalContent, mood, langCode);
       const revised = appendEditWithinDiscordLimit(originalContent, editLine);
       await DiscordRequest(`channels/${channelId}/messages/${messageId}`, {
         method: 'PATCH',
@@ -567,8 +567,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // "praatmetmichael" command
-    if (name === 'praatmetmichael') {
+    // "chat" command (was praatmetmichael)
+    if (name === 'chat') {
       const userInput = data.options.find(o => o.name === 'bericht').value;
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
@@ -589,7 +589,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       // Feature 3 — Bait / forcing-Michael trap: respond coldly and queue unfinished business
       if (BAIT_RE.test(userInput)) {
-        console.log(`[michael] praatmetmichael | bait-dismissal | ${username} (${userId})`);
+        console.log(`[michael] chat | bait-dismissal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
@@ -606,7 +606,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       // Code / technical request — refuse in-character, queue unfinished business
       if (CODE_REQUEST_RE.test(userInput)) {
-        console.log(`[michael] praatmetmichael | code-refusal | ${username} (${userId})`);
+        console.log(`[michael] chat | code-refusal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
@@ -623,7 +623,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       // ~15% chance Michael refuses outright — no OpenAI call
       if (Math.random() < 0.15) {
-        console.log(`[michael] praatmetmichael | random-refusal (15%) | ${username} (${userId})`);
+        console.log(`[michael] chat | random-refusal (15%) | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -660,7 +660,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const asksAgain = unlocked && getRequestedLanguageCode(userInput) === unlocked.code;
         const speaksIt = unlocked && userSpeaksUnlockedLanguage(unlocked, userInput);
         const languagePermission = unlocked && (speaksIt || asksAgain) ? unlocked : null;
-        console.log(`[michael] praatmetmichael | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${existingCharacter?.archetype ?? 'nieuw'} | ${username}`);
+        console.log(`[michael] chat | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${existingCharacter?.archetype ?? 'nieuw'} | ${username}`);
 
         // Feature 2 — Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
@@ -716,7 +716,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         let gifUrl = null;
         if (process.env.GIPHY_API_KEY && Math.random() < 0.25) {
           gifUrl = await fetchGiphyGif(getMichaelOptionalGifQuery(cosmicRole));
-          if (gifUrl) console.log(`[michael] praatmetmichael | gif | ${username}`);
+          if (gifUrl) console.log(`[michael] chat | gif | ${username}`);
         }
         const messageBase = `> ${safeInput}\n\n${michaelMessage}`;
         const patchBody = { content: messageBase };
@@ -742,7 +742,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             const getMsgRes = await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, { method: 'GET' });
             const sentMsg = await getMsgRes.json();
             if (sentMsg?.id) {
-              schedulePostRevision(channelId, sentMsg.id, messageBase, mood, 'praatmetmichael');
+              schedulePostRevision(channelId, sentMsg.id, messageBase, mood, 'chat', langCode);
             }
           } catch {
             // non-critical — skip revision if we can't fetch the message ID
@@ -756,7 +756,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           );
         }
       } catch (err) {
-        console.error('praatmetmichael error:', err);
+        console.error('chat error:', err);
         // If the token expired (10015) the fallback PATCH will also fail — swallow it silently
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
@@ -1316,7 +1316,7 @@ cron.schedule('*/15 * * * *', async () => {
 
     // Feature 5 — maybe append a post-revision edit to the consequence message
     if (sentMsg?.id) {
-      schedulePostRevision(targetChannel, sentMsg.id, message, mood, 'consequence');
+      schedulePostRevision(targetChannel, sentMsg.id, message, mood, 'consequence', consequenceLangCode);
     }
   } catch (err) {
     let errObj = {};
