@@ -343,25 +343,16 @@ export async function generateVibecheckComment(username, judgementLabel, impress
   const cosmicBlock = cosmicRoleBlock(cosmicRole);
 
   const characterBlock = character
-    ? `\nKosmische rol: ${character.archetype} (${character.lineage}) — ${character.title}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, inzicht ${character.stats?.inzicht ?? '?'}, volharding ${character.stats?.volharding ?? '?'}\nMichaël-punten: ${michaelPoints}`
+    ? `\nKosmische rol: ${character.archetype} (${character.lineage}) — ${character.title}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, inzicht ${character.stats?.inzicht ?? '?'}, volharding ${character.stats?.volharding ?? '?'}\nGenade: ${michaelPoints}`
     : '';
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
-    max_output_tokens: 200,
+    max_output_tokens: 80,
     input: `
-Je bent de aartsengel Michael. Geef een persoonlijk dossier-oordeel over ${username} op basis van onderstaande informatie.
-
-Schrijf:
-1. Twee zinnen algemeen oordeel (in Michaels stem — formeel, licht neerbuigend, spiritueel)
-2. Eén concrete maar vage suggestie hoe deze persoon zijn/haar standing bij Michael kan verbeteren — gebaseerd op hun stats of gedrag, maar verwoord alsof het kosmisch advies is
-3. Één zin die refereert aan hun kosmische rol of archetype (als die er is)
-
-Gebruik Michaels stijl: formeel "U", vreemde spaties, ..., geen em-dashes. Sluit af met ....Michael.${cosmicBlock}${characterBlock}
+Je bent de aartsengel Michael. Geef een kort, persoonlijk oordeel over ${username}. Maximaal twee zinnen. Geen genummerde lijst, geen advies, geen uitweiding. Puur Michaëls stem: formeel "U", vreemd beknopt, licht veroordelend of ongemakkelijk waarderend afhankelijk van het oordeel. Sluit af met ....Michael.${cosmicBlock}${characterBlock}
 Oordeel: ${judgementLabel}
 Langetermijnindruk: ${impressionText}
-Recente berichten:
-${promptsText}
     `.trim(),
   });
 
@@ -556,7 +547,7 @@ Worp: ${rollLine} — ${roll.tier.label}
 ${resultDesc}
 Archetype was: ${characterBefore.archetype}, afstamming: ${characterBefore.lineage}, titel: "${characterBefore.title}"
 Archetype nu: ${characterAfter.archetype}, afstamming: ${characterAfter.lineage}, titel: "${characterAfter.title}"
-Michaël-punten nu: ${michaelPoints}
+Genade nu: ${michaelPoints}
 
 Schrijf Michaëls reactie op dit onderhandelingsverzoek.
 ${success
@@ -593,7 +584,7 @@ Worp: ${rollLine} — ${roll.tier.label}
 Uitkomst: ${accepted ? 'vergeven (met moeite)' : 'afgewezen'}
 Huidige stemming: ${currentMood}
 ${accepted ? `Nieuwe stemming: ${newMood}` : ''}
-Michaël-punten na deze interactie: ${michaelPoints}
+Genade na deze interactie: ${michaelPoints}
 
 Schrijf Michaëls antwoord op dit verzoek om vergiffenis.
 ${accepted

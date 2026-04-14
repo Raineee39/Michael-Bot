@@ -116,7 +116,14 @@ function applyNegotiationSuccess(userId, character) {
 }
 
 function applyNegotiationFailure(userId, character) {
-  const frag = pick(WORSE_FRAGMENTS);
+  // Pick a fragment not already present in the title to prevent stacking duplicates
+  const available = WORSE_FRAGMENTS.filter(f => !character.title.includes(f));
+  const pool = available.length ? available : WORSE_FRAGMENTS;
+  const frag = pick(pool);
+  // If title already contains this exact fragment, just return without changing
+  if (character.title.includes(frag)) {
+    return { kind: 'title_worse', newValue: character.title };
+  }
   let t = `${character.title}${frag}`.trim().slice(0, 120);
   patchMichaelCharacter(userId, { title: t });
   return { kind: 'title_worse', newValue: t };

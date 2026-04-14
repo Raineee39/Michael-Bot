@@ -579,7 +579,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         const { stats } = character;
         const statBar = (v) => '█'.repeat(Math.round(v / 3)) + '░'.repeat(6 - Math.round(v / 3));
-        const mpSign = mp >= 0 ? '+' : '';
+        const mpSign = mp > 0 ? '+' : '';
         const safeComment = comment.slice(0, 300);
         const sheet = [
           `📜⚡📜⚡📜⚡📜⚡📜`,
@@ -597,7 +597,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           `inzicht     ${statBar(stats.inzicht)} ${String(stats.inzicht).padStart(2)}`,
           `volharding  ${statBar(stats.volharding)} ${String(stats.volharding).padStart(2)}`,
           `\`\`\``,
-          `**Michaël-punten**   ${mpSign}${mp}`,
+          `**Genade**           ${mpSign}${mp}`,
           ``,
           `*${safeComment}*`,
         ].join('\n');
@@ -692,15 +692,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           `📊 **MICHAËLS DOSSIER: ${username}**`,
           ``,
           `**Oordeel**          ${label}   ${scoreBar}   *(${memory.judgementScore ?? 0})*`,
-          `**Michaël-punten**   ${mpSign}${mp}`,
+          `**Genade**           ${mpSign}${mp}`,
         ];
 
         if (character) {
-          lines.push(`**Kosmische rol**    ${character.archetype} • ${character.lineage} — *${character.title}*`);
-        }
-
-        if (memory.impression) {
-          lines.push(`**Indruk**           *${memory.impression}*`);
+          lines.push(`**Kosmische rol**    ${character.archetype} • ${character.lineage} — *${character.title.slice(0, 60)}*`);
         }
 
         lines.push(``, comment);
@@ -976,7 +972,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const outcome = forgiven ? 'GESLAAGD' : 'GEFAALD';
         const moodLine = forgiven ? `stemming    ${currentMood} → ${newMood}` : `stemming    ${currentMood} (onveranderd)`;
         const mpSign = michaelPoints > 0 ? '+' : '';
-        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${need}\nuitkomst    ${outcome}\n${moodLine}\npunten      ${mpSign}${michaelPoints}\n\`\`\``;
+        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${need}\nuitkomst    ${outcome}\n${moodLine}\ngenade      ${mpSign}${michaelPoints}\n\`\`\``;
         const header = forgiven ? '🕊️✨🕊️✨🕊️' : '🔥💢🔥💢🔥';
         const content = `${header}\n${narrative}\n\n${systemBlock}`;
         console.log(`[michael] vergeefmij | ${username} | roll=${roll.total} need=${need} forgiven=${forgiven}`);
@@ -1071,7 +1067,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const sign = roll.modifier >= 0 ? '+' : '−';
         const outcome = success ? 'GESLAAGD' : 'GEFAALD';
         const mpSign = michaelPoints > 0 ? '+' : '';
-        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${dc}\nuitkomst    ${outcome}\npunten      ${mpSign}${michaelPoints}\n\`\`\``;
+        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${dc}\nuitkomst    ${outcome}\ngenade      ${mpSign}${michaelPoints}\n\`\`\``;
         const header = success ? '📜✨📜✨📜' : '🔥📜🔥📜🔥';
         const content = `${header}\n**ONDERHANDELINGSREGISTER**\n*"${verzoek.slice(0, 80)}"*\n\n${narrative}\n\n${systemBlock}`;
         console.log(`[michael] onderhandelen | ${username} | roll=${roll.total} dc=${dc} success=${success} | ${verzoek.slice(0, 50)}`);

@@ -552,7 +552,7 @@ export function patchMichaelCharacter(userId, partial) {
 export function formatCharacterForPrompt(character, michaelPoints) {
   if (!character) return '';
   const { archetype, lineage, title, stats } = character;
-  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${archetype}", ras/afstamming "${lineage}", titel/epitheton "${title}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}, Michaël-punten ${michaelPoints ?? 0}.`;
+  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${archetype}", ras/afstamming "${lineage}", titel/epitheton "${title}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}, genade ${michaelPoints ?? 0}.`;
 }
 
 /** ~12% suggestion: Michael may nod at the role in a reply. */
