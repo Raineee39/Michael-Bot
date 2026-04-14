@@ -44,7 +44,7 @@ const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s
 // The original text is preserved — only a short "Edit: …" line is appended.
 
 async function maybeScheduleRevision(channelId, messageId, originalContent, mood, langCode = 'nl') {
-  if (Math.random() > 0.25) return; // 25% chance
+  if (Math.random() > 0.10) return; // 10% chance
   const delay = 6000 + Math.floor(Math.random() * 14000); // 6–20 s
   console.log(`[michael] revision scheduled | gateway | msg=${messageId} | ~${Math.round(delay / 1000)}s`);
   setTimeout(async () => {

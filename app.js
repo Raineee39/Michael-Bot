@@ -207,7 +207,7 @@ function moodName(lang, key) {
 // The original content is always preserved — only an "Edit: …" line is added.
 
 async function schedulePostRevision(channelId, messageId, originalContent, mood, label = 'message', langCode = 'nl') {
-  if (Math.random() > 0.20) return; // 20% chance
+  if (Math.random() > 0.10) return; // 10% chance
   const delay = 7000 + Math.floor(Math.random() * 13000); // 7–20 s
   console.log(`[michael] revision scheduled | ${label} | ${messageId} | ~${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
@@ -434,31 +434,32 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const { stats } = character;
         const mr = lang.mijnrol;
         const statBar = (v) => '█'.repeat(Math.round(v / 3)) + '░'.repeat(6 - Math.round(v / 3));
+        const statVal = (v) => `${statBar(v ?? 0)}  ${String(v ?? '?').padStart(2)}`;
         const safeComment = comment.slice(0, 300);
-        const sheet = [
-          mr.header,
-          mr.title,
-          mr.subtitle,
-          ``,
-          `${mr.archetypeLabel}    ${character.archetype}`,
-          `${mr.lineageLabel}   ${character.lineage}`,
-          `${mr.titleLabel}        *${character.title}*`,
-          ``,
-          `\`\`\``,
-          `${mr.statNames.aura.padEnd(10)} ${statBar(stats.aura)} ${String(stats.aura).padStart(2)}`,
-          `${mr.statNames.discipline.padEnd(10)} ${statBar(stats.discipline)} ${String(stats.discipline).padStart(2)}`,
-          `${mr.statNames.chaos.padEnd(10)} ${statBar(stats.chaos)} ${String(stats.chaos).padStart(2)}`,
-          `${mr.statNames.inzicht.padEnd(10)} ${statBar(stats.inzicht)} ${String(stats.inzicht).padStart(2)}`,
-          `${mr.statNames.volharding.padEnd(10)} ${statBar(stats.volharding)} ${String(stats.volharding).padStart(2)}`,
-          `\`\`\``,
-          ``,
-          `*${safeComment}*`,
-        ].join('\n');
+        const embedColor = langCode === 'ar' ? 0xd97706 : 0x7c3aed; // desert gold / cosmic purple
+        const embedTitle = mr.title.replace(/^#+\s*/, ''); // strip markdown heading prefix
 
         console.log(`[michael] mijnrol | ${username} (${userId}) | archetype=${character.archetype}`);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: sheet },
+          body: {
+            content: mr.header,
+            embeds: [{
+              color: embedColor,
+              title: embedTitle,
+              description: `${mr.subtitle}\n\n*${safeComment}*`,
+              fields: [
+                { name: mr.archetypeLabel.replace(/\*\*/g, ''), value: character.archetype,          inline: false },
+                { name: mr.lineageLabel.replace(/\*\*/g, ''),   value: character.lineage,            inline: false },
+                { name: mr.titleLabel.replace(/\*\*/g, ''),     value: `*${character.title}*`,       inline: false },
+                { name: mr.statNames.aura,       value: `\`${statVal(stats.aura)}\``,       inline: true },
+                { name: mr.statNames.discipline, value: `\`${statVal(stats.discipline)}\``, inline: true },
+                { name: mr.statNames.chaos,      value: `\`${statVal(stats.chaos)}\``,      inline: true },
+                { name: mr.statNames.inzicht,    value: `\`${statVal(stats.inzicht)}\``,    inline: true },
+                { name: mr.statNames.volharding, value: `\`${statVal(stats.volharding)}\``, inline: true },
+              ],
+            }],
+          },
         });
       } catch (err) {
         console.error('[michael] mijnrol error:', err);
@@ -1258,7 +1259,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 //      A global 25-minute cooldown prevents back-to-back firings.
 
 let lastConsequenceAt = 0;
-const CONSEQUENCE_COOLDOWN_MS = 12 * 60 * 1000; // 12 min between consequence firings
+const CONSEQUENCE_COOLDOWN_MS = 30 * 60 * 1000; // 30 min between consequence firings
 
 // Channels where we received 50001 (Missing Access) this session.
 // Cleared on process restart. Prevents the Gateway from repopulating lastChannelId
@@ -1489,7 +1490,8 @@ app.post(
       'cd /root/michael-bot',
       'git fetch origin main',
       'git reset --hard origin/main',
-      'npm install --prefer-offline',
+      'npm install',
+      'node commands.js',
       'pm2 restart michael-bot --update-env',
     ].join(' && ');
 
