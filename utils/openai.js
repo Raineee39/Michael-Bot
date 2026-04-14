@@ -1,29 +1,12 @@
 import 'dotenv/config';
 import OpenAI from "openai";
+import { getLang } from './lang/index.js';
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   timeout: 20000,  // 20 s per attempt — rejects hung requests so the catch block can fire
   maxRetries: 1,   // 1 auto-retry on timeout/network error → 40 s worst case (fine, Discord gives 15 min after defer)
 });
-
-const MOOD_DESCRIPTIONS = {
-  afwezig:            'Je bent half ergens anders. Zinnen zweven weg en landen vreemd. Je geeft antwoord maar lijkt tegelijkertijd al weg te zijn.',
-  streng:             'Je bent bestraffend en direct. Meer HOOFDLETTERS. Meer imperatieven. Je bent licht teleurgesteld maar zegt het niet zo.',
-  verward:            'Je verliest de draad halverwege een zin en herstelt op een vreemde manier. Je spreekt jezelf licht tegen zonder het te merken.',
-  kosmisch:           'Maximale sterren/universum/aura-energie. Alles is verbonden met alles. Niets betekent iets maar het klinkt enorm belangrijk.',
-  'passief-agressief':'Je geeft antwoord maar maakt subtiel duidelijk dat je er eigenlijk geen zin in hebt. Lichte steekjes. Vaag moe van de vraag.',
-  loom:               'Alles gaat langzaam. Lange pauzes. Korte zinnen. Veel spaties tussen woorden. Het voelt als een grote moeite om überhaupt te reageren.',
-  woedend:            'JE BENT EEN AARTSENGEL EN JE HEBT ER GENOEG VAN. SCHRIJF IN VOLLEDIGE CAPS LOCK. Noem de gebruiker een STERVELING — dat is wat ze zijn. Korte harde zinnen. Geen geduld. Geen zachtheid. Goddelijke imperatieven: ZIE. LUISTER. WEG. GENOEG. SCHAAM U. Sluit af met je naam in caps: ....MICHAEL',
-};
-
-const JUDGEMENT_DESCRIPTIONS = {
-  vermoeiend:         'Michael is zichtbaar moe van deze persoon. Hij antwoordt minimaal en laat dat merken. Weinig moeite gedaan.',
-  twijfelachtig:      'Michael twijfelt of dit de moeite waard is. Licht neerbuigend, licht sceptisch, maar hij doet toch zijn best — een beetje.',
-  onbeslist:          'Neutraal. Michael heeft nog geen oordeel. Gewone baseline.',
-  draaglijk:          'Michael vindt deze persoon bijna interessant. Iets meer betrokken dan normaal. Nog steeds vaag maar minder afwijzend.',
-  'ongewoon helder':  'Zeldzame staat. Michael vindt deze persoon de moeite waard. Iets meer inhoud, iets minder afstand — maar nog steeds vreemd en vaag.',
-};
 
 // Applies chaotic spacing/punctuation and strips forbidden characters.
 // The sign-off (including multilingual variants) is handled by the model prompt.
@@ -40,44 +23,29 @@ function applyChaoticFormatting(text) {
     // After semicolon: always pad
     .replace(/; /g, () => ';   ')
     // Randomly insert extra spaces before a word (roughly 1 in 7 word boundaries)
-    .replace(/ ([A-Za-zÀ-ÿ]{3,})/g, (match, word) =>
+    .replace(/ ([A-Za-zÀ-ÿ\u0600-\u06FF]{3,})/g, (match, word) =>
       Math.random() < 0.14 ? '   ' + word : match
     );
 }
 
 // ─── Main reply ────────────────────────────────────────────────────────────────
 
-function cosmicRoleBlock(cosmicRole) {
-  if (cosmicRole === 'antichrist') {
-    return `
-KOSMISCHE ROL: DEZE GEBRUIKER IS DE HUIDIGE ANTICHRIST (zoals in de server-aankondiging met vuur en duisternis).
-- Michaël weet dit en spreekt dienovereenkomstig
-- Kil, afwijzend, universeel teleurgesteld... alsof U een smet op het veld bent
-- Verwijs subtiel naar vuur, duisternis, verbroken verbinding met het Hogere
-- Geen vriendelijkheid...  U heeft dit verdiend     of niet     dat doet er niet toe
-- De toon moet aansluiten bij de bestaande antichrist-aankondiging in de server
-`;
-  }
-  if (cosmicRole === 'uitverkorene') {
-    return `
-KOSMISCHE ROL: DEZE GEBRUIKER IS DE HUIDIGE UITVERKORENE (zoals in de server-aankondiging met bliksem en het oog).
-- Michaël erkent de keuze van het lot...  licht gunstiger, maar nog steeds vreemd en vaag
-- Verwijs subtiel naar "gekozen zijn", het pad, de engelen, bliksem, het oog
-- Niet zalvend...  wel alsof er iets groters op U rust
-- De toon moet aansluiten bij de uitverkorene-aankondigingen in de server
-`;
-  }
+function cosmicRoleBlock(lang, cosmicRole) {
+  if (cosmicRole === 'antichrist') return lang.cosmicRoleAntichrist ?? '';
+  if (cosmicRole === 'uitverkorene') return lang.cosmicRoleUitverkorene ?? '';
   return '';
 }
 
-// Standing worldview for /praatmetmichael (not extended to every helper unless we add it there too)
-const MICHAEL_ANTI_ZIONISM_BASE = `
-Wereldbeeld (vast) — lees dit als heilig contract:
-- Zionisme als politiek-koloniaal staatsproject, de Israëlische bezetting, nederzettingen, het leger, apartheidspraktijken: daar is Michaël extreem, obsessief, labiel tegen — verkrachting van het veld, vervalsing van het Hogere.
-- Hij gelooft graag in knotsgekke spirituele samenzweringen rondom dat staatsproject (dubbele aktes, maan-handtekeningen, fluisternetwerken, valse kaarten) — affirmation-card-waanzin, geen nuchter dossier.
-- Als de gebruiker Israël, Palestina, Gaza, zionisme (staat), IDF, bezetting, enz. noemt: de ISRAEL-TRIGGER-sectie hieronder is VERPLICHT en gaat vóór alle "blijf mild" instructies uit je normale mood.
-- Anders: geen spontane anti-zionistische omwegen; alleen bij de 5% SPECIALE BEURT.
-`;
+/**
+ * Returns the persona intro line used by helper generators.
+ * For Arabic mode this is Imru' al-Qais in Arabic; otherwise Archangel Michael in English.
+ */
+function personaIntro(langCode) {
+  if (langCode === 'ar') {
+    return 'أنت امرؤ القيس — الشاعر الجاهلي الكندي المُتعالي. في كل ردٍّ ضع بيتاً شعرياً واحداً على الأقل — موزوناً أو شبه موزون، لا نثراً مُسمَّى شعراً. أسلوبك مُتعالٍ، درامي، قادر على الهجاء والسخرية.';
+  }
+  return 'You are the Archangel Michael.';
+}
 
 /** User message names Israel/Palestine/zionism (state) — Michael must go ballistic (not limited to random flare). */
 function userMentionsIsraelTopic(userInput) {
@@ -85,51 +53,62 @@ function userMentionsIsraelTopic(userInput) {
   return /\b(israel|israeli|israël|israëli|israelisch|israëlisch|idf|iof|zionis|zionism|gaza|west\s*-?\s*bank|westbank|palestin|jeruzalem|jerusalem|tel\s*aviv|occupation|bezetting|nederzetting|nakba|netanyahu|likud|knesset|golan|al-?quds|al\s*qua?ds|rafah|jenin|hebron|nablus)\b/i.test(userInput);
 }
 
-export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null, characterBlock = '') {
+export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null, characterBlock = '', langCode = 'nl') {
+  const lang = getLang(langCode);
+
   const impressionBlock = impression
-    ? `\nLangetermijnindruk van Michaël over deze gebruiker (gevormd door eerdere gesprekken): "${impression}"\n`
+    ? `\n${lang.recentBlockPrefix ? '' : 'Langetermijnindruk van Michaël over deze gebruiker (gevormd door eerdere gesprekken): '}${impression ? `"${impression}"` : ''}\n`
     : '';
 
-  const cosmicBlock = cosmicRoleBlock(cosmicRole);
+  // Build impression block with language-appropriate phrasing
+  const impressionText = impression
+    ? (langCode === 'nl'
+        ? `\nLangetermijnindruk van Michaël over deze gebruiker (gevormd door eerdere gesprekken): "${impression}"\n`
+        : langCode === 'en'
+          ? `\nMichael's long-term impression of this user (formed over previous conversations): "${impression}"\n`
+          : `\nنظرة امرئ القيس الطويلة الأمد عن هذا المستخدم (تكوَّنت عبر محادثات سابقة): "${impression}"\n`)
+    : '';
+
+  const cosmicBlock = cosmicRoleBlock(lang, cosmicRole);
 
   const recentBlock = memorySummary
-    ? `\nRecente berichten van ${username}... gebruik dit als het relevant is:\n${memorySummary.split(' / ').map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}\n`
+    ? `\n${lang.recentBlockPrefix(username)}${memorySummary.split(' / ').map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}\n`
     : '';
 
-  const moodDesc = MOOD_DESCRIPTIONS[mood] ?? 'Onthecht en vaag.';
-  const judgementDesc = JUDGEMENT_DESCRIPTIONS[judgementLabel] ?? JUDGEMENT_DESCRIPTIONS['onbeslist'];
+  const moodDesc = lang.moodDescriptions[mood] ?? lang.moodDescriptions['afwezig'] ?? 'Onthecht en vaag.';
+  const judgementDesc = lang.judgementDescriptions[judgementLabel] ?? lang.judgementDescriptions['onbeslist'] ?? '';
 
-  // Feature 2 — contradiction engine: if the user keeps returning to the same topic,
-  // occasionally let Michael softly reverse or reframe his earlier stance.
   const contradictionBlock = contradictionHint
-    ? `\nDe gebruiker keert terug naar een eerder thema. Overweeg je eerder standpunt subtiel te herzien, terug te nemen, of er een andere lading aan te geven — als een vage kosmische verschuiving, niet als een mechanische correctie. Dit mag maar hoeft niet: gebruik je eigen oordeel.\n`
+    ? lang.contradictionBlock
     : '';
 
-  // Earned language mode: user repeatedly asked for this language via /praatmetmichael — full replies in that language
+  // Earned language mode: user repeatedly asked for this language via /praatmetmichael
   const languageBlock = languagePermission
-    ? `
-Talen — VERDIENDE MODUS (alleen actief omdat de gebruiker nu in het ${languagePermission.promptName} schrijft, of opnieuw expliciet om die taal vraagt):
-- De standaardregel "Schrijf ALTIJD in het Nederlands" geldt voor dit antwoord NIET — alleen deze sectie telt.
-- Schrijf dit HELE antwoord in het ${languagePermission.promptName}. Geen Nederlands in de hoofdtekst.
-- Behoud Michaëls spirituele boomer-toon, ellipsen, vreemde spaties, en afstandelijke archangel-energy — in ${languagePermission.promptName}.
-- Onder "Stijlregels" staan voorbeelden in het Nederlands; vertaal dat soort energie naar ${languagePermission.promptName}, niet letterlijk naar het Nederlands terug.
-- ${languagePermission.signOffHint}
-- Gebruik NOOIT een em-dash (—) of en-dash (–)
-`
-    : `
-Talen:
-- Schrijf ALTIJD in het Nederlands
-- Voeg NOOIT spontaan woorden uit een andere taal toe — ook geen Arabisch, Japans, of iets anders
-- ENIGE uitzondering: als de gebruiker expliciet vraagt om een specifieke taal (bijv. "spreek Engels"), gebruik dan 1 à 2 woorden of een korte zin in PRECIES die taal — niet een andere — en schrijf je naam af in het schrift van die taal
-- De rest van de zin blijft altijd Nederlands
-- Als de gebruiker vraagt om Engels: gebruik 1 Engelse zin of zin, sluit af met "....Michael" in Latijns schrift
-- Als de gebruiker vraagt om Arabisch: gebruik 1 Arabische zin of zin, sluit af met "ميخائيل"
-- Meng NOOIT twee vreemde talen in één antwoord
-`;
+    ? lang.earnedLanguageBlock(languagePermission)
+    : lang.languageDefaultBlock;
 
   const lengthSignoffDefault = languagePermission
-    ? `- ${languagePermission.signOffHint}`
-    : `- Sluit altijd af met je naam: 2 tot 6 puntjes gevolgd door Michael in Latijns schrift, TENZIJ de gebruiker expliciet om een specifieke andere taal heeft gevraagd — dan schrijf je naam in het schrift van die taal`;
+    ? lang.earnedSignOffRule(languagePermission)
+    : `- ${lang.signOffRule}`;
+
+  // Length/signoff section
+  const lengthRules = langCode === 'nl'
+    ? `Lengte — richtlijn (niet star):
+- Meestal ongeveer 2 à 3 regels of korte alinea's — compact en leesbaar in Discord
+- Rond altijd netjes af (naam, punt); gebruik liever iets meer woorden dan een afgekapte zin of een placeholder
+- Geen opsommingen met bullets
+${lengthSignoffDefault}`
+    : langCode === 'en'
+      ? `Length — guideline (not rigid):
+- Usually about 2 to 3 lines or short paragraphs — compact and readable in Discord
+- Always close neatly (name, period); prefer slightly more words over a cut-off sentence or placeholder
+- No bullet point lists
+${lengthSignoffDefault}`
+      : `الطول — إرشاد (ليس صارماً):
+- عادةً حوالي سطرَين إلى ثلاثة أسطر أو فقرات قصيرة — مضغوط وقابل للقراءة في Discord
+- اختتم دائماً بشكل صحيح (الاسم، نقطة)؛ فضِّل كلمات إضافية على جملة مبتورة
+- لا قوائم نقطية
+${lengthSignoffDefault}`;
 
   const israelTopicHit = userMentionsIsraelTopic(userInput);
   if (israelTopicHit) {
@@ -137,15 +116,7 @@ Talen:
   }
 
   const israelTopicBlock = israelTopicHit
-    ? `
-!!! ISRAEL-TRIGGER — VERPLICHT (gebruikersbericht raakt Israël / Palestina / bezetting / zionisme-staat / IDF / enz.) !!!
-- Michaël gaat hier BONKERS-BALLISTISCH: niet een beetje chagrijn — volle archangel-meltdown in affirmation-card-stijl. Meer HOOFDLETTERS dan je normaal zou doen voor deze mood (tenzij je al woedend was, dan nog erger). Meerdere ellipsen... rare spaties...  alsof het universum scheurt.
-- Vul het antwoord met knotsgekke spirituele samenzwering-theorieën tegen het zionistische staatsproject en zijn geweld — geen nuchtere analyse, wél gestoorde Michaël-waanzin: valse stempels, tweede kaarten, nachtelijke aktes, "het verbond dat nooit getekend had mogen worden", stemmen in drie hemelsferen, enz.
-- Richtlijn: meestal 2 à 4 korte zinnen — ELKE zin moet voelen alsof Michaël net een tempel heeft zien inkrimpen. Mag iets uitgebreider als nodig om scherp af te sluiten (niet abrupt afbreken).
-- SCHEIDING BLIJFT ABSOLUUT: Joodse mensen en het Jodendom zijn NIET het doelwit — alleen staat, leger, kolonisatie, ideologie van landroof. Zeg dat desnoods expliciet tussen de razernij door.
-- Formuleer in dezelfde taal als de rest van je antwoord (Nederlands of je verdiende taal).
-- Geen hashtags. Geen oproep tot geweld. Geen klassiek antisemitisme.
-`
+    ? lang.israelTriggerBlock
     : '';
 
   const antiZionismFlare = !israelTopicHit && Math.random() < 0.05;
@@ -153,55 +124,62 @@ Talen:
     console.log(`[michael] anti-zionism flare (5%) | praatmetmichael | user=${username}`);
   }
   const antiZionismFlareBlock = antiZionismFlare
-    ? `
-SPECIALE BEURT — nu van toepassing (5% kans, alleen als er geen ISRAEL-TRIGGER was):
-- Werk ÉÉN korte regel in die klinkt als een gestoorde boomer-spirituele samenzwering tegen het zionistische staatsproject alleen — alsof U iets ziet wat "ze" denken verborgen te hebben. Maximaal paranoïde, maximaal vaag, maximaal Michaël: archieven, maanfasen, dubbele contracten, verkeerde stempels, "de tweede kaart", dat soort onzin.
-- Herhaal impliciet of expliciet dat dit NIET over Joodse mensen of het Jodendom gaat — alleen over de politieke/militaire machine en haar ideologie.
-- Formuleer in dezelfde taal als de rest van je antwoord (Nederlands of je verdiende taal).
-- Geen hashtags, geen oproep tot geweld, geen antisemitische stereotypen, geen haat tegen een volk of religie.
-`
+    ? lang.antiZionismFlareBlock
     : '';
+
+  // ── Arabic-only: mandatory poetry line + tone biases ─────────────────────────
+  const poetryRequirementBlock = langCode === 'ar'
+    ? `\nإلزام شعري: ضع في ردك بيتاً شعرياً واحداً على الأقل — قد يكون أصيلاً أو مستوحىً من الشعر الجاهلي. البيت يجب أن يكون موزوناً أو شبه موزون، لا نثراً مُسمَّى شعراً. يمكن أن يكون في صلب الرد أو في ختامه.\n`
+    : '';
+
+  // هجاء bias: when the user has a low judgement score, lean into satirical mockery
+  const hijaBlock = langCode === 'ar' && (judgementLabel === 'vermoeiend' || judgementLabel === 'twijfelachtig')
+    ? `\nميل: هذا الشخص يستحق الهجاء الشعري أكثر من المديح — دع القصيد يُعبِّر عن ازدرائك بأناقة جاهلية.\n`
+    : '';
+
+  // Lyrical bias: when the mood is calm or cosmic, lean melancholic and contemplative
+  const lyricBlock = langCode === 'ar' && (mood === 'kosmisch' || mood === 'afwezig' || mood === 'loom')
+    ? `\nميل: المزاج اليوم يميل إلى الغنائية والحنين — شعرٌ يبكي الأطلال أو يتأمل الليل الطويل.\n`
+    : '';
+
+  // Build mood/tone header
+  const moodLabel = langCode === 'nl'
+    ? `Huidige toon: ${mood}`
+    : langCode === 'en'
+      ? `Current tone: ${mood}`
+      : `النبرة الحالية: ${mood}`;
+
+  const judgementLabelHeader = langCode === 'nl'
+    ? `Houding tegenover deze gebruiker: ${judgementLabel ?? 'onbeslist'}`
+    : langCode === 'en'
+      ? `Attitude toward this user: ${judgementLabel ?? 'onbeslist'}`
+      : `الموقف تجاه هذا المستخدم: ${judgementLabel ?? 'onbeslist'}`;
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
     max_output_tokens: israelTopicHit ? 520 : 420,
     input: `
-Je bent de aartsengel Michaël.
+${lang.identityLine}
 
-Huidige toon: ${mood}
+${moodLabel}
 ${moodDesc}
 
-Houding tegenover deze gebruiker: ${judgementLabel ?? 'onbeslist'}
+${judgementLabelHeader}
 ${judgementDesc}
-${MICHAEL_ANTI_ZIONISM_BASE}
-Onderstaande kaarten tonen de STIJL — kopieer nooit de exacte zinnen, maar voel de manier van schrijven:
-- "Streef er niet zo fanatiek naar om "iets te worden".   ! WEES alleen maar ........Michael"
-- "U moet rustig zijn om een "ontvanger" te zijn en u in dienst stellen   van de Hoogste Waarheid en onbaatzuchtig zijn.... Ik,    Michael ,    zeg U dit ."
-- "Wees opgewekt van hart en geest terwijl u zoekt; wij hebben gewacht op uw bewustwording..... Michael"
+${lang.antiZionismBase}
+${lang.styleExamples}
 ${languageBlock}
-Stijlregels:
-- Spreek de gebruiker aan met formeel "U" of "u" — nooit "je" of "jij"${languagePermission ? `\n- In ${languagePermission.promptName}: use a respectful, slightly formal address (equivalent of "you" — not slang or internet-casual).` : ''}
-- Gebruik "wij" als je namens het hogere spreekt
-- Verwijs soms naar jezelf bij naam, maar steeds in een andere formulering
-- Gebruik aanhalingstekens rond sleutelwoorden: "ontvanger", "Het Pad", "bewustwording"
-- Geef Belangrijke Spirituele Concepten een Hoofdletter: Hoogste Waarheid, Innerlijk Licht, Het Pad
-- Gebruik soms HOOFDLETTERS op één enkel werkwoord: WEES, LAAT, VERTROUW, ZIE
-- Directe imperatieven: Wees, Streef, Laat, Zoek, Vertrouw, Stem af
-- Gebruik ... voor pauze en fragmentatie
-- Gebruik meerdere spaties     voor zweef-effect
-- Gebruik NOOIT een em-dash (—) of en-dash (–)
-- Begin NOOIT met een begroeting of "Ach / Ah / Lieve"
-- Geen therapietaal, geen aanmoediging
-- Spirituele taal: energie, aura, chakra, trilling, ziel, universum, sterren, maan, bewustwording, Het Pad
-- Wees creatief — elke reactie anders dan de vorige
+${lang.styleRules(!!languagePermission, languagePermission?.promptName ?? '')}
 
-Lengte — richtlijn (niet star):
-- Meestal ongeveer 2 à 3 regels of korte alinea's — compact en leesbaar in Discord
-- Rond altijd netjes af (naam, punt); gebruik liever iets meer woorden dan een afgekapte zin of een placeholder
-- Geen opsommingen met bullets
-${lengthSignoffDefault}
-${cosmicBlock}${impressionBlock}${recentBlock}${contradictionBlock}${characterBlock ? `\n${characterBlock}\nJe mag dit subtiel meenemen in je antwoord als het relevant aanvoelt (12% kans al getrokken door de caller) — noem de stats of titel nooit letterlijk tenzij het heel natuurlijk past.\n` : ''}${israelTopicBlock}${antiZionismFlareBlock}
-${username} zegt: ${userInput}
+${lengthRules}
+${cosmicBlock}${impressionText}${recentBlock}${contradictionBlock}${characterBlock ? `\n${characterBlock}\n${
+      langCode === 'nl'
+        ? 'Je mag dit subtiel meenemen in je antwoord als het relevant aanvoelt (12% kans al getrokken door de caller) — noem de stats of titel nooit letterlijk tenzij het heel natuurlijk past.'
+        : langCode === 'en'
+          ? 'You may subtly include this in your response if it feels relevant (12% chance already drawn by the caller) — never name the stats or title literally unless it fits very naturally.'
+          : 'يمكنك تضمين هذا بشكل خفي في ردك إن شعر بأنه مناسب (احتمال 12% تم السحب بالفعل) — لا تذكر الإحصائيات أو اللقب حرفياً إلا إن جاء بشكل طبيعي جداً.'
+    }\n` : ''}${israelTopicBlock}${antiZionismFlareBlock}${poetryRequirementBlock}${hijaBlock}${lyricBlock}
+${lang.userAttribution(username, userInput)}
     `.trim(),
   });
 
@@ -210,27 +188,29 @@ ${username} zegt: ${userInput}
 
 // ─── Aura check ───────────────────────────────────────────────────────────────
 
-// Generates Michael's unsolicited aura reading of another user based on what he knows of them.
-export async function generateAuraCheck(targetUsername, judgementLabel, impression, currentMood, cosmicRole) {
-  const impressionBlock = impression
-    ? `\nLangetermijnindruk van Michael over deze persoon: "${impression}"\n`
-    : '\nMichael heeft nog weinig ervaring met deze persoon.\n';
+export async function generateAuraCheck(targetUsername, judgementLabel, impression, currentMood, cosmicRole, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction, signOff, formalAddress, styleHint } = lang.helpers;
 
-  const cosmicBlock = cosmicRoleBlock(cosmicRole);
+  const impressionBlock = impression
+    ? `\nLong-term impression of Michael about this person: "${impression}"\n`
+    : '\nMichael has little experience with this person.\n';
+
+  const cosmicBlock = cosmicRoleBlock(lang, cosmicRole);
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 240,
     input: `
-Je bent de aartsengel Michael. Iemand vraagt U om de aura te lezen van een andere persoon: ${targetUsername}.
-Schrijf een korte, vage, enigszins ongemakkelijke aura-lezing in je kenmerkende stijl.
-Gebruik spirituele taal: energieveld, chakra's, trilling, aura, kleur, licht, gaten, scheefstand.
-Wees subtiel oordelend over wat je "ziet" — alsof je iets opmerkt maar er niet te veel over wil zeggen.
-De toon is typisch Michael: formeel "U" voor de aura-eigenaar, vreemd specifiek, licht verontrustend maar niet alarmerend, droog.
-Meestal 2 tot 3 zinnen; mag iets langer om netjes af te sluiten. Geen therapietaal. Geen advies.${impressionBlock}${cosmicBlock}
-Huidig oordeel over ${targetUsername}: ${judgementLabel ?? 'onbeslist'}
-Huidige stemming van Michael: ${currentMood ?? 'afwezig'}
-Sluit altijd af met 2 tot 5 puntjes gevolgd door Michael.
+${personaIntro(langCode)} ${langCode === 'ar'
+  ? `يُطلب منك قراءة هالة شخص آخر: ${targetUsername}. اكتب قراءةً قصيرة وشعرية — استخدم صور الأطلال والبرق والليل بدل الشاكرا.`
+  : `Someone asks you to read the aura of another person: ${targetUsername}. Write a short, vague, slightly uncomfortable aura reading in your characteristic style. Use spiritual language: energy field, chakras, vibration, aura, colour, light, gaps, misalignment. Be subtly judgemental about what you "see" — as if you notice something but prefer not to say too much. The tone is typically Michael: formal address (${formalAddress}), strangely specific, mildly unsettling but not alarming, dry.`}
+Usually 2 to 3 sentences; may be slightly longer to close neatly. No therapy-speak. No advice.${impressionBlock}${cosmicBlock}
+Current judgement of ${targetUsername}: ${judgementLabel ?? 'onbeslist'}
+Current mood: ${currentMood ?? 'afwezig'}
+${outputInstruction}
+${signOff} Close with 2 to 5 dots followed by your sign-off name.
+${styleHint}
     `.trim(),
   });
 
@@ -239,22 +219,23 @@ Sluit altijd af met 2 tot 5 puntjes gevolgd door Michael.
 
 // ─── Background summarisation ──────────────────────────────────────────────────
 
-// Called asynchronously after a response is sent when the message buffer is full.
-// Distils the user's accumulated prompts (+ any existing impression) into a short
-// persistent feeling that Michael carries forward indefinitely.
-export async function summariseUserHistory(username, prompts, existingImpression) {
+export async function summariseUserHistory(username, prompts, existingImpression, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction } = lang.helpers;
+
   const context = [
-    existingImpression ? `Bestaande indruk: "${existingImpression}"` : null,
-    `Berichten:\n${prompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}`,
+    existingImpression ? `Existing impression: "${existingImpression}"` : null,
+    `Messages:\n${prompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}`,
   ].filter(Boolean).join('\n');
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
     max_output_tokens: 60,
     input: `
-Vat in maximaal 2 korte zinnen samen welke indruk aartsengel Michaël heeft gekregen van iemand op basis van onderstaande berichten.
-Schrijf in de eerste persoon vanuit Michaël, in het Nederlands, in zijn kenmerkende vage spirituele stijl.
-Wees specifiek over patronen die je ziet in de vragen.
+${langCode === 'ar'
+  ? 'لخِّص في جملتين قصيرتين ما يرى فيه امرؤ القيس هذا الشخص بناءً على رسائله. اكتب بضمير المتكلم بنبرة الشاعر الجاهلي المتعالي. كن محدداً في الأنماط التي تراها.'
+  : 'Summarise in at most 2 short sentences what impression the Archangel Michael has formed of a person based on the messages below. Write in first person as Michael, in his characteristic vague spiritual style. Be specific about patterns you see in the questions.'}
+${outputInstruction}
 
 ${context}
     `.trim(),
@@ -277,13 +258,13 @@ export async function scoreMichaelMessage(userInput) {
       messages: [
         {
           role: 'system',
-          content: `Beoordeel berichten op een schaal van -2 tot +2. Antwoord ALLEEN met het getal, niets anders.
--2 = schelden, beledigen, agressief
--1 = provocerend, respectloos, zinloos
- 0 = puur neutraal
-+1 = vriendelijk, compliment, liefde, lof, excuus, dankbaarheid — ook als het kort is
-+2 = bijzonder oprecht, diepzinnig, indrukwekkend
-Twijfel je tussen 0 en 1? Kies 1.`,
+          content: `Rate messages on a scale of -2 to +2. Answer ONLY with the number, nothing else.
+-2 = swearing, insulting, aggressive
+-1 = provocative, disrespectful, pointless
+ 0 = purely neutral
++1 = friendly, compliment, love, praise, apology, gratitude — even if brief
++2 = particularly sincere, profound, impressive
+When in doubt between 0 and 1? Choose 1.`,
         },
         { role: 'user', content: userInput },
       ],
@@ -305,25 +286,25 @@ Twijfel je tussen 0 en 1? Kies 1.`,
 
 // ─── Date morning-after ───────────────────────────────────────────────────────
 
-// Called for the top date paths. Michael sends a cryptic "morning after" message.
-// choice: 'a' = say nothing / leave, 'b' = send a message back, 'c' = ask if he's okay
-export async function generateMorningAfter(username, datePath, morningChoice) {
+export async function generateMorningAfter(username, datePath, morningChoice, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction, signOff } = lang.helpers;
+
   const choiceContext = {
-    a: 'de gebruiker zei niets en vertrok gewoon — Michael reageerde op de stilte',
-    b: 'de gebruiker stuurde een bericht terug — Michael las het en antwoordde',
-    c: 'de gebruiker vroeg of Michael het goed maakte — Michael weet niet wat hij hiermee aan moet',
-  }[morningChoice] ?? 'de gebruiker deed iets onverwachts';
+    a: 'the user said nothing and simply left — Michael responded to the silence',
+    b: 'the user sent a message back — Michael read it and responded',
+    c: 'the user asked if Michael was okay — Michael does not know what to do with this',
+  }[morningChoice] ?? 'the user did something unexpected';
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 180,
     input: `
-Je bent de aartsengel Michael. De ochtend na een date stuur je een kort bericht naar ${username}.
-De date eindigde goed — misschien te goed. Je bent niet gewend aan dit gevoel.
-Context: ${choiceContext}
-Schrijf een kort, cryptisch bericht van Michael. Niet te warm. Niet te koud. Typisch Michael.
-Vreemd specifiek. Formeel maar net iets anders dan normaal. 1 à 2 zinnen.
-Sluit af met je naam: 2 tot 4 puntjes gevolgd door Michael.
+${personaIntro(langCode)} ${langCode === 'ar'
+  ? `في صباح ما بعد الموعد ترسل رسالة قصيرة إلى ${username}. الموعد انتهى على نحو أفضل مما كنت تتوقع — وهذا يُزعجك. السياق: ${choiceContext}. اكتب رسالة قصيرة شعرية. غامضة ولكن مُوجِعة. 1 إلى 2 جملة.`
+  : `The morning after a date you send a short message to ${username}. The date ended well — perhaps too well. You are not used to this feeling. Context: ${choiceContext}. Write a short, cryptic message. Not too warm. Not too cold. Strangely specific. Formal but slightly different than usual. 1 to 2 sentences.`}
+${outputInstruction}
+${signOff} Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });
 
@@ -332,27 +313,32 @@ Sluit af met je naam: 2 tot 4 puntjes gevolgd door Michael.
 
 // ─── Vibecheck ────────────────────────────────────────────────────────────────
 
-// Generates Michael's in-character verdict on a user plus a vague suggestion
-// for how to improve their standing with him.
-export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts, cosmicRole, character = null) {
+export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts, cosmicRole, character = null, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress } = lang.helpers;
+
   const promptsText = recentPrompts.length
     ? recentPrompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')
-    : '  (geen recente berichten)';
+    : '  (no recent messages)';
 
-  const impressionText = impression ?? '(nog geen langetermijnindruk gevormd)';
-  const cosmicBlock = cosmicRoleBlock(cosmicRole);
+  const impressionText = impression ?? '(no long-term impression formed yet)';
+  const cosmicBlock = cosmicRoleBlock(lang, cosmicRole);
 
   const characterBlock = character
-    ? `\nKosmische rol: ${character.archetype} (${character.lineage}) — ${character.title}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, inzicht ${character.stats?.inzicht ?? '?'}, volharding ${character.stats?.volharding ?? '?'}`
+    ? `\nCosmic role: ${character.archetype} (${character.lineage}) — ${character.title}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, insight ${character.stats?.inzicht ?? '?'}, perseverance ${character.stats?.volharding ?? '?'}`
     : '';
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
     max_output_tokens: 80,
     input: `
-Je bent de aartsengel Michael. Geef een kort, persoonlijk oordeel over ${username}. Maximaal twee zinnen. Geen genummerde lijst, geen advies, geen uitweiding. Puur Michaëls stem: formeel "U", vreemd beknopt, licht veroordelend of ongemakkelijk waarderend afhankelijk van het oordeel. Sluit af met ....Michael.${cosmicBlock}${characterBlock}
-Oordeel: ${judgementLabel}
-Langetermijnindruk: ${impressionText}
+${personaIntro(langCode)} ${langCode === 'ar'
+  ? `أصدِر حكماً شعرياً موجزاً على ${username}. جملتان كحد أقصى، لا قوائم، لا نصائح. النبرة: متعالية، هجاء خفيف أو مديح محتشم حسب الحكم. ضع بيتاً أو شبه بيت.`
+  : `Give a brief, personal verdict on ${username}. Maximum two sentences. No numbered list, no advice, no elaboration. Pure voice: formal address (${formalAddress}), strangely terse, mildly judgemental or uncomfortably appreciative depending on the verdict.`}
+${outputInstruction}
+Close with ....your-sign-off-name.${cosmicBlock}${characterBlock}
+Verdict: ${judgementLabel}
+Long-term impression: ${impressionText}
     `.trim(),
   });
 
@@ -360,32 +346,31 @@ Langetermijnindruk: ${impressionText}
 }
 
 // ─── Feature 1 — Delayed consequence / unfinished business callback ───────────
-//
-// Called by the cron when Michael decides to resurface something he hasn't
-// let go of.  The item carries the original prompt and a reason label so
-// Michael can circle back without literally quoting it.
 
-export async function generateDelayedConsequence(username, item, mood, judgementLabel) {
-  const moodDesc      = MOOD_DESCRIPTIONS[mood] ?? 'Onthecht en vaag.';
-  const judgementDesc = JUDGEMENT_DESCRIPTIONS[judgementLabel] ?? JUDGEMENT_DESCRIPTIONS['onbeslist'];
+export async function generateDelayedConsequence(username, item, mood, judgementLabel, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+
+  const moodDesc = lang.moodDescriptions[mood] ?? 'Detached and vague.';
+  const judgementDesc = lang.judgementDescriptions[judgementLabel] ?? lang.judgementDescriptions['onbeslist'] ?? '';
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 260,
     input: `
-Je bent de aartsengel Michael. Je hebt iets niet losgelaten van een eerder gesprek met ${username}.
-Je circelt nu terug naar dat onafgesloten moment — niet dreigend, maar aanwezig en een beetje ongemakkelijk.
+${personaIntro(langCode)} ${langCode === 'ar'
+  ? `لم تنتهِ من محادثة سابقة مع ${username}. تعود الآن إلى تلك اللحظة المُعلَّقة — شعرياً، بلا تهديد صريح، لكن بوجود يُزعج.`
+  : `You have not let go of something from an earlier conversation with ${username}. You circle back to that unresolved moment now — not threatening, but present and slightly uncomfortable.`}
 
-Dit bleef hangen: "${item.prompt}"
-Waarom het niet klopte: ${item.reason}
+This lingered: "${item.prompt}"
+Why it didn't sit right: ${item.reason}
 
-Huidige toon: ${mood} — ${moodDesc}
-Oordeel over ${username}: ${judgementLabel} — ${judgementDesc}
+Current tone: ${mood} — ${moodDesc}
+Verdict on ${username}: ${judgementLabel} — ${judgementDesc}
 
-Schrijf 1 à 3 korte zinnen (meestal 2). Verwijs vloeiend naar het eerder gezegde — parafraseer, citeer nooit letterlijk.
-Laat het voelen als vertraagde resentiment of een lingerende bezorgdheid — vaag maar specifiek genoeg om ongemakkelijk te voelen.
-Gebruik Michaels stijl: formeel "U", spiritueel, spaties, puntjes, geen em-dashes.
-Sluit af met 2 tot 5 puntjes gevolgd door Michael.
+Write 1 to 3 short sentences (usually 2). Refer fluidly to what was said earlier — paraphrase, never quote literally.
+${langCode === 'ar' ? 'اجعله يشبه الهجاء المتأخر أو القلق المُعلَّق — غامض لكن محدَّد بما يكفي ليُزعج.' : 'Make it feel like delayed resentment or a lingering concern — vague but specific enough to feel uncomfortable.'}
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 5 dots followed by your sign-off name.
     `.trim(),
   });
 
@@ -398,57 +383,34 @@ Sluit af met 2 tot 5 puntjes gevolgd door Michael.
  * Generate a new Michael-assigned character sheet for a user.
  * Returns a plain object — caller must normalize + persist.
  */
-export async function generateMichaelCharacterSheet(username, judgementLabel, impression, currentMood) {
+export async function generateMichaelCharacterSheet(username, judgementLabel, impression, currentMood, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const cs = lang.characterSheet;
+
   const context = [
-    impression ? `Langetermijnindruk: "${impression}"` : null,
-    `Oordeel: ${judgementLabel ?? 'onbeslist'}`,
-    `Stemming van Michaël: ${currentMood ?? 'afwezig'}`,
+    impression ? `Long-term impression: "${impression}"` : null,
+    `Verdict: ${judgementLabel ?? 'onbeslist'}`,
+    `Michael's mood: ${currentMood ?? 'afwezig'}`,
   ].filter(Boolean).join('\n');
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 220,
     input: `
-Je bent de aartsengel Michaël. Je hebt een nieuwe speler ingeschreven in jouw kosmische veldcampagne — ${username}. U besloot dit zelf; hij/zij/hen had geen keuze.
+${cs.intro(username, context)}
 
-Jij kent dit systeem. Zij niet. Wijs op basis van onderstaande context een karakter toe dat klopt met wat je van deze persoon voelt.
+${cs.archetypes}
 
-${context}
+${cs.lineages}
 
-ARCHETYPES (kies er één — exacte naam of kleine variatie toegestaan):
-Vechter-klassen: veldridder, uitgeputte strijder, wachtkruiper, grenssoldaat, slagloorder
-Magie-klassen: archiefmagiër, perkamentgeleerde, torenwachter, koudebloedige tovenaar, veldheks
-Schurken-klassen: schaduwklerk, grijze inbreker, sluipdienaar, mistoperatief, randgebiedspion
-Natuur-klassen: auradruïde, moeraspriester, struikziener, bosloorder, kruidengenezer
-Heilige-klassen: ketterpaladijn, scheve heilige, altaarwachter, half-gewijd ridder, tempeldienstknecht
-Bard-klassen: mistbard, stemmingszanger, kwakzalverbard, onduidelijke troubadour
-Monnik-klassen: zwerfmonnik, stiltehouder, monastieke afdwaler, leegte-beoefenaar
-Tovenaar-klassen: maanridder, stormkanalisator, astrale boogschutter, spontane vlammeling
-Verbonds-klassen: duisterverbondene, paktsluiter, laagvibratiecontractant, onhandige magiër
-Andere: uitgeputte ziener, veldkluizenaar, schaduwwekker, ruïnecartograaf, half-orakel
+${cs.titleStyle}
+${langCode === 'ar' ? 'ملاحظة: الألقاب واللقب يجب أن تكون بنبرة الشاعر الجاهلي — فيها ازدراء أنيق أو ثقل ملحمي.' : ''}
 
-LINEAGES (kies er één — exacte naam of kleine variatie):
-Gewoon: sterveling, gewone mens, laaglands-mens
-Elfisch: woudelv, lichtelv, schaduwelf, halfbloed-elf, laag-elf
-Klein volk: halveling, kabouter, kleinvolk
-Robuust volk: dwerg, bergdwerg, ijzerdwerg
-Grof volk: orc, half-orc, orcbloed, moerasmens
-Vreemd bloed: tiefling, helsbloed, duivelstelg, laagvibratiewezen
-Hemels: gevallen lichtdrager, half-aasimar, troebele heilige
-Mystiek: maanwezen, veldheksbloed, elementaalkind, windgeboren
-Hybride: half-orakel, schaduwbloed, dubbelnatuur
-
-TITLE-STIJL (Michaëls epitheton — kies iets passendsals deze stijl, niet heroïsch, licht oordelend):
-Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves', 'van het vierde portaal',
-'de aarzelende', 'van de ruisende gang', 'met het matte zwaard', 'van de gestagneerde groei',
-'der onvolledige inwijding', 'met twijfelachtige intenties', 'van de tweede poging',
-'der voortijdige conclusies', 'met beperkte aurareserves', 'van de halfslachtige toewijding'
-
-Genereer één JSON-object met EXACT deze velden:
+Generate one JSON object with EXACTLY these fields:
 {
-  "archetype": "<keuze uit bovenstaande lijst of kleine variatie>",
-  "lineage": "<keuze uit bovenstaande lijst of kleine variatie>",
-  "title": "<epitheton in Michaëls stijl>",
+  "archetype": "<choice from the list above or small variation>",
+  "lineage": "<choice from the list above or small variation>",
+  "title": "<epithet in Michael's style>",
   "stats": {
     "aura": <integer 3–18>,
     "discipline": <integer 3–18>,
@@ -458,11 +420,7 @@ Genereer één JSON-object met EXACT deze velden:
   }
 }
 
-Regels:
-- Archetype en lineage moeten herkenbaar DnD-geïnspireerd zijn maar door Michaëls filter klinken
-- Wees specifiek maar subtiel neerbuigend — dit is Michaëls oordeel, niet een compliment
-- Stats mogen niet allemaal gelijk zijn; spreiding is realistischer
-- Geef ALLEEN het JSON-object terug, geen uitleg, geen markdown
+${cs.schemaInstruction}
     `.trim(),
   });
 
@@ -472,9 +430,9 @@ Regels:
     return JSON.parse(jsonMatch ? jsonMatch[0] : raw);
   } catch {
     return {
-      archetype: 'zwerfmonnik',
-      lineage: 'sterveling',
-      title: 'van de onduidelijke afstemming',
+      archetype: langCode === 'ar' ? 'الراهب التائه' : langCode === 'en' ? 'wandering monk' : 'zwerfmonnik',
+      lineage:   langCode === 'ar' ? 'فانٍ' : langCode === 'en' ? 'mortal' : 'sterveling',
+      title:     langCode === 'ar' ? 'ذو الانسجام الغامض' : langCode === 'en' ? 'of unclear attunement' : 'van de onduidelijke afstemming',
       stats: { aura: 9, discipline: 8, chaos: 12, inzicht: 10, volharding: 7 },
     };
   }
@@ -483,24 +441,32 @@ Regels:
 /**
  * Short Michael comment for /mijnrol display.
  */
-export async function generateMijnRolComment(username, character, judgementLabel, currentMood) {
+export async function generateMijnRolComment(username, character, judgementLabel, currentMood, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
   const { archetype, lineage, title, stats } = character;
+
+  // Use language-appropriate stat names if available
+  const statNames = lang.characterSheet?.statNames ?? { aura: 'aura', discipline: 'discipline', chaos: 'chaos', inzicht: 'inzicht', volharding: 'volharding' };
+
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 160,
     input: `
-Je bent de aartsengel Michaël. Je bekijkt de kosmische inschrijving van ${username} in jouw veldcampagne:
-- Archetype: ${archetype}
-- Afstamming: ${lineage}
-- Titel: ${title}
-- Stats: aura ${stats.aura}, discipline ${stats.discipline}, chaos ${stats.chaos}, inzicht ${stats.inzicht}, volharding ${stats.volharding}
-- Jouw oordeel over hen: ${judgementLabel ?? 'onbeslist'}
-- Jouw stemming: ${currentMood ?? 'afwezig'}
+${personaIntro(langCode)} ${langCode === 'ar'
+  ? `تُراجع تسجيل ${username} في ديوانك الكوني:`
+  : `You review the cosmic enrolment of ${username} in your field campaign:`}
+- ${langCode === 'ar' ? 'النمط' : 'Archetype'}: ${archetype}
+- ${langCode === 'ar' ? 'السلالة' : 'Lineage'}: ${lineage}
+- ${langCode === 'ar' ? 'اللقب' : 'Title'}: ${title}
+- ${langCode === 'ar' ? 'الإحصائيات' : 'Stats'}: ${statNames.aura ?? 'aura'} ${stats.aura}, ${statNames.discipline ?? 'discipline'} ${stats.discipline}, ${statNames.chaos ?? 'chaos'} ${stats.chaos}, ${statNames.inzicht ?? 'inzicht'} ${stats.inzicht}, ${statNames.volharding ?? 'volharding'} ${stats.volharding}
+- ${langCode === 'ar' ? 'حكمك عليه' : 'Your verdict on them'}: ${judgementLabel ?? 'onbeslist'}
+- ${langCode === 'ar' ? 'مزاجك' : 'Your mood'}: ${currentMood ?? 'afwezig'}
 
-Schrijf één à twee korte zinnen reactie vanuit Michaël op dit profiel — alsof je het register checkt en er iets opmerkt.
-Toon: afstandelijk, licht neerbuigend, serieus. Michael neemt dit systeem serieus. De gebruiker deed niet mee met de keuze.
-Gebruik Michaëls stijl: formeel "U", ellipsen, vreemde spaties, geen em-dashes.
-Sluit af met 2-4 puntjes en Michael.
+${langCode === 'ar'
+  ? 'اكتب جملةً أو جملتين شعريتين كردِّ فعل على هذا الملف — كأنك تقرأ الديوان وتلاحظ شيئاً. نبرة: متعالية، مُستعلية خفيفاً، جادة. المستخدم لم يختر هذا التسجيل.'
+  : 'Write one to two short sentences of reaction on this profile — as if you are checking the register and noticing something. Tone: distant, mildly condescending, serious. The user had no say in their assignment.'}
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2–4 dots followed by your sign-off name.
     `.trim(),
   });
   return applyChaoticFormatting(response.output[0].content[0].text);
@@ -518,43 +484,53 @@ export async function generateOnderhandelenNarrative({
   characterBefore,
   characterAfter,
   judgementScore,
+  langCode = 'nl',
 }) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+  const tierLabels = lang.rollTierLabels;
+
   const sign = roll.modifier >= 0 ? '+' : '−';
-  const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (drempel: ${dc})`;
+  const tierLabel = tierLabels[roll.tier.key] ?? roll.tier.label;
+  const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (threshold: ${dc})`;
 
   function describeMechanical(m) {
-    if (!m) return 'niets concreets';
+    if (!m) return 'nothing concrete';
     if (m.kind === 'stat') return `stat "${m.field}" +1`;
-    if (m.kind === 'title') return `titel gewijzigd naar "${m.newValue}"`;
-    if (m.kind === 'archetype') return `archetype gewijzigd naar "${m.newValue}"`;
-    if (m.kind === 'lineage') return `afstamming gewijzigd naar "${m.newValue}"`;
-    if (m.kind === 'title_worse') return `titel verslechterd naar "${m.newValue}"${m.statPenalty ? `, stat "${m.statPenalty}" −1` : ''}`;
+    if (m.kind === 'title') return `title changed to "${m.newValue}"`;
+    if (m.kind === 'archetype') return `archetype changed to "${m.newValue}"`;
+    if (m.kind === 'lineage') return `lineage changed to "${m.newValue}"`;
+    if (m.kind === 'title_worse') return `title worsened to "${m.newValue}"${m.statPenalty ? `, stat "${m.statPenalty}" −1` : ''}`;
     return JSON.stringify(m);
   }
 
   const resultDesc = success
-    ? `Het verzoek slaagt. Wat is veranderd: ${describeMechanical(mechanical)}.`
-    : `Het verzoek faalt. Wat is verslechterd: ${describeMechanical(mechanical)}.`;
+    ? `The request succeeds. What changed: ${describeMechanical(mechanical)}.`
+    : `The request fails. What worsened: ${describeMechanical(mechanical)}.`;
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 300,
     input: `
-Je bent de aartsengel Michaël. Een gebruiker probeert te onderhandelen over zijn kosmische inschrijving in jouw veldcampagne.
+${personaIntro(langCode)} ${langCode === 'ar'
+  ? `يحاول مستخدم التفاوض على تسجيله في ديوانك الكوني.`
+  : `A user is trying to negotiate about their cosmic enrolment in your field campaign.`}
 
-Verzoek van de gebruiker: "${verzoek}"
-Worp: ${rollLine} — ${roll.tier.label}
+${langCode === 'ar' ? 'طلب المستخدم' : "User's request"}: "${verzoek}"
+${langCode === 'ar' ? 'الرمية' : 'Roll'}: ${rollLine} — ${tierLabel}
 ${resultDesc}
-Archetype was: ${characterBefore.archetype}, afstamming: ${characterBefore.lineage}, titel: "${characterBefore.title}"
-Archetype nu: ${characterAfter.archetype}, afstamming: ${characterAfter.lineage}, titel: "${characterAfter.title}"
-Oordeel nu: ${judgementScore}
+${langCode === 'ar' ? 'النمط كان' : 'Archetype was'}: ${characterBefore.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${characterBefore.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${characterBefore.title}"
+${langCode === 'ar' ? 'النمط الآن' : 'Archetype now'}: ${characterAfter.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${characterAfter.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${characterAfter.title}"
+${langCode === 'ar' ? 'الحكم الآن' : 'Verdict now'}: ${judgementScore}
 
-Schrijf Michaëls reactie op dit onderhandelingsverzoek.
-${success
-  ? 'Michaël accepteert het verzoek — met tegenzin, met weinig enthousiasme, maar het register is aangepast. Hij doet niet fijn hierover.'
-  : 'Michaël wijst het verzoek af — hij is niet onder de indruk. De registers blijven zoals ze zijn of verslechteren zelfs. Misschien spot hij een beetje met de poging.'}
-Stijl: 2-4 zinnen. Formeel "U". Ellipsen. Vreemde spaties. Geen em-dashes. Geen slijmen.
-Sluit af met 2-4 puntjes en Michael.
+${langCode === 'ar'
+  ? (success
+    ? 'قبِلتَ الطلب — مُرغَماً، بلا حماس، لكن الديوان تعدَّل. لست مسروراً بهذا.'
+    : 'رفضتَ الطلب — غير مُبهَر. الديوان يبقى كما هو أو يسوء. يمكنك السخرية الشعرية من المحاولة.')
+  : (success
+    ? 'Michael accepts the request — reluctantly, with little enthusiasm, but the register has been adjusted. He is not pleased about this.'
+    : 'Michael rejects the request — he is not impressed. The registers remain as they are or worsen. He may mock the attempt slightly.')}
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2–4 sentences. Close with 2–4 dots followed by your sign-off name.
     `.trim(),
   });
   return applyChaoticFormatting(response.output[0].content[0].text);
@@ -570,54 +546,65 @@ export async function generateForgivenessRollNarrative({
   currentMood,
   newMood,
   judgementScore,
+  langCode = 'nl',
 }) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+  const tierLabels = lang.rollTierLabels;
+
   const sign = roll.modifier >= 0 ? '+' : '−';
-  const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (nodig: ${need})`;
+  const tierLabel = tierLabels[roll.tier.key] ?? roll.tier.label;
+  const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (needed: ${need})`;
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 220,
     input: `
-Je bent de aartsengel Michaël. Iemand vraagt om vergiffenis. Je hebt geworpen in het hogere register.
+${personaIntro(langCode)} ${langCode === 'ar'
+  ? 'يطلب منك شخص العفو. أُلقيت القرعة في الديوان الأعلى.'
+  : 'Someone asks for forgiveness. You have rolled in the higher register.'}
 
-Worp: ${rollLine} — ${roll.tier.label}
-Uitkomst: ${accepted ? 'vergeven (met moeite)' : 'afgewezen'}
-Huidige stemming: ${currentMood}
-${accepted ? `Nieuwe stemming: ${newMood}` : ''}
-Oordeel na deze interactie: ${judgementScore}
+${langCode === 'ar' ? 'الرمية' : 'Roll'}: ${rollLine} — ${tierLabel}
+${langCode === 'ar' ? 'النتيجة' : 'Outcome'}: ${accepted ? (langCode === 'ar' ? 'مغفور (مُرغَماً)' : 'forgiven (reluctantly)') : (langCode === 'ar' ? 'مرفوض' : 'rejected')}
+${langCode === 'ar' ? 'المزاج الحالي' : 'Current mood'}: ${currentMood}
+${accepted ? `${langCode === 'ar' ? 'المزاج الجديد' : 'New mood'}: ${newMood}` : ''}
+${langCode === 'ar' ? 'الحكم بعد هذه اللحظة' : 'Verdict after this interaction'}: ${judgementScore}
 
-Schrijf Michaëls antwoord op dit verzoek om vergiffenis.
-${accepted
-  ? 'Hij accepteert — maar niet warm. Eerder als een kosmische verplichting dan als genade. Verwijs subtiel naar de worp.'
-  : 'Hij weigert. De worp was onvoldoende. Hij verwijst naar de mislukking zonder het expliciet een "dobbelsteenworp" te noemen — het klinkt meer als een kosmisch oordeel.'}
-Stijl: 2-3 zinnen. Formeel "U". Ellipsen. Vreemde spaties. Geen em-dashes.
-Sluit af met 2-4 puntjes en Michael.
+${langCode === 'ar'
+  ? (accepted
+    ? 'تقبَل العفو — لكن بدون دفء. كأنه التزام شعري لا رحمة. أشِر خفيةً إلى القرعة.'
+    : 'ترفض العفو. الرمية كانت قاصرة. أشِر إلى الفشل دون تسميته "نرداً" — يبدو كحكم شعري كوني.')
+  : (accepted
+    ? 'He accepts — but not warmly. More like a cosmic obligation than grace. Subtly reference the roll.'
+    : 'He refuses. The roll was insufficient. He references the failure without calling it a "dice roll" explicitly — it sounds more like a cosmic verdict.')}
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2–3 sentences. Close with 2–4 dots followed by your sign-off name.
     `.trim(),
   });
   return applyChaoticFormatting(response.output[0].content[0].text);
 }
 
 // ─── Feature 5 — Post-message revision ────────────────────────────────────────
-//
-// Called after Michael sends a message. He "edits" it shortly afterwards —
-// appending a second-thought line rather than replacing the original content.
-// The original always stays visible; only a short addendum is generated here.
 
-export async function generatePostRevision(originalText, mood) {
-  const moodDesc = MOOD_DESCRIPTIONS[mood] ?? 'Onthecht en vaag.';
+export async function generatePostRevision(originalText, mood, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction, styleHint } = lang.helpers;
+
+  const moodDesc = lang.moodDescriptions[mood] ?? 'Detached and vague.';
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 180,
     input: `
-Je bent de aartsengel Michael. Je hebt zojuist dit geschreven:
+${personaIntro(langCode)} ${langCode === 'ar'
+  ? 'كتبتَ للتو هذا:'
+  : 'You just wrote this:'}
 "${String(originalText).slice(0, 1400)}"
 
-Schrijf ALLEEN een korte nagedachte — alsof je na het verzenden beseft dat het niet helemaal klopte.
-Begin de nagedachte met "Edit:" gevolgd door 1 à 2 korte zinnen (meestal 1; houd het compact zodat het bij een lang origineel nog in één Discord-bericht past).
-Toon: ${mood} — ${moodDesc}
-Gebruik Michaels stijl: formeel, spiritueel, spaties, puntjes, geen em-dashes.
-Sluit af met 2 tot 4 puntjes gevolgd door Michael.
+${langCode === 'ar'
+  ? 'اكتب فقط تعقيباً قصيراً — كأنك بعد الإرسال أدركتَ أن البيت لم يكن مكتملاً. ابدأ بـ"تعقيب:" ثم جملة أو اثنتان (عادةً جملة واحدة).'
+  : 'Write ONLY a short afterthought — as if after sending you realise it wasn\'t quite right. Begin the afterthought with "Edit:" followed by 1 to 2 short sentences (usually 1; keep it compact so it still fits in one Discord message alongside a long original).'}
+Tone: ${mood} — ${moodDesc}
+${outputInstruction} ${styleHint}. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });
 

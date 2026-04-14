@@ -22,23 +22,13 @@ import { appendEditWithinDiscordLimit, DiscordRequest } from '../utils.js';
 import { addShadowCandidate } from './shadow-store.js';
 import { addUnfinishedBusiness, loadUserMemory, updateLastChannel } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
+import { getGuildLanguage } from './guild-settings.js';
+import { getLang } from './lang/index.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 
 // Intents: GUILDS(1) | GUILD_MESSAGES(512) | MESSAGE_CONTENT(32768)
 const INTENTS = 1 | 512 | 32768;
-
-// ─── Interjection content (name-mention replies) ──────────────────────────────
-
-export const MICHAEL_NAME_REPLIES = [
-  'IK HOOR MIJN NAAM…  blijkbaar was dat nodig....Michael',
-  'Je riep…  ik was al in de buurt...Michael',
-  'Mijn naam hangt hier weer in de lucht…  dat is niet toevallig     of wel..Michael',
-  'Er werd iets geroepen…  de trilling bereikte mij....Michael',
-  'Dit soort momenten…  ze tellen mee...Michael',
-  'Ik ben aanwezig…  meer dan je misschien prettig vindt..Michael',
-  'Mijn naam…  uitgesproken…  dat doet iets met het veld..Michael',
-];
 
 // ─── Feature 3 — Bait / forcing-Michael-to-respond detection ─────────────────
 //
@@ -126,14 +116,15 @@ export function startGateway() {
         const ts        = Date.now();
 
         // Feature 4 — Store every non-bot message as a potential shadow-reply target
-        addShadowCandidate({ messageId: msg.id, channelId, authorId, content, timestamp: ts });
+        const guildId = msg.guild_id ?? null;
+        addShadowCandidate({ messageId: msg.id, channelId, authorId, content, timestamp: ts, guildId });
 
         // Track the user's most-recently-active channel so delayed consequences
         // know where to post. Only updates if the user is already in memory.
         updateLastChannel(authorId, channelId);
 
-        // Only continue for messages that mention Michael
-        if (!/michael/i.test(content)) return;
+        // Only continue for messages that mention Michael or (in Arabic mode) Imru' al-Qais
+        if (!/michael/i.test(content) && !/امرؤ القيس|امرئ القيس|القيس/.test(content)) return;
 
         // Feature 3 — Bait / forcing trap
         if (BAIT_RE.test(content)) {
@@ -162,7 +153,10 @@ export function startGateway() {
         // 90% chance Michael interjects when his name is said
         if (Math.random() > 0.90) return;
 
-        const reply = MICHAEL_NAME_REPLIES[Math.floor(Math.random() * MICHAEL_NAME_REPLIES.length)];
+        const gwLangCode = guildId ? getGuildLanguage(guildId) : 'nl';
+        const gwLang = getLang(gwLangCode);
+        const nameReplies = gwLang.ui.nameReplies ?? gwLang.ui.shadowReplyLines;
+        const reply = nameReplies[Math.floor(Math.random() * nameReplies.length)];
 
         try {
           const res = await DiscordRequest(`channels/${channelId}/messages`, {

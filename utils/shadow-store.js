@@ -7,7 +7,7 @@
  * losing the queue on restart is acceptable.
  *
  * Each candidate:
- *   { messageId, channelId, authorId, content, timestamp, shadowReplied }
+ *   { messageId, channelId, authorId, content, timestamp, shadowReplied, guildId? }
  */
 
 const MAX_CANDIDATES = 120;
@@ -17,9 +17,9 @@ const MAX_AGE_MS = 2 * 60 * 60 * 1000; // up to 2 hours — keeps more candidate
 const candidates = [];
 
 /** Store a new message as a potential shadow reply target. Deduplicates by messageId. */
-export function addShadowCandidate({ messageId, channelId, authorId, content, timestamp }) {
+export function addShadowCandidate({ messageId, channelId, authorId, content, timestamp, guildId = null }) {
   if (candidates.some(c => c.messageId === messageId)) return;
-  candidates.push({ messageId, channelId, authorId, content, timestamp, shadowReplied: false });
+  candidates.push({ messageId, channelId, authorId, content, timestamp, shadowReplied: false, guildId });
   // Keep array bounded — drop oldest entries first
   if (candidates.length > MAX_CANDIDATES) {
     candidates.splice(0, candidates.length - MAX_CANDIDATES);

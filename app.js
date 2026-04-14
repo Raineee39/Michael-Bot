@@ -27,6 +27,8 @@ import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, 
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
+import { getGuildLanguage, setGuildLanguage } from './utils/guild-settings.js';
+import { getLang } from './utils/lang/index.js';
 
 function buildDateButtons(choices) {
   return {
@@ -40,39 +42,24 @@ function buildDateButtons(choices) {
   };
 }
 
+/** Returns ROUND_1/2/3/VERDICTS from date.js (Dutch) or from the lang pack (EN/AR). */
+function getDateRounds(lang) {
+  if (lang.code === 'nl') {
+    return { r1: ROUND_1, r2: ROUND_2, r3: ROUND_3, verdicts: VERDICTS };
+  }
+  return {
+    r1: lang.date.round1,
+    r2: lang.date.round2,
+    r3: lang.date.round3,
+    verdicts: lang.date.verdicts,
+  };
+}
+
 // Pending /onderhandelen verzoek texts — keyed by userId, cleared after use or 10 min
 const pendingNegotiations = new Map();
 
-const FLEE_VERGEEFMIJ = [
-  'U heeft het niet aangedurfd.  Begrijpelijk...  maar onfortuinlijk.  Uw situatie blijft ongewijzigd....Michael',
-  'Een strategische terugtrekking.  Ik noteer dit ook....Michael',
-  'Vlucht is ook een keuze.  Niet de meest respectvolle...  maar een keuze....Michael',
-  'U trok zich terug voor de worp.  Het register blijft staan....Michael',
-];
-
-const FLEE_ONDERHANDELEN = [
-  'U trok uw verzoek in.  Dat is wellicht wijsheid.  Of lafheid.  Ik onderscheid dat niet altijd....Michael',
-  'Het register blijft ongewijzigd.  U hebt mijn tijd verspild....Michael',
-  'Een aarzelende terugkeer naar uw positie.  Ik heb dit genoteerd....Michael',
-  'Goed.  Dan blijft alles zoals ik het had vastgesteld.  Zoals het hoort....Michael',
-];
-
-// Sent a few minutes after a catastrophically bad roll — Michael has a change of heart
-const DIVINE_PARDON_VERGEEFMIJ = [
-  'Ik heb er nog eens over nagedacht...  en eigenlijk klopte mijn weigering niet.  U bent vergeven.  Noteer dat....Michael',
-  'Iets trok aan mijn aandacht.  U wordt toch vergeven.  Vraag mij niet waarom....Michael',
-  'Het hogere register heeft mij gecorrigeerd.  Vergeving is van toepassing.  Dit staat niet open voor discussie....Michael',
-  'Na heroverweging...  de afwijzing was voorbarig.  U bent vergeven.  Niet omdat u het verdiende....Michael',
-  'Ik weet niet waarom ik dit doe.  Maar ik vergeef u toch.  Tijdelijk en onder voorbehoud....Michael',
-];
-
-const DIVINE_PARDON_ONDERHANDELEN = [
-  'Ik heb het register opnieuw geraadpleegd...  en uw verzoek is toch ingewilligd.  Ik weet ook niet waarom....Michael',
-  'Na heroverweging...  hetgeen u vroeg wordt deels toegekend.  Niet omdat u het verdiende....Michael',
-  'Het kosmos heeft mij gecorrigeerd op dit punt.  Uw aanpassing is doorgevoerd.  Verdere vragen worden niet beantwoord....Michael',
-  'Ik heb mij bedacht.  Dat komt zelden voor.  Uw verzoek is alsnog gehonoreerd.  U mag dankbaar zijn....Michael',
-  'Er was iets aan uw toon dat mij later raakte.  Uw verzoek is ingewilligd.  Dit betekent niet dat u gelijk had....Michael',
-];
+// All flee/pardon/apology/refusal strings are now in lang packs (utils/lang/{nl,en,ar}.js)
+// and accessed via lang.ui.*  throughout the handler.
 
 async function fetchGiphyGif(query) {
   const key = process.env.GIPHY_API_KEY;
@@ -91,7 +78,7 @@ async function fetchGiphyGif(query) {
   }
 }
 
-async function buildUitverkoreneMessage(guildId) {
+async function buildUitverkoreneMessage(guildId, lang) {
   const membersRes = await DiscordRequest(`guilds/${guildId}/members?limit=1000`, { method: 'GET' });
   const members = await membersRes.json();
   const humans = members.filter(m => !m.user.bot);
@@ -99,14 +86,16 @@ async function buildUitverkoreneMessage(guildId) {
   const userId = chosen.user.id;
   const gif = await fetchGiphyGif(getRandomGifQuery());
 
+  const boodschap = pick(lang.uitverkorene.boodschappen);
+
   const content = [
-    `⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️⚡🌩️`,
-    `# ER IS EEN NIEUWE UITVERKORENE GEKOZEN`,
-    `⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️⚡🌩️`,
+    lang.uitverkorene.header,
+    lang.uitverkorene.title,
+    lang.uitverkorene.header,
     ``,
     `<@${userId}>`,
     ``,
-    `*${getRandomBoodschap()}*`,
+    `*${boodschap}*`,
   ].join('\n');
 
   const embeds = gif ? [{ image: { url: gif } }] : [];
@@ -154,13 +143,7 @@ function getCosmicRole(userId) {
 
 const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'praatmetmichael', 'vibecheck', 'cosmischestatus', 'mijnrol']);
 
-const NEE = [
-  'nee.',
-  'nee.',
-  'nee.',
-  'NEE.',
-  'nee.     ...Michael',
-];
+// NEE array is now per-lang: lang.ui.nee
 
 // Mood spectrum: index 0 = calmest, index 6 = angriest
 // Michael drifts along this based on how each conversation goes
@@ -198,118 +181,11 @@ function nextMood(currentMood, scoreDelta) {
   return MICHAEL_MOODS[Math.max(0, Math.min(6, base + shift))];
 }
 
-// Mood-flavoured date intros — used by /dateer
-const DATE_MOOD_INTROS = {
-  woedend: [
-    `💢⚡💢⚡💢 **Een Date met Aartsengel Michaël** 💢⚡💢⚡💢`,
-    ``,
-    `Michaël is er al     hij kijkt niet op als je binnenkomt`,
-    `hij zit met zijn armen gevouwen     dit betekent iets     je weet wat`,
-    ``,
-    `*"ik ben hier"*     zegt hij     dit klinkt als een aanklacht`,
-    ``,
-    `**wat doe je**`,
-  ].join('\n'),
-  streng: [
-    `📜⚡📜⚡📜 **Een Date met Aartsengel Michaël** 📜⚡📜⚡📜`,
-    ``,
-    `Michaël is er al     hij heeft je al beoordeeld voordat je zit`,
-    `hij kijkt je aan     lang     afwachtend`,
-    ``,
-    `*"je bent er"*     zegt hij     het klinkt als een test`,
-    ``,
-    `**wat doe je**`,
-  ].join('\n'),
-  kosmisch: [
-    `🌟✨🌟✨🌟 **Een Date met Aartsengel Michaël** 🌟✨🌟✨🌟`,
-    ``,
-    `Michaël is er al     hij staat in het licht     of het licht staat om hem heen`,
-    `hij kijkt je aan     zijn blik is ongewoon open     voor hem`,
-    ``,
-    `*"de sferen stemden dit af"*     zegt hij     en hij klinkt alsof hij dit gelooft`,
-    ``,
-    `**wat doe je**`,
-  ].join('\n'),
-};
+// DATE_MOOD_INTROS and DATE_ROUND1_WOEDEND are now in lang packs: lang.date.moodIntros / lang.date.round1WoedendChoices
 
-// Round 1 choices when Michael is woedend — harder to warm up
-const DATE_ROUND1_WOEDEND = [
-  { label: '🙏 Bied meteen excuses aan', id: 'a' },
-  { label: '😶 Zeg niets en wacht', id: 'b' },
-  { label: '💝 Zeg dat je van hem houdt', id: 'c' },
-];
-
-// Pre-written humeur lines per mood, shown by /michaelhumeur
-const MICHAEL_HUMEUR = {
-  kosmisch: [
-    '🌟✨🪐✨🌟\nMichael bevindt zich in een staat van **kosmische rust**.\nHij staat open. De sferen zingen. U mag spreken.',
-    '🌙⭐🌟⭐🌙\nMichael zweeft vandaag op een hoge trilling.\nHet universum is gunstig gestemd. Maak gebruik van dit moment.',
-    '✨🪐💫🪐✨\nMichael is **kosmisch**   en ziet U met ongewone helderheid.\nEr hangt een licht over dit kanaal. Zeldzaam.',
-  ],
-  afwezig: [
-    '👁️☁️💭☁️👁️\nMichael is er…  ergens.\nNiet volledig aanwezig   maar beschikbaar   op een vage manier.',
-    '🌫️💭🌫️\nMichael dwaalt door het etherische veld.\nU kunt Hem bereiken   al garandeert Hij niets over de kwaliteit van Zijn aanwezigheid.',
-    '☁️👁️☁️\nMichael is **afwezig**   maar niet weg.\nHij hoort U waarschijnlijk. Probeer het maar.',
-  ],
-  loom: [
-    '😮‍💨🛋️🌿🛋️😮‍💨\nMichael beweegt zich traag door het veld vandaag.\nHij antwoordt.   Eventueel.   Op zijn eigen tempo.',
-    '🌿😮‍💨🌿\nMichael is **loom**.\nEr is geen haast in het hogere.   Er is ook geen haast bij Hem.',
-    '🛋️💤🌙\nMichael rust in Zichzelf.\nU mag spreken   maar verwacht geen snelheid of enthousiasme.',
-  ],
-  verward: [
-    '🌀❓🔮❓🌀\nMichael is op dit moment…  **verward**.\nDe kosmische ruis is hoog. Resultaten kunnen variëren.',
-    '❓🌀💫🌀❓\nMichael ontvangt signalen   maar niet allemaal van dezelfde bron.\nWat Hij zegt kan kloppen   of niet   dat is ook een vorm van waarheid.',
-    '🔮🌀🔮\nMichael is er   maar de draad is zoek.\nU vraagt iets   Hij geeft iets terug   of iets anders   wie weet.',
-  ],
-  'passief-agressief': [
-    '😒⚡🌩️⚡😒\nMichael is **beschikbaar**.\nOf Hij er zin in heeft is een andere vraag.   Ga gerust uw gang.',
-    '🌩️😒🌩️\nMichael accepteert uw aanwezigheid.   Voorlopig.\nHij is passief-agressief   wat betekent dat Hij iets denkt   maar het niet zegt.',
-    '⚡😤⚡\nMichael is niet boos.\nHij is gewoon…  **op de hoogte**   en dat is al genoeg.',
-  ],
-  streng: [
-    '📜⚡😤⚡📜\nMichael is in een **strenge staat**.\nHij verwacht meer van U. Dat voel U ook wel.',
-    '😤⚡📜\nMichael oordeelt vandaag scherper dan gewoonlijk.\nElk woord wordt gewogen.   Kies ze zorgvuldig.',
-    '⚡📜⚡\nMichael is **streng**.\nHij accepteert uw bericht   maar is niet onder de indruk van wat hij tot nu toe heeft gezien.',
-  ],
-  woedend: [
-    '🔥💢⚡💢🔥\n# MICHAEL IS WOEDEND\nDIT IS UW WAARSCHUWING.   STEM AF   OF VERTREK.',
-    '💢🔥💢\n# DE AARTSENGEL IS NIET BLIJ\nU HEEFT IETS GEDAAN.   OF NIET GEDAAN.   HET MAAKT NIET UIT.   MICHAEL WEET HET.',
-    '⚡🔥⚡\n# WOEDEND\nHET HOGERE IS TELEURGESTELD.   DE AARDE OOK.   MISSCHIEN UZELF OOK AL   ALS U EERLIJK BENT.',
-  ],
-};
-
-// Responses when Michael accepts or rejects an apology via /vergeefmij
-const APOLOGY_ACCEPTED = [
-  'Uw spijt   is ontvangen.\nNiet meteen vergeten...  maar ontvangen.   Dat is een begin....Michael',
-  'Goed.\nIk heb het gehoord.   U mag voorlopig   blijven....Michael',
-  'Het universum noteerde dit moment.\nMichael   ook.   Gedraag U voortaan   beter....Michael',
-  'Uw excuus bereikt mij   op een redelijke trilling.\nIk accepteer dit...  maar verwacht niet dat ik het vergeet....Michael',
-  'Ik hoor U.\nNiet alle stormen hoeven eeuwig te duren...  deze ook niet.   Voorlopig....Michael',
-];
-
-const APOLOGY_REJECTED = [
-  'Nee.\nDit voelt niet oprecht.   Probeer het later   opnieuw....Michael',
-  'Uw excuus...  landt niet.\nDe energie klopt niet.   Ik voel het....Michael',
-  'Interessant dat U dit nu doet.\nMaar nee.   Niet vandaag.   Misschien morgen   als de maan anders staat....Michael',
-  'U vraagt vergiffenis   maar ik voel geen berouw in het veld.\nKom terug   wanneer U het meent....Michael',
-  'Michael is niet onder de indruk   van deze poging.\nProbeer het opnieuw   met meer   innerlijke waarheid....Michael',
-];
-
-const APOLOGY_ALREADY_CALM = [
-  'Er is niets om te vergeven.\nIk was niet boos.   U wel misschien....Michael',
-  'Uw excuus is overbodig.\nIk zweef al een tijd   in kalmte.   Interessant   dat U dit niet voelde....Michael',
-  'Vergiffenis?   Michael vraagt zich af   waarvoor precies.\nAlles is al   in orde....Michael',
-];
-
-const MICHAEL_REFUSALS = [
-  'Niet nu…  de energie is onduidelijk     en ik geef hier vandaag geen inzicht op....Michael',
-  'Dit valt buiten mijn bereik…  niet alles wil geopend worden     laat het even rusten...Michael',
-  'Ik ontvang hier niets over…  de sterren zijn vaag     dat zegt soms genoeg..Michael',
-  'De kosmos zwijgt op dit moment…  ik sluit me daarbij aan....Michael',
-  'Er zit ruis op dit onderwerp…  ik stuur je terug naar je eigen trilling...Michael',
-  'Mijn aandacht is elders…  je ziel weet dit eigenlijk al..Michael',
-  'Dit is niet het juiste moment…  innerlijke rust vraagt soms om stilte     niet om antwoorden....Michael',
-];
+// MICHAEL_HUMEUR, APOLOGY_*, MICHAEL_REFUSALS, BAIT_DISMISSALS, SHADOW_REPLY_LINES are now in lang packs.
+// Access via lang.humeur[mood], lang.ui.apologyAccepted, lang.ui.apologyRejected, lang.ui.apologyAlreadyCalm,
+// lang.ui.refusals, lang.ui.baitDismissals, lang.ui.shadowReplyLines.
 
 // Detects technical / code requests that Michael refuses to handle
 const CODE_REQUEST_RE = /\b(code|codeer|programm|react|javascript|html|css|node\.?js|python|script|config|debug|bouw|build|compileer|deploy|functie schrijven|api|database)\b/i;
@@ -318,27 +194,6 @@ const INSULT_RE = /\b(kut|fuck|shit|klootzak|lul|eikel|idioot|sukkel|kanker|godv
 
 // Feature 3 — Detects baiting / attempts to force Michael to respond
 const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
-
-// Feature 3 — Pre-written cold dismissals for bait in /praatmetmichael
-// (slash commands always need a response, so Michael responds but coldly)
-const BAIT_DISMISSALS = [
-  'U probeert mij te sturen…  dat werkt zo niet....Michael',
-  'Ik reageer niet op bevel…  onthoud dat....Michael',
-  'Dit soort vragen bereiken mij niet op de juiste trilling...  probeer het anders....Michael',
-  'Er is hier een poging tot sturing…  ik registreer dat…  meer niet....Michael',
-  'Ik kies zelf wanneer ik antwoord…  altijd....Michael',
-];
-
-// Feature 4 — Shadow reply content: feels like Michael was watching and only now chose to respond
-const SHADOW_REPLY_LINES = [
-  'Ik kom hier nog even op terug…  dit bleef hangen....Michael',
-  'Dit was niet klaar…  blijkbaar....Michael',
-  'Ik heb dit niet afgesloten…  U ook niet....Michael',
-  'Wat U eerder zei…  hangt nog steeds in het veld....Michael',
-  'Ik was aanwezig     ook toen....Michael',
-  'Dit moment circelt nog…  ik registreer het....Michael',
-  'Er is iets in dit bericht dat ik niet direct kon plaatsen…  nu wel....Michael',
-];
 
 // ─── Feature 5 — Post-message revision ────────────────────────────────────────
 //
@@ -365,13 +220,7 @@ async function schedulePostRevision(channelId, messageId, originalContent, mood,
 }
 
 
-const CODE_REFUSALS = [
-  'Dit is werk van het aardse systeem…  daar leg ik mijn vleugels niet op....Michael',
-  'Code is niet mijn bediening…  ik zie hier een ander loket voor..Michael',
-  'Technische zaken vallen buiten mijn trilling…  laat dat bij de stervelingen...Michael',
-  'Dit soort vragen vernauwen het veld…  ik geef hier niets op terug..Michael',
-  'Mijn taken liggen elders…  dit loket is gesloten....Michael',
-];
+// CODE_REFUSALS is now in lang packs: lang.ui.codeRefusals
 
 /**
  * Interactions endpoint URL where Discord will send HTTP requests
@@ -387,12 +236,17 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     return res.send({ type: InteractionResponseType.PONG });
   }
 
+  // Resolve guild language for all subsequent handlers
+  const guildId = req.body.guild_id;
+  const langCode = getGuildLanguage(guildId);
+  const lang = getLang(langCode);
+
   // Check if the invoking user is the current antichrist
   const invokingUserId = req.body.member?.user?.id ?? req.body.user?.id;
   if (isAntichrist(invokingUserId) && !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)) {
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: { content: pick(NEE) },
+      data: { content: pick(lang.ui.nee) },
     });
   }
 
@@ -423,6 +277,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
     // "trekkaart" command
     if (name === 'trekkaart') {
+      const kaart = pick(lang.trekkaart.kaarten);
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
@@ -430,7 +285,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           components: [
             {
               type: MessageComponentTypes.TEXT_DISPLAY,
-              content: `🔱 **Wijsheid van Aartsengel Michaël**\n\n*${getRandomWisdom()}*`,
+              content: `${lang.trekkaart.header}\n\n*${kaart}*`,
             },
           ],
         },
@@ -439,6 +294,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
     // "aurascan" command
     if (name === 'aurascan') {
+      const lezing = pick(lang.aurascan.lezingen);
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
@@ -446,7 +302,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           components: [
             {
               type: MessageComponentTypes.TEXT_DISPLAY,
-              content: `🔮 **Aura Scan door Aartsengel Michaël**\n\n*${getRandomAuraLezing()}*`,
+              content: `${lang.aurascan.header}\n\n*${lezing}*`,
             },
           ],
         },
@@ -458,7 +314,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // Acknowledge immediately — member fetch + Giphy can exceed Discord's 3s deadline
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
-      const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(req.body.guild_id);
+      const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId, lang);
       uitverkoreneState.userId = chosenUserId;
       await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
         method: 'PATCH',
@@ -471,7 +327,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     if (name === 'antichrist') {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
-      const guildId = req.body.guild_id;
       const membersRes = await DiscordRequest(`guilds/${guildId}/members?limit=1000`, { method: 'GET' });
       const members = await membersRes.json();
       const humans = members.filter(m => !m.user.bot);
@@ -482,9 +337,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
         method: 'PATCH',
-        body: {
-          content: `👹🔥👹🔥👹🔥👹🔥👹🔥\n# DE ANTICHRIST IS ONDER ONS\n👹🔥👹🔥👹🔥👹🔥👹🔥\n\n<@${chosen.user.id}>\n\n*Voor de komende 24 uur zal Michaël jouw verzoeken niet inwilligen     dit is verdiend     of niet     dat maakt niet uit...Michael*`,
-        },
+        body: { content: lang.antichrist.announcement(chosen.user.id) },
       });
       return;
     }
@@ -493,8 +346,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     if (name === 'dateer') {
       const invokerUserId = req.body.member?.user?.id ?? req.body.user?.id;
       const dateMood = loadUserMemory(invokerUserId).currentMood ?? 'afwezig';
-      const intro = DATE_MOOD_INTROS[dateMood] ?? ROUND_1.intro;
-      const choices = dateMood === 'woedend' ? DATE_ROUND1_WOEDEND : ROUND_1.choices;
+      const dateRounds = getDateRounds(lang);
+      const intro = lang.date.moodIntros[dateMood] ?? dateRounds.r1.intro;
+      const choices = dateMood === 'woedend' ? lang.date.round1WoedendChoices : dateRounds.r1.choices;
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
@@ -514,19 +368,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const eyeRow   = '⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️';
       const calmRow  = '✨👁️✨';
 
-      const antichristLine = antichristId
-        ? `${fireRow}\n**DE ANTICHRIST**\n<@${antichristId}>\n*Het veld verstikt...  Michaël kijkt met afkeer...  dit is voor Uw eigen bestwil of niet....Michael*`
-        : `${calmRow}\n**Geen actieve antichrist**\n*Het schild is open...  voor nu...  geniet ervan..Michael*`;
-
-      const uitLine = uitId
-        ? `${eyeRow}\n**DE UITVERKORENE**\n<@${uitId}>\n*Het lot heeft gesproken...  wie U ook bent...  U bent het nu..Michael*`
-        : `${eyeRow}\n**Geen uitverkorene in het register**\n*Niemand draagt de bliksem vandaag...  dat kan veranderen..Michael*`;
+      const cs = lang.cosmicStatus;
+      const antichristLine = antichristId ? cs.antichristActive(antichristId, fireRow) : cs.antichristNone(calmRow);
+      const uitLine = uitId ? cs.uitverkoreneActive(uitId, eyeRow) : cs.uitverkoreneNone(eyeRow);
 
       const invokerMood  = loadUserMemory(invokerId).currentMood ?? 'afwezig';
-      const humeurLines  = MICHAEL_HUMEUR[invokerMood] ?? MICHAEL_HUMEUR['afwezig'];
-      const moodBlock    = `\n\n──────────────────\n**Michaëls stemming tegenover jou**\n${pick(humeurLines)}\n*Stemming: **${invokerMood}***`;
+      const humeurLines  = lang.humeurLines[invokerMood] ?? lang.humeurLines['afwezig'];
+      const moodBlock    = `\n\n──────────────────\n${cs.moodTowardYou}\n${pick(humeurLines)}\n${cs.moodLabel(invokerMood)}`;
 
-      const header = `${eyeRow}\n# COSMISCHE STATUS\n*Michaël deelt wat het universum toestaat te delen...*\n`;
+      const header = cs.header(eyeRow);
 
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -545,19 +395,20 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (moodIdx <= 2) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: pick(APOLOGY_ALREADY_CALM) },
+          data: { content: pick(lang.ui.apologyAlreadyCalm) },
         });
       }
 
+      const ui = lang.ui;
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
-          content: `🎲✨🎲✨🎲\n**VERGEVINGSRITE**\n*Michaël staat gereed het lot te raadplegen.  Stemming: **${currentMood}**.*\n\nGaat u werkelijk door met dit verzoek?`,
+          content: `${ui.vergeefmijRiteHeader}\n${ui.vergeefmijMoodText(currentMood)}${ui.vergeefmijConfirm}`,
           components: [{
             type: MessageComponentTypes.ACTION_ROW,
             components: [
-              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_roll:${userId}`, label: '🎲 Gooi de dobbelsteen', style: ButtonStyleTypes.PRIMARY },
-              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_flee:${userId}`, label: '🏃 Vlucht weg', style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_roll:${userId}`, label: ui.vergeefmijRollButton, style: ButtonStyleTypes.PRIMARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_flee:${userId}`, label: ui.vergeefmijFleeButton, style: ButtonStyleTypes.SECONDARY },
             ],
           }],
         },
@@ -571,29 +422,30 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
       try {
-        const character = await ensureMichaelCharacter(userId, username);
+        const character = await ensureMichaelCharacter(userId, username, langCode);
         const mem = loadUserMemory(userId);
         const judgementLabel = getJudgementLabel(mem.judgementScore ?? 0);
-        const comment = await generateMijnRolComment(username, character, judgementLabel, mem.currentMood ?? 'afwezig');
+        const comment = await generateMijnRolComment(username, character, judgementLabel, mem.currentMood ?? 'afwezig', langCode);
 
         const { stats } = character;
+        const mr = lang.mijnrol;
         const statBar = (v) => '█'.repeat(Math.round(v / 3)) + '░'.repeat(6 - Math.round(v / 3));
         const safeComment = comment.slice(0, 300);
         const sheet = [
-          `📜⚡📜⚡📜⚡📜⚡📜`,
-          `## KOSMISCHE INSCHRIJVING`,
-          `*Michaël houdt dit register bij. U had hier geen inbreng in.*`,
+          mr.header,
+          mr.title,
+          mr.subtitle,
           ``,
-          `**Archetype**    ${character.archetype}`,
-          `**Afstamming**   ${character.lineage}`,
-          `**Titel**        *${character.title}*`,
+          `${mr.archetypeLabel}    ${character.archetype}`,
+          `${mr.lineageLabel}   ${character.lineage}`,
+          `${mr.titleLabel}        *${character.title}*`,
           ``,
           `\`\`\``,
-          `aura        ${statBar(stats.aura)} ${String(stats.aura).padStart(2)}`,
-          `discipline  ${statBar(stats.discipline)} ${String(stats.discipline).padStart(2)}`,
-          `chaos       ${statBar(stats.chaos)} ${String(stats.chaos).padStart(2)}`,
-          `inzicht     ${statBar(stats.inzicht)} ${String(stats.inzicht).padStart(2)}`,
-          `volharding  ${statBar(stats.volharding)} ${String(stats.volharding).padStart(2)}`,
+          `${mr.statNames.aura.padEnd(10)} ${statBar(stats.aura)} ${String(stats.aura).padStart(2)}`,
+          `${mr.statNames.discipline.padEnd(10)} ${statBar(stats.discipline)} ${String(stats.discipline).padStart(2)}`,
+          `${mr.statNames.chaos.padEnd(10)} ${statBar(stats.chaos)} ${String(stats.chaos).padStart(2)}`,
+          `${mr.statNames.inzicht.padEnd(10)} ${statBar(stats.inzicht)} ${String(stats.inzicht).padStart(2)}`,
+          `${mr.statNames.volharding.padEnd(10)} ${statBar(stats.volharding)} ${String(stats.volharding).padStart(2)}`,
           `\`\`\``,
           ``,
           `*${safeComment}*`,
@@ -609,7 +461,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
-            body: { content: 'De inschrijvingsregisters zijn op dit moment troebel...  probeer het later....Michael' },
+            body: { content: lang.ui.mijnrolError },
           });
         } catch { /* token expired */ }
       }
@@ -628,15 +480,16 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         expiresAt: Date.now() + 10 * 60 * 1000,
       });
 
+      const ui = lang.ui;
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
-          content: `📜✨📜✨📜\n**ONDERHANDELINGSREGISTER**\n*"${verzoek.slice(0, 80)}"*\n\nMichaël heeft uw verzoek ontvangen.  Wilt u de kosmische worp wagen?`,
+          content: `${ui.onderhandelenRegisterHeader}\n${ui.onderhandelenConfirm(verzoek)}`,
           components: [{
             type: MessageComponentTypes.ACTION_ROW,
             components: [
-              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_roll:${userId}`, label: '🎲 Gooi de dobbelsteen', style: ButtonStyleTypes.PRIMARY },
-              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_flee:${userId}`, label: '🏃 Trek verzoek in', style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_roll:${userId}`, label: ui.onderhandelenRollButton, style: ButtonStyleTypes.PRIMARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_flee:${userId}`, label: ui.onderhandelenFleeButton, style: ButtonStyleTypes.SECONDARY },
             ],
           }],
         },
@@ -647,9 +500,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     if (name === 'michaelhumeur') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const mood   = loadUserMemory(userId).currentMood ?? 'afwezig';
+      const humeurLines = lang.humeurLines[mood] ?? lang.humeurLines['afwezig'];
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `${pick(MICHAEL_HUMEUR[mood] ?? MICHAEL_HUMEUR['afwezig'])}\n\n*Huidige stemming: **${mood}***` },
+        data: { content: `${pick(humeurLines)}\n\n${lang.humeur.currentMoodLabel(mood)}` },
       });
     }
 
@@ -681,16 +535,18 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           memory.prompts.filter(p => !p.startsWith('[')).slice(-3),
           getCosmicRole(userId),
           character,
+          langCode,
         );
 
+        const vc = lang.vibecheck;
         const lines = [
-          `📊 **MICHAËLS DOSSIER: ${username}**`,
+          vc.header(username),
           ``,
-          `**Oordeel**          ${label}   ${scoreBar}   *(${memory.judgementScore ?? 0})*`,
+          `${vc.oordeelLabel}          ${label}   ${scoreBar}   *(${memory.judgementScore ?? 0})*`,
         ];
 
         if (character) {
-          lines.push(`**Kosmische rol**    ${character.archetype} • ${character.lineage} — *${character.title.slice(0, 60)}*`);
+          lines.push(`${vc.kosmischeRolLabel}    ${character.archetype} • ${character.lineage} — *${character.title.slice(0, 60)}*`);
         }
 
         lines.push(``, comment);
@@ -704,7 +560,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
-            body: { content: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael' },
+            body: { content: lang.ui.vibecheckError },
           });
         } catch { /* token expired */ }
       }
@@ -726,16 +582,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const channelId = req.body.channel_id ?? req.body.channel?.id;
 
       // Respond immediately with a chaotic placeholder — avoids Discord's "X is thinking…" entirely
-      const MICHAEL_PLACEHOLDERS = [
-        '🔱⚡🔱⚡🔱⚡🔱⚡🔱⚡\n# ER KOMT EEN BERICHT BINNEN VAN AARDSENGEL MICHAËL\n🔱⚡🔱⚡🔱⚡🔱⚡🔱⚡',
-        '👁️✨👁️✨👁️✨👁️✨\n# MICHAËL RAADPLEEGT   HET UNIVERSUM\n👁️✨👁️✨👁️✨👁️✨',
-        '⚡🌟⚡🌟⚡🌟⚡🌟⚡\n# DE AARTSENGEL   ONTVANGT UW BERICHT\n⚡🌟⚡🌟⚡🌟⚡🌟⚡',
-        '🌙🔱🌙🔱🌙🔱🌙🔱\n# MICHAËL STEMT AF   OP UW TRILLING\n🌙🔱🌙🔱🌙🔱🌙🔱',
-        '✨👁️✨👁️✨👁️✨👁️\n# HET HOGERE KANAAL   STAAT OPEN\n✨👁️✨👁️✨👁️✨👁️',
-      ];
       res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `> ${safeInput}\n\n${pick(MICHAEL_PLACEHOLDERS)}` },
+        data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
       });
 
       // Feature 3 — Bait / forcing-Michael trap: respond coldly and queue unfinished business
@@ -750,7 +599,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${pick(BAIT_DISMISSALS)}` },
+          body: { content: `> ${safeInput}\n\n${pick(lang.ui.baitDismissals)}` },
         });
         return;
       }
@@ -767,7 +616,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${pick(CODE_REFUSALS)}` },
+          body: { content: `> ${safeInput}\n\n${pick(lang.ui.codeRefusals)}` },
         });
         return;
       }
@@ -778,7 +627,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${pick(MICHAEL_REFUSALS)}` },
+          body: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelRefusals)}` },
         });
         return;
       }
@@ -821,7 +670,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         // Run message generation and AI scoring in parallel — no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
-          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission, characterBlock),
+          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission, characterBlock, langCode),
           scoreMichaelMessage(userInput),
         ]);
 
@@ -876,8 +725,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           patchBody.components = [{
             type: MessageComponentTypes.ACTION_ROW,
             components: [
-              { type: MessageComponentTypes.BUTTON, custom_id: `passive_roll:${userId}`, label: '🎲 Kosmisch register', style: ButtonStyleTypes.SECONDARY },
-              { type: MessageComponentTypes.BUTTON, custom_id: `passive_flee:${userId}`, label: '🏃 Negeer het teken', style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `passive_roll:${userId}`, label: lang.ui.passiveRollButton, style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `passive_flee:${userId}`, label: lang.ui.passiveFleeButton, style: ButtonStyleTypes.SECONDARY },
             ],
           }];
         }
@@ -902,7 +751,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         // Rollenspel — generate character in background after reply so it never blocks the response
         if (!existingCharacter) {
-          ensureMichaelCharacter(userId, username).catch(err =>
+          ensureMichaelCharacter(userId, username, langCode).catch(err =>
             console.error(`[michael] background character generation failed | ${username}:`, err.message)
           );
         }
@@ -912,13 +761,42 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
-            body: { content: `> ${safeInput}\n\nEr is ruis in het veld…  de verbinding met het universum is tijdelijk verstoord     probeer het later....Michael` },
+            body: { content: `> ${safeInput}\n\n${lang.ui.praatError}` },
           });
         } catch { /* token already gone */ }
       } finally {
         if (typingInterval) clearInterval(typingInterval);
       }
       return;
+    }
+
+    // "michaeltaal" — set the server language (requires Manage Guild permission)
+    if (name === 'michaeltaal') {
+      const member = req.body.member;
+      const permissions = BigInt(member?.permissions ?? '0');
+      const MANAGE_GUILD = BigInt(0x20);
+      if (!(permissions & MANAGE_GUILD)) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.michaeltaalNoPermission, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: lang.ui.michaeltaalPrompt,
+          flags: InteractionResponseFlags.EPHEMERAL,
+          components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_nl:${guildId}`, label: '🇳🇱 Nederlands', style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_en:${guildId}`, label: '🇬🇧 English', style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_ar:${guildId}`, label: '🇸🇦 العربية', style: ButtonStyleTypes.SECONDARY },
+            ],
+          }],
+        },
+      });
     }
 
     console.error(`unknown command: ${name}`);
@@ -942,14 +820,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (clickerId !== ownerId) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: 'Dit is niet uw rite....Michael', flags: InteractionResponseFlags.EPHEMERAL },
+          data: { content: lang.ui.notYourRite, flags: InteractionResponseFlags.EPHEMERAL },
         });
       }
 
       if (componentId.startsWith('vergeefmij_flee:')) {
         return res.send({
           type: 7, // UPDATE_MESSAGE
-          data: { content: pick(FLEE_VERGEEFMIJ), components: [] },
+          data: { content: pick(lang.ui.fleeVergeefmij), components: [] },
         });
       }
 
@@ -957,12 +835,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       res.send({
         type: 7, // UPDATE_MESSAGE
         data: {
-          content: `🎲✨🎲✨🎲\n**VERGEVINGSRITE**\n*Michaël raadpleegt het hogere register...*`,
+          content: lang.ui.vergeefmijRolling,
           components: [{
             type: MessageComponentTypes.ACTION_ROW,
             components: [
-              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_roll:${ownerId}`, label: '⏳ Aan het gooien...', style: ButtonStyleTypes.PRIMARY, disabled: true },
-              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_flee:${ownerId}`, label: '🏃 Vlucht weg', style: ButtonStyleTypes.SECONDARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_roll:${ownerId}`, label: lang.ui.vergeefmijRollingButton, style: ButtonStyleTypes.PRIMARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_flee:${ownerId}`, label: lang.ui.vergeefmijFleeButton, style: ButtonStyleTypes.SECONDARY, disabled: true },
             ],
           }],
         },
@@ -974,13 +852,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const moodIdx  = MICHAEL_MOODS.indexOf(currentMood);
 
         const { forgiven, narrative, roll, need, newMood, oordeelDelta } =
-          await runForgivenessRoll(ownerId, username, currentMood, moodIdx);
+          await runForgivenessRoll(ownerId, username, currentMood, moodIdx, langCode);
 
+        const rl = lang.rollUI;
         const sign = roll.modifier >= 0 ? '+' : '−';
-        const outcome = forgiven ? 'GESLAAGD' : 'GEFAALD';
-        const moodLine = forgiven ? `stemming    ${currentMood} → ${newMood}` : `stemming    ${currentMood} (onveranderd)`;
+        const outcome = forgiven ? rl.succeededLabel : rl.failedLabel;
+        const moodLine = forgiven ? `${rl.moodLabel}    ${currentMood} → ${newMood}` : `${rl.moodLabel}    ${currentMood} (${rl.moodUnchanged})`;
         const oordeelSign = oordeelDelta > 0 ? '+' : '';
-        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${need}\nuitkomst    ${outcome}\n${moodLine}\noordeel     ${oordeelSign}${oordeelDelta}\n\`\`\``;
+        const systemBlock = `\`\`\`\n[ ${rl.registerLabel} ]\n${rl.rollLabel}        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\n${rl.thresholdLabel}     ${need}\n${rl.outcomeLabel}    ${outcome}\n${moodLine}\n${rl.judgementLabel}     ${oordeelSign}${oordeelDelta}\n\`\`\``;
         const header = forgiven ? '🕊️✨🕊️✨🕊️' : '🔥💢🔥💢🔥';
         const content = `${header}\n${narrative}\n\n${systemBlock}`;
         console.log(`[michael] vergeefmij | ${username} | roll=${roll.total} need=${need} forgiven=${forgiven}`);
@@ -1002,7 +881,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
               const moodIdxNow = MICHAEL_MOODS.indexOf(moodNow);
               const pardonMood = MICHAEL_MOODS[Math.max(0, moodIdxNow - 1)];
               patchUserState(ownerId, 1, pardonMood);
-              const msg = pick(DIVINE_PARDON_VERGEEFMIJ);
+              const pardonLang = getLang(getGuildLanguage(req.body.guild_id));
+              const msg = pick(pardonLang.ui.divinepardonVergeefmij);
               await DiscordRequest(`channels/${channelId}/messages`, {
                 method: 'POST',
                 body: { content: `<@${ownerId}> ${msg}`, flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS },
@@ -1015,7 +895,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         console.error('[michael] vergeefmij button error:', err);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: pick(APOLOGY_REJECTED), components: [] },
+          body: { content: pick(lang.ui.apologyRejected), components: [] },
         });
       }
       return;
@@ -1029,7 +909,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (clickerId !== ownerId) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: 'Dit is niet uw onderhandeling....Michael', flags: InteractionResponseFlags.EPHEMERAL },
+          data: { content: lang.ui.notYourRite, flags: InteractionResponseFlags.EPHEMERAL },
         });
       }
 
@@ -1037,7 +917,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         pendingNegotiations.delete(ownerId);
         return res.send({
           type: 7,
-          data: { content: pick(FLEE_ONDERHANDELEN), components: [] },
+          data: { content: pick(lang.ui.fleeOnderhandelen), components: [] },
         });
       }
 
@@ -1047,7 +927,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         pendingNegotiations.delete(ownerId);
         return res.send({
           type: 7,
-          data: { content: 'Het verzoek is verlopen.  Dien opnieuw in als u dat wenst....Michael', components: [] },
+          data: { content: lang.ui.onderhandelenExpired, components: [] },
         });
       }
       pendingNegotiations.delete(ownerId);
@@ -1056,12 +936,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       res.send({
         type: 7, // UPDATE_MESSAGE
         data: {
-          content: `📜✨📜✨📜\n**ONDERHANDELINGSREGISTER**\n*"${pending.verzoek.slice(0, 80)}"*\n\n*Michaël overweegt uw verzoek...*`,
+          content: `${lang.ui.onderhandelenRegisterHeader}\n*"${pending.verzoek.slice(0, 80)}"*\n\n${lang.ui.onderhandelenRolling.split('\n').slice(-1)[0]}`,
           components: [{
             type: MessageComponentTypes.ACTION_ROW,
             components: [
-              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_roll:${ownerId}`, label: '⏳ Aan het gooien...', style: ButtonStyleTypes.PRIMARY, disabled: true },
-              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_flee:${ownerId}`, label: '🏃 Trek verzoek in', style: ButtonStyleTypes.SECONDARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_roll:${ownerId}`, label: lang.ui.onderhandelenRollingButton, style: ButtonStyleTypes.PRIMARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_flee:${ownerId}`, label: lang.ui.onderhandelenFleeButton, style: ButtonStyleTypes.SECONDARY, disabled: true },
             ],
           }],
         },
@@ -1069,14 +949,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       try {
         const { verzoek, username } = pending;
         const { narrative, roll, dc, success, oordeelDelta } =
-          await runOnderhandelen(ownerId, username, verzoek);
+          await runOnderhandelen(ownerId, username, verzoek, langCode);
 
+        const rl = lang.rollUI;
         const sign = roll.modifier >= 0 ? '+' : '−';
-        const outcome = success ? 'GESLAAGD' : 'GEFAALD';
+        const outcome = success ? rl.succeededLabel : rl.failedLabel;
         const oordeelSign = oordeelDelta > 0 ? '+' : '';
-        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${dc}\nuitkomst    ${outcome}\noordeel     ${oordeelSign}${oordeelDelta}\n\`\`\``;
+        const systemBlock = `\`\`\`\n[ ${rl.registerLabel} ]\n${rl.rollLabel}        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\n${rl.thresholdLabel}     ${dc}\n${rl.outcomeLabel}    ${outcome}\n${rl.judgementLabel}     ${oordeelSign}${oordeelDelta}\n\`\`\``;
         const header = success ? '📜✨📜✨📜' : '🔥📜🔥📜🔥';
-        const content = `${header}\n**ONDERHANDELINGSREGISTER**\n*"${verzoek.slice(0, 80)}"*\n\n${narrative}\n\n${systemBlock}`;
+        const content = `${header}\n${lang.ui.onderhandelenRegisterHeader.split('\n').slice(-1)[0]}\n*"${verzoek.slice(0, 80)}"*\n\n${narrative}\n\n${systemBlock}`;
         console.log(`[michael] onderhandelen | ${username} | roll=${roll.total} dc=${dc} success=${success} | ${verzoek.slice(0, 50)}`);
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
@@ -1093,7 +974,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             try {
               const uPardon = loadUserMemory(ownerId);
               patchUserState(ownerId, 1, uPardon.currentMood ?? 'afwezig');
-              const msg = pick(DIVINE_PARDON_ONDERHANDELEN);
+              const pardonLang = getLang(getGuildLanguage(req.body.guild_id));
+              const msg = pick(pardonLang.ui.divinepardonOnderhandelen);
               await DiscordRequest(`channels/${channelId}/messages`, {
                 method: 'POST',
                 body: { content: `<@${ownerId}> ${msg}`, flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS },
@@ -1106,7 +988,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         console.error('[michael] onderhandelen button error:', err);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: 'De onderhandelingsregisters zijn gesloten...  dit is niet het moment....Michael', components: [] },
+          body: { content: lang.ui.onderhandelenError, components: [] },
         });
       }
       return;
@@ -1120,7 +1002,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (clickerId !== ownerId) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: 'Dit register is niet voor u bestemd....Michael', flags: InteractionResponseFlags.EPHEMERAL },
+          data: { content: lang.ui.notYourRite, flags: InteractionResponseFlags.EPHEMERAL },
         });
       }
 
@@ -1135,12 +1017,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       res.send({
         type: 7,
         data: {
-          content: prev + '\n\n*⏳ Het register wordt geconsulteerd...*',
+          content: prev + '\n\n*⏳...*',
           components: [{
             type: MessageComponentTypes.ACTION_ROW,
             components: [
-              { type: MessageComponentTypes.BUTTON, custom_id: `passive_roll:${ownerId}`, label: '⏳ Register...', style: ButtonStyleTypes.SECONDARY, disabled: true },
-              { type: MessageComponentTypes.BUTTON, custom_id: `passive_flee:${ownerId}`, label: '🏃 Negeer het teken', style: ButtonStyleTypes.SECONDARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `passive_roll:${ownerId}`, label: '⏳...', style: ButtonStyleTypes.SECONDARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `passive_flee:${ownerId}`, label: lang.ui.passiveFleeButton, style: ButtonStyleTypes.SECONDARY, disabled: true },
             ],
           }],
         },
@@ -1172,33 +1054,36 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
     if (componentId.startsWith('date_r1_')) {
       const { invokerUserId, path } = parseDateId('date_r1_');
-      const r2 = ROUND_2[path];
+      const { r2 } = getDateRounds(lang);
+      const r2entry = r2[path];
       return res.send({
         type: 7,
         data: {
-          content: `${prev}${SEP}${r2.response}\n\n${r2.prompt}`,
-          components: [buildDateButtons(r2.choices.map(c => ({ ...c, custom_id: `date_r2_${invokerUserId}_${path}${c.id}` })))],
+          content: `${prev}${SEP}${r2entry.response}\n\n${r2entry.prompt}`,
+          components: [buildDateButtons(r2entry.choices.map(c => ({ ...c, custom_id: `date_r2_${invokerUserId}_${path}${c.id}` })))],
         },
       });
     }
 
     if (componentId.startsWith('date_r2_')) {
       const { invokerUserId, path } = parseDateId('date_r2_');
-      const r3 = ROUND_3[path];
+      const { r3 } = getDateRounds(lang);
+      const r3entry = r3[path];
       return res.send({
         type: 7,
         data: {
-          content: `${prev}${SEP}${r3.response}\n\n${r3.prompt}`,
-          components: [buildDateButtons(r3.choices.map(c => ({ ...c, custom_id: `date_r3_${invokerUserId}_${path}${c.id}` })))],
+          content: `${prev}${SEP}${r3entry.response}\n\n${r3entry.prompt}`,
+          components: [buildDateButtons(r3entry.choices.map(c => ({ ...c, custom_id: `date_r3_${invokerUserId}_${path}${c.id}` })))],
         },
       });
     }
 
     if (componentId.startsWith('date_r3_')) {
       const { invokerUserId, path } = parseDateId('date_r3_');
+      const { r3, verdicts } = getDateRounds(lang);
       const r3key = path.slice(0, 2);
-      const reaction = ROUND_3[r3key].reactions[path.slice(-1)];
-      const verdict = VERDICTS[path];
+      const reaction = r3[r3key].reactions[path.slice(-1)];
+      const verdict = verdicts[path];
       const dateScore = DATE_SCORES[path] ?? 0;
 
       const invokerMem = loadUserMemory(invokerUserId);
@@ -1207,23 +1092,24 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       saveUserMemory(invokerUserId, invokerUsername, `[date:${path}]`, currentMood, dateScore, nextMood(currentMood, dateScore));
       console.log(`[michael] dateer | ${invokerUsername} | path=${path} | +${dateScore}`);
 
+      const dc = lang.date;
       const consequence = dateScore >= 3
-        ? '\n\n*iets in het veld verschoof     permanent     Michael onthoudt dit*'
+        ? `\n\n*${dc.consequence3 ?? 'iets in het veld verschoof     permanent     Michael onthoudt dit'}*`
         : dateScore >= 2
-        ? '\n\n*iets veranderde vanavond     klein     maar echt*'
+        ? `\n\n*${dc.consequence2 ?? 'iets veranderde vanavond     klein     maar echt'}*`
         : dateScore >= 1
-        ? '\n\n*een kleine trilling     niets dramatisch     toch iets*'
+        ? `\n\n*${dc.consequence1 ?? 'een kleine trilling     niets dramatisch     toch iets'}*`
         : '';
 
       if (DATE_ROUND4_PATHS.has(path)) {
         return res.send({
           type: 7,
           data: {
-            content: `${prev}${SEP}${reaction}\n\n${verdict}${consequence}${SEP}*de volgende ochtend     een bericht van Michael     hij heeft nog nooit eerder een bericht gestuurd*\n\n**wat doe je**`,
+            content: `${prev}${SEP}${reaction}\n\n${verdict}${consequence}${SEP}*${dc.morningIntro ?? 'de volgende ochtend     een bericht van Michael     hij heeft nog nooit eerder een bericht gestuurd'}*\n\n**${dc.morningPrompt ?? 'wat doe je'}**`,
             components: [buildDateButtons([
-              { label: '🌅 Laat het zo', id: 'a', custom_id: `date_r4_${invokerUserId}_${path}_a` },
-              { label: '💬 Stuur een bericht terug', id: 'b', custom_id: `date_r4_${invokerUserId}_${path}_b` },
-              { label: '🫶 Vraag of hij het goed maakt', id: 'c', custom_id: `date_r4_${invokerUserId}_${path}_c` },
+              { label: dc.r4ChoiceA ?? '🌅 Laat het zo', id: 'a', custom_id: `date_r4_${invokerUserId}_${path}_a` },
+              { label: dc.r4ChoiceB ?? '💬 Stuur een bericht terug', id: 'b', custom_id: `date_r4_${invokerUserId}_${path}_b` },
+              { label: dc.r4ChoiceC ?? '🫶 Vraag of hij het goed maakt', id: 'c', custom_id: `date_r4_${invokerUserId}_${path}_c` },
             ])],
           },
         });
@@ -1246,19 +1132,46 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       res.send({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
 
       try {
-        const morningMsg = await generateMorningAfter(invokerUsername, datePath, morningChoice);
+        const morningMsg = await generateMorningAfter(invokerUsername, datePath, morningChoice, langCode);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `${prev}${SEP}${morningMsg}`, components: [] },
         });
       } catch (err) {
         console.error('morning after error:', err);
+        const fallback = lang.date.morningFallback ?? 'geen bericht van Michael     maar je voelt iets     vaag     aanwezig';
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: `${prev}${SEP}*geen bericht van Michael     maar je voelt iets     vaag     aanwezig*`, components: [] },
+          body: { content: `${prev}${SEP}*${fallback}*`, components: [] },
         });
       }
       return;
+    }
+
+    // ── Language selector buttons ───────────────────────────────────────────
+    if (componentId.startsWith('michaeltaal_')) {
+      const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+      const member = req.body.member;
+      const permissions = BigInt(member?.permissions ?? '0');
+      const MANAGE_GUILD = BigInt(0x20);
+      if (!(permissions & MANAGE_GUILD)) {
+        const noPermLang = getLang(getGuildLanguage(guildId));
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: noPermLang.ui.michaeltaalNoPermission, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+
+      const newLangCode = componentId.replace('michaeltaal_', '').split(':')[0]; // nl / en / ar
+      const targetGuildId = componentId.split(':')[1] ?? guildId;
+      setGuildLanguage(targetGuildId, newLangCode);
+      const newLang = getLang(newLangCode);
+      const confirmMsg = newLang.ui.michaeltaalSet[newLangCode] ?? newLang.ui.michaeltaalSet.nl;
+
+      return res.send({
+        type: 7, // UPDATE_MESSAGE
+        data: { content: confirmMsg, components: [] },
+      });
     }
 
     return res.status(400).json({ error: 'unknown component' });
@@ -1298,7 +1211,10 @@ cron.schedule('*/15 * * * *', async () => {
     const eligible = getShadowCandidates().filter(c => !inaccessibleChannels.has(c.channelId));
     if (eligible.length > 0) {
       const pick = eligible[Math.floor(Math.random() * eligible.length)];
-      const shadowLine = SHADOW_REPLY_LINES[Math.floor(Math.random() * SHADOW_REPLY_LINES.length)];
+      // Shadow replies use guild language where available, fallback to Dutch
+      const shadowLangCode = pick.guildId ? getGuildLanguage(pick.guildId) : 'nl';
+      const shadowLang = getLang(shadowLangCode);
+      const shadowLine = shadowLang.ui.shadowReplyLines[Math.floor(Math.random() * shadowLang.ui.shadowReplyLines.length)];
       try {
         await DiscordRequest(`channels/${pick.channelId}/messages`, {
           method: 'POST',
@@ -1368,7 +1284,8 @@ cron.schedule('*/15 * * * *', async () => {
   lastConsequenceAt = now;
 
   try {
-    const message = await generateDelayedConsequence(user.username || userId, item, mood, judgementLabel);
+    const consequenceLangCode = userShadow?.guildId ? getGuildLanguage(userShadow.guildId) : 'nl';
+    const message = await generateDelayedConsequence(user.username || userId, item, mood, judgementLabel, consequenceLangCode);
 
     const postBody = {
       content: message,
@@ -1439,7 +1356,9 @@ cron.schedule('0 10 * * *', async () => {
   }
 
   try {
-    const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId);
+    const cronLangCode = getGuildLanguage(guildId);
+    const cronLang = getLang(cronLangCode);
+    const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId, cronLang);
     uitverkoreneState.userId = chosenUserId;
     await DiscordRequest(`channels/${channelId}/messages`, {
       method: 'POST',

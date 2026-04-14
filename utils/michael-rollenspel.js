@@ -40,7 +40,7 @@ function pick(arr) {
 }
 
 /** Create and persist a character sheet if missing. */
-export async function ensureMichaelCharacter(userId, username) {
+export async function ensureMichaelCharacter(userId, username, langCode = 'nl') {
   const mem = loadUserMemory(userId);
   if (mem.michaelCharacter) return mem.michaelCharacter;
 
@@ -51,6 +51,7 @@ export async function ensureMichaelCharacter(userId, username) {
     judgementLabel,
     mem.impression ?? null,
     mem.currentMood ?? 'afwezig',
+    langCode,
   );
   const normalized = normalizeMichaelCharacter(sheet);
   saveMichaelCharacter(userId, username, normalized);
@@ -131,8 +132,8 @@ function applyNegotiationFailure(userId, character) {
 /**
  * Run onderhandelen: roll, apply mechanical outcome, return data for narrative + Discord.
  */
-export async function runOnderhandelen(userId, username, verzoek) {
-  await ensureMichaelCharacter(userId, username);
+export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl') {
+  await ensureMichaelCharacter(userId, username, langCode);
   const user = loadUserMemory(userId);
   const mood = user.currentMood ?? 'afwezig';
   const roll = computeMichaelRoll(user, mood, { context: 'negotiation' });
@@ -171,14 +172,15 @@ export async function runOnderhandelen(userId, username, verzoek) {
     characterBefore,
     characterAfter: userAfter.michaelCharacter,
     judgementScore: userAfter.judgementScore,
+    langCode,
   });
 
   return { narrative, roll, dc, success, mechanical, oordeelDelta };
 }
 
 /** Build /vergeefmij response after roll. */
-export async function runForgivenessRoll(userId, username, currentMood, moodIdx) {
-  await ensureMichaelCharacter(userId, username);
+export async function runForgivenessRoll(userId, username, currentMood, moodIdx, langCode = 'nl') {
+  await ensureMichaelCharacter(userId, username, langCode);
   let user = loadUserMemory(userId);
   const roll = computeMichaelRoll(user, currentMood, { context: 'forgiveness' });
   const need = forgivenessThreshold(currentMood);
@@ -201,6 +203,7 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx)
       currentMood,
       newMood,
       judgementScore: user.judgementScore,
+      langCode,
     });
   } else {
     // Poor roll gets a small oordeel penalty; other failures just mean no forgiveness
@@ -216,6 +219,7 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx)
       currentMood,
       newMood: currentMood,
       judgementScore: user.judgementScore,
+      langCode,
     });
   }
 
