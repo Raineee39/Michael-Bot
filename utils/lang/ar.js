@@ -344,20 +344,20 @@ export default {
     onderhandelenRollingButton: '⏳ جارٍ الرمي...',
 
     negotiateWizard: {
-      intro: "**دِيوَان المُفَاوَضَة**\n*اجثُ أمام السجل: توسَّلْ، ثمَّ اختر سطراً واحداً من تسجيلك لمنازعته.*",
+      intro: "**\u062f\u0650\u064a\u0648\u064e\u0627\u0646 \u0627\u0644\u0645\u064f\u0641\u064e\u0627\u0648\u064e\u0636\u064e\u0629**\n*\u0623\u064a\u064f\u0651 \u062c\u0632\u0621 \u0645\u0646 \u062a\u0633\u062c\u064a\u0644\u0643 \u062a\u0631\u064a\u062f \u0645\u0646\u0627\u0632\u0639\u062a\u0647\u061f \u0627\u062e\u062a\u0631 \u062d\u0642\u0644\u064b\u0627 \u0648\u0627\u062d\u062f\u064b\u0627.*",
       selectPlaceholder: 'النمط، السلالة، أو اللقب…',
       kindArchetype: { label: 'النمط', description: 'الدور الكوني / الصنف' },
       kindLineage: { label: 'السلالة', description: 'الجنس أو النسب (مثل تيفلينج)' },
       kindTitle: { label: 'اللقب', description: 'الكنية أو اللقب الشعري' },
       modalTitle: {
-        archetype: 'توسُّلك — النمط',
-        lineage: 'توسُّلك — السلالة',
-        title: 'توسُّلك — اللقب',
+        archetype: 'فاوض على النمط',
+        lineage: 'فاوض على السلالة',
+        title: 'فاوض على اللقب',
       },
-      modalLabel: '\u0645\u0627 \u062a\u0648\u0633\u064f\u0644\u0643\u060c \u064a\u0627 \u0628\u0646\u064a \u0627\u0644\u0641\u0627\u0646\u064a\u061f',
-      modalPlaceholder: '\u0627\u0628\u0643\u064f\u060c \u0631\u0627\u0648\u0636\u060c \u0627\u0636\u062c\u0631 \u2014 \u0645\u0627 \u062a\u0631\u064a\u062f \u0623\u0646 \u064a\u0642\u0648\u0644\u0647 \u0627\u0644\u062f\u064a\u0648\u0627\u0646\u2026',
+      modalLabel: '\u0628\u0645\u0627\u0630\u0627 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0635\u0628\u062d\u061f',
+      modalPlaceholder: 'مثال: تيفلينج، فارس القمر',
       fieldLabel: { archetype: 'النمط', lineage: 'السلالة', title: 'اللقب' },
-      confirmFooter: '\u0633\u0645\u0639 \u0627\u0645\u0631\u0624 \u0627\u0644\u0642\u064a\u0633 \u062a\u0648\u0633\u064f\u0644\u0643.  \u0647\u0644 \u062a\u062c\u0631\u0651\u0628 \u0627\u0644\u0631\u0645\u064a\u0629\u061f',
+      confirmFooter: '\u062a\u0644\u0642\u064e\u0651\u0649 \u0627\u0645\u0631\u0624 \u0627\u0644\u0642\u064a\u0633 \u0637\u0644\u0628\u0643.  \u0647\u0644 \u062a\u0631\u064a\u062f \u0627\u0644\u0645\u062c\u0627\u0632\u0641\u0629 \u0628\u0627\u0644\u0631\u0645\u064a\u0629 \u0627\u0644\u0634\u0639\u0631\u064a\u0629\u061f',
       confirm: (kind, text) => {
         const L = { archetype: 'النمط', lineage: 'السلالة', title: 'اللقب' }[kind] ?? kind;
         return `**${L}** → *"${String(text).slice(0, 200)}"*\n\n`;

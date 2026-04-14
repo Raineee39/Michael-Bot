@@ -196,12 +196,15 @@ const MIJNROL_COMMAND = {
 
 const ONDERHANDELEN_COMMAND = {
   name: 'onderhandelen',
-  description: 'Doorloop een korte wizard en onderhandel met Michaël over archetype, afstamming of titel.',
+  description:
+    'Smek en buig vóór het register — kies archetype, afstamming of titel, spreek uw wens, waag de worp.',
   name_localizations: { 'en-US': 'negotiate', 'en-GB': 'negotiate', ar: 'تفاوض' },
   description_localizations: {
-    'en-US': 'A short wizard: pick archetype, lineage, or title, then say what you want — then roll with Michael.',
-    'en-GB': 'A short wizard: pick archetype, lineage, or title, then say what you want — then roll with Michael.',
-    ar: 'معالج قصير: اختر النمط أو السلالة أو اللقب، ثم اكتب ما تريد — ثم ارمِ مع ميخائيل.',
+    'en-US':
+      'Plead and grovel before the register — pick archetype, lineage, or title, then your wish, then roll.',
+    'en-GB':
+      'Plead and grovel before the register — pick archetype, lineage, or title, then your wish, then roll.',
+    ar: 'توسَّل واستذل قبل أن يُفتَح باب التفاوض — اختر النمط أو السلالة أو اللقب، ثم قول مرادك وارمِ.',
   },
   type: 1,
   integration_types: [0, 1],
