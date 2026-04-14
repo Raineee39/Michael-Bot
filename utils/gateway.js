@@ -80,7 +80,9 @@ export function startGateway() {
     ws.on('open', () => console.log('Gateway: connected.'));
 
     ws.on('message', async (raw) => {
-      const payload = JSON.parse(raw);
+      try {
+      let payload;
+      try { payload = JSON.parse(raw); } catch { return; }
       const { op, d, s, t } = payload;
 
       if (s !== null) lastSeq = s;
@@ -181,6 +183,9 @@ export function startGateway() {
         } catch (err) {
           console.error('[michael] gateway reply failed:', err.message);
         }
+      }
+      } catch (err) {
+        console.error('[michael] gateway message handler error:', err.message);
       }
     });
 

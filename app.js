@@ -1524,6 +1524,16 @@ app.post(
   },
 );
 
+// ── Global crash guards ────────────────────────────────────────────────────────
+// Prevent PM2 restarts from uncaught async errors — log and stay up instead.
+process.on('uncaughtException', (err) => {
+  console.error('[michael] uncaughtException — staying alive:', err.message, err.stack);
+});
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  console.error('[michael] unhandledRejection — staying alive:', msg);
+});
+
 app.listen(PORT, () => {
   console.log('Listening on port', PORT);
   startGateway();
