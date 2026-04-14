@@ -1122,7 +1122,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           const rv = (v) => typeof v === 'object' ? resolveField(v, langCode) : (v ?? '');
           if (mechanical.kind === 'stat') {
             const label = sn[mechanical.field] ?? mechanical.field;
-            return `${label} +1`;
+            const d = mechanical.delta ?? 1;
+            return `${label} ${d > 0 ? '+' : ''}${d}`;
           }
           if (mechanical.kind === 'title_worse') return rv(mechanical.newValue).slice(0, 80) || null;
           if (mechanical.kind === 'title')       return rv(mechanical.newValue).slice(0, 80) || null;

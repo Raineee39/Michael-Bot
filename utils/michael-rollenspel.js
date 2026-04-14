@@ -289,19 +289,74 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
   return { kind: 'lineage', field: 'lineage', newValue: newLineage };
 }
 
-function applyNegotiationFailure(userId, character, langCode = 'nl') {
-  const titleObj = getTitleObj(character);
-  const newTitle = {};
-  for (const lang of ['nl', 'en', 'ar']) {
-    const worseFragments = WORSE_FRAGMENTS[lang];
-    const base = titleObj[lang];
-    // Pick a worse fragment not already in this language's title
-    const available = worseFragments.filter(f => !base.includes(f));
-    const frag = pick(available.length ? available : worseFragments);
-    newTitle[lang] = `${base}${frag}`.trim().slice(0, 120);
+/**
+ * Failed negotiation: Michael picks one random aspect to worsen (not necessarily the field they challenged).
+ */
+async function applyNegotiationFailure(userId, character, langCode = 'nl', verzoek = '', wishedKind = null) {
+  const branch = pick(['title_worse', 'stat', 'archetype', 'lineage', 'title']);
+
+  if (branch === 'stat') {
+    const k = pick(STAT_KEYS);
+    const v = Math.max(3, (character.stats[k] ?? 10) - 1);
+    patchMichaelCharacter(userId, { stats: { [k]: v } });
+    return { kind: 'stat', field: k, delta: -1 };
   }
-  patchMichaelCharacter(userId, { title: newTitle });
-  return { kind: 'title_worse', newValue: newTitle };
+
+  if (branch === 'title_worse') {
+    const titleObj = getTitleObj(character);
+    const newTitle = {};
+    for (const lang of ['nl', 'en', 'ar']) {
+      const worseFragments = WORSE_FRAGMENTS[lang];
+      const base = titleObj[lang];
+      const available = worseFragments.filter(f => !base.includes(f));
+      const frag = pick(available.length ? available : worseFragments);
+      newTitle[lang] = `${base}${frag}`.trim().slice(0, 120);
+    }
+    patchMichaelCharacter(userId, { title: newTitle });
+    return { kind: 'title_worse', newValue: newTitle };
+  }
+
+  const { generateCharacterFieldPunishment } = await import('./openai.js');
+
+  if (branch === 'title') {
+    const raw = getTitleObj(character);
+    const cleaned = {
+      title: {
+        nl: stripWorseFragments(raw.nl),
+        en: stripWorseFragments(raw.en),
+        ar: stripWorseFragments(raw.ar),
+      },
+      stats: character.stats,
+    };
+    const newTitle = await generateCharacterFieldPunishment('title', {
+      verzoek,
+      characterBefore: cleaned,
+      langCode,
+      wishedField: wishedKind,
+    });
+    patchMichaelCharacter(userId, { title: newTitle });
+    return { kind: 'title', field: 'title', newValue: newTitle };
+  }
+
+  if (branch === 'archetype') {
+    const newArchetype = await generateCharacterFieldPunishment('archetype', {
+      verzoek,
+      characterBefore: character,
+      langCode,
+      wishedField: wishedKind,
+    });
+    patchMichaelCharacter(userId, { archetype: newArchetype });
+    return { kind: 'archetype', field: 'archetype', newValue: newArchetype };
+  }
+
+  const newLineage = await generateCharacterFieldPunishment('lineage', {
+    verzoek,
+    characterBefore: character,
+    langCode,
+    wishedField: wishedKind,
+  });
+  patchMichaelCharacter(userId, { lineage: newLineage });
+  return { kind: 'lineage', field: 'lineage', newValue: newLineage };
 }
 
 /**
@@ -324,16 +379,9 @@ export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl
     oordeelDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 2 : 1;
     patchUserState(userId, oordeelDelta, mood);
   } else {
-    mechanical = applyNegotiationFailure(userId, characterBefore, langCode);
+    mechanical = await applyNegotiationFailure(userId, characterBefore, langCode, verzoek, negotiationKind);
     oordeelDelta = -1;
     patchUserState(userId, oordeelDelta, mood);
-    if (Math.random() < 0.35) {
-      const u2 = loadUserMemory(userId);
-      const k = pick(STAT_KEYS);
-      const v = Math.max(3, (u2.michaelCharacter.stats[k] ?? 10) - 1);
-      patchMichaelCharacter(userId, { stats: { [k]: v } });
-      mechanical.statPenalty = k;
-    }
   }
 
   const userAfter = loadUserMemory(userId);

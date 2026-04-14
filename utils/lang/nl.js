@@ -340,20 +340,20 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     onderhandelenRollingButton: '⏳ Aan het gooien...',
 
     negotiateWizard: {
-      intro: '**ONDERHANDELINGSREGISTER**\n*Welk deel van uw inschrijving wilt U betwisten? Kies één veld.*',
+      intro: '**ONDERHANDELINGSREGISTER**\n*Kniel voor het register: spreek Uw smeekbede uit, kies daarna één regel van uw inschrijving om te betwisten.*',
       selectPlaceholder: 'Archetype, afstamming of titel…',
       kindArchetype: { label: 'Archetype', description: 'Kosmische rol / klasse (bijv. bard, klerk)' },
       kindLineage: { label: 'Afstamming', description: 'Ras of bloedlijn (bijv. tiefling, elf)' },
       kindTitle: { label: 'Titel', description: 'Epitheton / bijnaam' },
       modalTitle: {
-        archetype: 'Onderhandel archetype',
-        lineage: 'Onderhandel afstamming',
-        title: 'Onderhandel titel',
+        archetype: 'Uw smeekbede — archetype',
+        lineage: 'Uw smeekbede — afstamming',
+        title: 'Uw smeekbede — titel',
       },
-      modalLabel: 'Wat moet het worden?',
-      modalPlaceholder: 'bijv. tiefling, maanridder, van de tweede zegel',
+      modalLabel: 'Wat is uw smeekbede, sterveling?',
+      modalPlaceholder: 'Smeek, beding, jammer — wat moet het register U toedichten…',
       fieldLabel: { archetype: 'Archetype', lineage: 'Afstamming', title: 'Titel' },
-      confirmFooter: 'Michaël heeft uw verzoek ontvangen.  Wilt u de kosmische worp wagen?',
+      confirmFooter: 'Michaël heeft uw smeekbede gehoord.  Waagt u de kosmische worp?',
       confirm: (kind, text) => {
         const L = { archetype: 'Archetype', lineage: 'Afstamming', title: 'Titel' }[kind] ?? kind;
         return `**${L}** → *"${String(text).slice(0, 200)}"*\n\n`;

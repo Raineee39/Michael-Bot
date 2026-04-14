@@ -455,6 +455,63 @@ Return ONLY a JSON object (no markdown, no extra text):
 }
 
 /**
+ * After a failed negotiation: rewrite one field to something worse / petty / embarrassing (not the user's wish).
+ * Returns { nl, en, ar }.
+ */
+export async function generateCharacterFieldPunishment(kind, { verzoek, characterBefore, langCode, wishedField = null }) {
+  const currentNl = resolveField(characterBefore[kind], 'nl');
+  const currentEn = resolveField(characterBefore[kind], 'en') || currentNl;
+  const currentAr = resolveField(characterBefore[kind], 'ar') || currentNl;
+
+  const hints = {
+    archetype: 'Short cosmic role labels (1–3 words). Make it diminished, ridiculous, or a bureaucratic downgrade — not cool, not what they asked.',
+    lineage:   'Short species or bloodline (1–3 words each language). Invent something petty or awkward — not a power fantasy. Vague poetic is fine; do not grant a “premium” ancestry.',
+    title:     'Epithets under 10 words. Something the register would add as a snub — whining, provisional, “of the refiled seal”, etc.',
+  }[kind] ?? '';
+
+  const fieldHint = wishedField
+    ? (langCode === 'ar'
+      ? `(كانوا يطمحون لتغيير **${wishedField}**؛ عاقبهم في حقل **${kind}**.)`
+      : `(They were bargaining over **${wishedField}**; punish them by twisting **${kind}** instead.)`)
+    : '';
+
+  try {
+    const response = await client.responses.create({
+      model: 'gpt-4.1-mini',
+      max_output_tokens: 130,
+      input: `
+You are Michael (Archangel in Dutch/English, Imru' al-Qais in Arabic), maintaining a cosmic RPG register.
+
+The user's negotiation FAILED. Their plea was: "${verzoek}"
+${fieldHint}
+
+Rewrite ONLY their ${kind} to something worse — petty, embarrassing, bureaucratically belittling, or cosmically inconvenient. It must NOT grant what they wanted. Keep it PG. ${hints}
+Keep Arabic in Imru' al-Qais style — sharp, ancient, a little cruel.
+Keep Dutch/English in Michael's cold cosmic register.
+
+Current ${kind}:
+- Dutch: "${currentNl}"
+- English: "${currentEn}"
+- Arabic: "${currentAr}"
+
+Return ONLY a JSON object (no markdown, no extra text):
+{"nl": "...", "en": "...", "ar": "..."}
+      `.trim(),
+    });
+    const raw = response.output[0].content[0].text.trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+    return {
+      nl: parsed.nl || currentNl,
+      en: parsed.en || currentEn,
+      ar: parsed.ar || currentAr,
+    };
+  } catch {
+    return { nl: currentNl, en: currentEn, ar: currentAr };
+  }
+}
+
+/**
  * Translate archetype, lineage and title from one language to the other two.
  * Returns a partial {nl?, en?, ar?} object for each field.
  */
@@ -634,17 +691,17 @@ export async function generateOnderhandelenNarrative({
   function describeMechanical(m) {
     if (!m) return 'nothing concrete';
     const val = (v) => typeof v === 'object' ? (v[langCode] ?? v.nl ?? JSON.stringify(v)) : v;
-    if (m.kind === 'stat') return `stat "${m.field}" +1`;
+    if (m.kind === 'stat') return `stat "${m.field}" ${m.delta >= 0 ? '+' : ''}${m.delta ?? 0}`;
     if (m.kind === 'title') return `title changed to "${val(m.newValue)}"`;
     if (m.kind === 'archetype') return `archetype changed to "${val(m.newValue)}"`;
     if (m.kind === 'lineage') return `lineage changed to "${val(m.newValue)}"`;
-    if (m.kind === 'title_worse') return `title worsened to "${val(m.newValue)}"${m.statPenalty ? `, stat "${m.statPenalty}" −1` : ''}`;
+    if (m.kind === 'title_worse') return `title worsened to "${val(m.newValue)}"`;
     return JSON.stringify(m);
   }
 
   const resultDesc = success
     ? `The request succeeds. What changed: ${describeMechanical(mechanical)}.`
-    : `The request fails. What worsened: ${describeMechanical(mechanical)}.`;
+    : `The request fails. Michael alters ONE random line of their enrolment out of spite — not necessarily the field they chose. What worsened: ${describeMechanical(mechanical)}.`;
 
   // Resolve multilingual fields to active language for the narrative prompt
   const rBefore = {

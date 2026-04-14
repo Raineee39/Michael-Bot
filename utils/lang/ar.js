@@ -344,20 +344,20 @@ export default {
     onderhandelenRollingButton: '⏳ جارٍ الرمي...',
 
     negotiateWizard: {
-      intro: "**دِيوَان المُفَاوَضَة**\n*أيُّ جزء من تسجيلك تريد منازعته؟ اختر حقلًا واحدًا.*",
+      intro: "**دِيوَان المُفَاوَضَة**\n*اجثُ أمام السجل: توسَّلْ، ثمَّ اختر سطراً واحداً من تسجيلك لمنازعته.*",
       selectPlaceholder: 'النمط، السلالة، أو اللقب…',
       kindArchetype: { label: 'النمط', description: 'الدور الكوني / الصنف' },
       kindLineage: { label: 'السلالة', description: 'الجنس أو النسب (مثل تيفلينج)' },
       kindTitle: { label: 'اللقب', description: 'الكنية أو اللقب الشعري' },
       modalTitle: {
-        archetype: 'فاوض على النمط',
-        lineage: 'فاوض على السلالة',
-        title: 'فاوض على اللقب',
+        archetype: 'توسُّلك — النمط',
+        lineage: 'توسُّلك — السلالة',
+        title: 'توسُّلك — اللقب',
       },
-      modalLabel: "بماذا يجب أن يصبح؟",
-      modalPlaceholder: 'مثال: تيفلينج، فارس القمر',
+      modalLabel: '\u0645\u0627 \u062a\u0648\u0633\u064f\u0644\u0643\u060c \u064a\u0627 \u0628\u0646\u064a \u0627\u0644\u0641\u0627\u0646\u064a\u061f',
+      modalPlaceholder: '\u0627\u0628\u0643\u064f\u060c \u0631\u0627\u0648\u0636\u060c \u0627\u0636\u062c\u0631 \u2014 \u0645\u0627 \u062a\u0631\u064a\u062f \u0623\u0646 \u064a\u0642\u0648\u0644\u0647 \u0627\u0644\u062f\u064a\u0648\u0627\u0646\u2026',
       fieldLabel: { archetype: 'النمط', lineage: 'السلالة', title: 'اللقب' },
-      confirmFooter: "تلقَّى امرؤ القيس طلبك.  هل تريد المجازفة بالرمية الشعرية؟",
+      confirmFooter: '\u0633\u0645\u0639 \u0627\u0645\u0631\u0624 \u0627\u0644\u0642\u064a\u0633 \u062a\u0648\u0633\u064f\u0644\u0643.  \u0647\u0644 \u062a\u062c\u0631\u0651\u0628 \u0627\u0644\u0631\u0645\u064a\u0629\u061f',
       confirm: (kind, text) => {
         const L = { archetype: 'النمط', lineage: 'السلالة', title: 'اللقب' }[kind] ?? kind;
         return `**${L}** → *"${String(text).slice(0, 200)}"*\n\n`;

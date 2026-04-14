@@ -340,20 +340,20 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     onderhandelenRollingButton: '⏳ Rolling...',
 
     negotiateWizard: {
-      intro: '**NEGOTIATION REGISTER**\n*Which part of your enrolment do you challenge? Pick one field below.*',
+      intro: '**NEGOTIATION REGISTER**\n*Kneel before the ledger: state your case, then choose one line of your enrolment to contest.*',
       selectPlaceholder: 'Archetype, lineage, or title…',
       kindArchetype: { label: 'Archetype', description: 'Cosmic role / class (e.g. bard, clerk)' },
       kindLineage: { label: 'Lineage', description: 'Species or bloodline (e.g. tiefling, elf)' },
       kindTitle: { label: 'Title', description: 'Epithet / sobriquet' },
       modalTitle: {
-        archetype: 'Negotiate archetype',
-        lineage: 'Negotiate lineage',
-        title: 'Negotiate title',
+        archetype: 'Your plea — archetype',
+        lineage: 'Your plea — lineage',
+        title: 'Your plea — title',
       },
-      modalLabel: 'What should it become?',
-      modalPlaceholder: 'e.g. tiefling, moon knight, of the second seal',
+      modalLabel: 'What is your plea, mortal?',
+      modalPlaceholder: 'Beg, bargain, whimper what you want the register to say…',
       fieldLabel: { archetype: 'Archetype', lineage: 'Lineage', title: 'Title' },
-      confirmFooter: 'Michael has received your request.  Do you wish to attempt the cosmic roll?',
+      confirmFooter: 'Michael has heard your plea.  Do you dare the cosmic roll?',
       confirm: (kind, text) => {
         const L = { archetype: 'Archetype', lineage: 'Lineage', title: 'Title' }[kind] ?? kind;
         return `**${L}** → *"${String(text).slice(0, 200)}"*\n\n`;
