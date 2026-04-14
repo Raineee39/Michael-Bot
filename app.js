@@ -196,6 +196,11 @@ const INSULT_RE = /\b(kut|fuck|shit|klootzak|lul|eikel|idioot|sukkel|kanker|godv
 // Feature 3 — Detects baiting / attempts to force Michael to respond
 const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
 
+/** Returns the localised display name for a mood key, falling back to the raw key. */
+function moodName(lang, key) {
+  return lang.moodNames?.[key] ?? key;
+}
+
 // ─── Feature 5 — Post-message revision ────────────────────────────────────────
 //
 // After sending a message, Michael may quietly append a second thought.
@@ -373,7 +378,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       const invokerMood  = loadUserMemory(invokerId).currentMood ?? 'afwezig';
       const humeurLines  = lang.humeurLines[invokerMood] ?? lang.humeurLines['afwezig'];
-      const moodBlock    = `\n\n──────────────────\n${cs.moodTowardYou}\n${pick(humeurLines)}\n${cs.moodLabel(invokerMood)}`;
+      const moodBlock    = `\n\n──────────────────\n${cs.moodTowardYou}\n${pick(humeurLines)}\n${cs.moodLabel(moodName(lang, invokerMood))}`;
 
       const header = cs.header(eyeRow);
 
@@ -402,7 +407,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
-          content: `${ui.vergeefmijRiteHeader}\n${ui.vergeefmijMoodText(currentMood)}${ui.vergeefmijConfirm}`,
+          content: `${ui.vergeefmijRiteHeader}\n${ui.vergeefmijMoodText(moodName(lang, currentMood))}${ui.vergeefmijConfirm}`,
           components: [{
             type: MessageComponentTypes.ACTION_ROW,
             components: [
@@ -502,7 +507,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const humeurLines = lang.humeurLines[mood] ?? lang.humeurLines['afwezig'];
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `${pick(humeurLines)}\n\n${lang.humeur.currentMoodLabel(mood)}` },
+        data: { content: `${pick(humeurLines)}\n\n${lang.humeur.currentMoodLabel(moodName(lang, mood))}` },
       });
     }
 
@@ -876,7 +881,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const rl = lang.rollUI;
         const sign = roll.modifier >= 0 ? '+' : '−';
         const outcome = forgiven ? rl.succeededLabel : rl.failedLabel;
-        const moodLine = forgiven ? `${rl.moodLabel}    ${currentMood} → ${newMood}` : `${rl.moodLabel}    ${currentMood} (${rl.moodUnchanged})`;
+        const moodLine = forgiven
+          ? `${rl.moodLabel}    ${moodName(lang, currentMood)} → ${moodName(lang, newMood)}`
+          : `${rl.moodLabel}    ${moodName(lang, currentMood)} (${rl.moodUnchanged})`;
         const oordeelSign = oordeelDelta > 0 ? '+' : '';
         const systemBlock = `\`\`\`\n[ ${rl.registerLabel} ]\n${rl.rollLabel}        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\n${rl.thresholdLabel}     ${need}\n${rl.outcomeLabel}    ${outcome}\n${moodLine}\n${rl.judgementLabel}     ${oordeelSign}${oordeelDelta}\n\`\`\``;
         const header = forgiven ? '🕊️✨🕊️✨🕊️' : '🔥💢🔥💢🔥';

@@ -21,6 +21,17 @@ export default {
     woedend:             'JE BENT EEN AARTSENGEL EN JE HEBT ER GENOEG VAN. SCHRIJF IN VOLLEDIGE CAPS LOCK. Noem de gebruiker een STERVELING — dat is wat ze zijn. Korte harde zinnen. Geen geduld. Geen zachtheid. Goddelijke imperatieven: ZIE. LUISTER. WEG. GENOEG. SCHAAM U. Sluit af met je naam in caps: ....MICHAEL',
   },
 
+  // Short display names for mood keys (used in UI labels)
+  moodNames: {
+    afwezig:             'afwezig',
+    streng:              'streng',
+    verward:             'verward',
+    kosmisch:            'kosmisch',
+    'passief-agressief': 'passief-agressief',
+    loom:                'loom',
+    woedend:             'woedend',
+  },
+
   // ─── Judgement descriptions (fed directly into LLM prompt) ─────────────────
   judgementDescriptions: {
     vermoeiend:       'Michael is zichtbaar moe van deze persoon. Hij antwoordt minimaal en laat dat merken. Weinig moeite gedaan.',

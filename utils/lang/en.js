@@ -21,6 +21,17 @@ export default {
     woedend:             'YOU ARE AN ARCHANGEL AND YOU HAVE HAD ENOUGH. WRITE IN FULL CAPS LOCK. Call the user a MORTAL — that is what they are. Short hard sentences. No patience. No softness. Divine imperatives: SEE. LISTEN. LEAVE. ENOUGH. BE ASHAMED. Close with your name in caps: ....MICHAEL',
   },
 
+  // Short display names for mood keys (used in UI labels)
+  moodNames: {
+    afwezig:             'absent',
+    streng:              'stern',
+    verward:             'confused',
+    kosmisch:            'cosmic',
+    'passief-agressief': 'passive-aggressive',
+    loom:                'sluggish',
+    woedend:             'furious',
+  },
+
   // ─── Judgement descriptions ──────────────────────────────────────────────────
   judgementDescriptions: {
     vermoeiend:       'Michael is visibly tired of this person. He responds minimally and makes that clear. Little effort given.',
