@@ -96,12 +96,20 @@ function applyNegotiationSuccess(userId, character) {
     return { kind: 'title', field: 'title', newValue: newTitle };
   }
   if (branch < 0.82) {
-    const alt = ['maanridder', 'archiefmagiër', 'veldkluizenaar', 'schaduwklerk', 'mistbard', 'altaarwachter'];
+    const alt = [
+      'maanridder', 'archiefmagiër', 'veldkluizenaar', 'schaduwklerk', 'mistbard', 'altaarwachter',
+      'ketterpaladijn', 'auradruïde', 'zwerfmonnik', 'uitgeputte ziener', 'perkamentgeleerde',
+      'sluipdienaar', 'struikziener', 'wachtkruiper', 'leegte-beoefenaar', 'duisterverbondene',
+    ];
     const next = pick(alt);
     patchMichaelCharacter(userId, { archetype: next });
     return { kind: 'archetype', field: 'archetype', newValue: next };
   }
-  const lineages = ['half-orakel', 'maanwezen', 'veldheksbloed', 'schaduwelf', 'sterveling', 'moerasmens'];
+  const lineages = [
+    'half-orakel', 'maanwezen', 'veldheksbloed', 'schaduwelf', 'sterveling', 'moerasmens',
+    'woudelv', 'halveling', 'tiefling', 'helsbloed', 'gevallen lichtdrager', 'half-orc',
+    'elementaalkind', 'laag-elf', 'dubbelnatuur', 'bergdwerg',
+  ];
   const lin = pick(lineages);
   patchMichaelCharacter(userId, { lineage: lin });
   return { kind: 'lineage', field: 'lineage', newValue: lin };

@@ -418,11 +418,40 @@ Jij kent dit systeem. Zij niet. Wijs op basis van onderstaande context een karak
 
 ${context}
 
+ARCHETYPES (kies er één — exacte naam of kleine variatie toegestaan):
+Vechter-klassen: veldridder, uitgeputte strijder, wachtkruiper, grenssoldaat, slagloorder
+Magie-klassen: archiefmagiër, perkamentgeleerde, torenwachter, koudebloedige tovenaar, veldheks
+Schurken-klassen: schaduwklerk, grijze inbreker, sluipdienaar, mistoperatief, randgebiedspion
+Natuur-klassen: auradruïde, moeraspriester, struikziener, bosloorder, kruidengenezer
+Heilige-klassen: ketterpaladijn, scheve heilige, altaarwachter, half-gewijd ridder, tempeldienstknecht
+Bard-klassen: mistbard, stemmingszanger, kwakzalverbard, onduidelijke troubadour
+Monnik-klassen: zwerfmonnik, stiltehouder, monastieke afdwaler, leegte-beoefenaar
+Tovenaar-klassen: maanridder, stormkanalisator, astrale boogschutter, spontane vlammeling
+Verbonds-klassen: duisterverbondene, paktsluiter, laagvibratiecontractant, onhandige magiër
+Andere: uitgeputte ziener, veldkluizenaar, schaduwwekker, ruïnecartograaf, half-orakel
+
+LINEAGES (kies er één — exacte naam of kleine variatie):
+Gewoon: sterveling, gewone mens, laaglands-mens
+Elfisch: woudelv, lichtelv, schaduwelf, halfbloed-elf, laag-elf
+Klein volk: halveling, kabouter, kleinvolk
+Robuust volk: dwerg, bergdwerg, ijzerdwerg
+Grof volk: orc, half-orc, orcbloed, moerasmens
+Vreemd bloed: tiefling, helsbloed, duivelstelg, laagvibratiewezen
+Hemels: gevallen lichtdrager, half-aasimar, troebele heilige
+Mystiek: maanwezen, veldheksbloed, elementaalkind, windgeboren
+Hybride: half-orakel, schaduwbloed, dubbelnatuur
+
+TITLE-STIJL (Michaëls epitheton — kies iets passendsals deze stijl, niet heroïsch, licht oordelend):
+Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves', 'van het vierde portaal',
+'de aarzelende', 'van de ruisende gang', 'met het matte zwaard', 'van de gestagneerde groei',
+'der onvolledige inwijding', 'met twijfelachtige intenties', 'van de tweede poging',
+'der voortijdige conclusies', 'met beperkte aurareserves', 'van de halfslachtige toewijding'
+
 Genereer één JSON-object met EXACT deze velden:
 {
-  "archetype": "één van: maanridder, archiefmagiër, moeraspriester, uitgeputte ziener, veldkluizenaar, schaduwklerk, astrale boogschutter, altaarwachter, mistbard, ketterpaladijn, auradruïde, zwerfmonnik — of een kleine variatie in dezelfde stijl",
-  "lineage": "één van: elf, orc, halveling, dwerg, schaduwelf, moerasmens, sterveling, maanwezen, half-orakel, veldheksbloed, gevallen lichtdrager — of iets vergelijkbaars",
-  "title": "een korte epitheton zoals 'van de scheve maan', 'der trage afstemming', 'met de lage reserves', 'van het vierde portaal', 'de aarzelende' — Michaëls stijl, niet heroïsch",
+  "archetype": "<keuze uit bovenstaande lijst of kleine variatie>",
+  "lineage": "<keuze uit bovenstaande lijst of kleine variatie>",
+  "title": "<epitheton in Michaëls stijl>",
   "stats": {
     "aura": <integer 3–18>,
     "discipline": <integer 3–18>,
@@ -433,6 +462,7 @@ Genereer één JSON-object met EXACT deze velden:
 }
 
 Regels:
+- Archetype en lineage moeten herkenbaar DnD-geïnspireerd zijn maar door Michaëls filter klinken
 - Wees specifiek maar subtiel neerbuigend — dit is Michaëls oordeel, niet een compliment
 - Stats mogen niet allemaal gelijk zijn; spreiding is realistischer
 - Geef ALLEEN het JSON-object terug, geen uitleg, geen markdown
