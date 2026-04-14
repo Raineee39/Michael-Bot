@@ -56,7 +56,7 @@ const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s
 async function maybeScheduleRevision(channelId, messageId, originalContent, mood) {
   if (Math.random() > 0.25) return; // 25% chance
   const delay = 6000 + Math.floor(Math.random() * 14000); // 6–20 s
-  console.log(`[revision] scheduled for gateway message ${messageId} (fires in ~${Math.round(delay / 1000)}s)`);
+  console.log(`[michael] revision scheduled | gateway | msg=${messageId} | ~${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
     try {
       const editLine = await generatePostRevision(originalContent, mood);
@@ -64,9 +64,9 @@ async function maybeScheduleRevision(channelId, messageId, originalContent, mood
         method: 'PATCH',
         body: { content: `${originalContent}\n\n${editLine}` },
       });
-      console.log(`[revision] applied to gateway message ${messageId}: "${editLine.slice(0, 60)}"`);
+      console.log(`[michael] revision applied | gateway | ${messageId} | "${editLine.slice(0, 60)}"`);
     } catch (err) {
-      console.error('[revision] gateway post-revision failed:', err.message);
+      console.error('[michael] revision failed | gateway:', err.message);
     }
   }, delay);
 }
@@ -145,7 +145,7 @@ export function startGateway() {
               messageId: msg.id,
               channelId,
             });
-            console.log(`[gateway] bait ignored for ${authorId}, queued unfinished business`);
+            console.log(`[michael] gateway | bait-silent + business | user=${authorId}`);
             return; // no immediate reply
           }
           // 30% chance: still replies, but also queues business
@@ -175,8 +175,9 @@ export function startGateway() {
             const userMood = loadUserMemory(authorId).currentMood ?? 'afwezig';
             maybeScheduleRevision(channelId, sentMsg.id, reply, userMood);
           }
+          console.log(`[michael] gateway | name-mention reply | ch=${channelId} | user=${authorId}`);
         } catch (err) {
-          console.error('Gateway: reply failed:', err.message);
+          console.error('[michael] gateway reply failed:', err.message);
         }
       }
     });

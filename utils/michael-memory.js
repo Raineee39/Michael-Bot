@@ -219,15 +219,18 @@ export function recordLanguageRequest(userId, username, userInput) {
   }
 
   user.languageRequestCounts[detected.code] = (user.languageRequestCounts[detected.code] ?? 0) + 1;
+  const langCount = user.languageRequestCounts[detected.code];
 
-  if (user.languageRequestCounts[detected.code] >= LANG_UNLOCK_THRESHOLD) {
+  if (langCount >= LANG_UNLOCK_THRESHOLD) {
     user.languagePermission = {
       code:        detected.code,
       displayName: detected.displayName,
       promptName:  detected.promptName,
       signOffHint: detected.signOffHint,
     };
-    console.log(`[language] unlocked ${detected.code} for user ${userId} (${username})`);
+    console.log(`[michael] language unlocked | ${detected.code} | ${userId} (${username})`);
+  } else {
+    console.log(`[michael] language progress | ${detected.code} ${langCount}/${LANG_UNLOCK_THRESHOLD} | ${userId}`);
   }
 
   all[userId] = user;
@@ -301,6 +304,7 @@ export function addUnfinishedBusiness(userId, {
 
   all[userId] = user;
   saveAll(all);
+  console.log(`[michael] unfinished-business | user=${userId} | sev=${severity} | ${String(reason).slice(0, 60)}`);
 }
 
 /**

@@ -307,7 +307,7 @@ const SHADOW_REPLY_LINES = [
 async function schedulePostRevision(channelId, messageId, originalContent, mood, label = 'message') {
   if (Math.random() > 0.20) return; // 20% chance
   const delay = 7000 + Math.floor(Math.random() * 13000); // 7–20 s
-  console.log(`[revision] scheduled for ${label} ${messageId} (fires in ~${Math.round(delay / 1000)}s)`);
+  console.log(`[michael] revision scheduled | ${label} | ${messageId} | ~${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
     try {
       const editLine = await generatePostRevision(originalContent, mood);
@@ -315,9 +315,9 @@ async function schedulePostRevision(channelId, messageId, originalContent, mood,
         method: 'PATCH',
         body: { content: `${originalContent}\n\n${editLine}` },
       });
-      console.log(`[revision] applied to ${label} ${messageId}: "${editLine.slice(0, 60)}"`);
+      console.log(`[michael] revision applied | ${label} | ${messageId} | "${editLine.slice(0, 60)}"`);
     } catch (err) {
-      console.error(`[revision] failed for ${label} ${messageId}:`, err.message);
+      console.error(`[michael] revision failed | ${label} | ${messageId}:`, err.message);
     }
   }, delay);
 }
@@ -656,6 +656,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       // Feature 3 — Bait / forcing-Michael trap: respond coldly and queue unfinished business
       if (BAIT_RE.test(userInput)) {
+        console.log(`[michael] praatmetmichael | bait-dismissal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
@@ -672,6 +673,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       // Code / technical request — refuse in-character, queue unfinished business
       if (CODE_REQUEST_RE.test(userInput)) {
+        console.log(`[michael] praatmetmichael | code-refusal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
@@ -688,6 +690,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
       // ~15% chance Michael refuses outright — no OpenAI call
       if (Math.random() < 0.15) {
+        console.log(`[michael] praatmetmichael | random-refusal (15%) | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -718,6 +721,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const asksAgain = unlocked && getRequestedLanguageCode(userInput) === unlocked.code;
         const speaksIt = unlocked && userSpeaksUnlockedLanguage(unlocked, userInput);
         const languagePermission = unlocked && (speaksIt || asksAgain) ? unlocked : null;
+        console.log(`[michael] praatmetmichael | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | ${username}`);
 
         // Feature 2 — Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
@@ -729,7 +733,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         ]);
 
         const oldScore = preMemory.judgementScore ?? 0;
-        console.log(`[score] ${username} | mood: ${mood} | delta: ${scoreDelta} | score: ${oldScore} → ${oldScore + scoreDelta} | input: "${userInput.slice(0, 60)}" | contradiction: ${contradictionHint}`);
+        console.log(`[michael] score | ${username} | mood=${mood} | Δ=${scoreDelta} | ${oldScore}→${oldScore + scoreDelta} | contradiction=${contradictionHint} | "${userInput.slice(0, 60)}"`);
 
         // Save first so the user record exists before addUnfinishedBusiness / addTheme write to it
         saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId);
@@ -756,16 +760,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         // Fire-and-forget summarisation once the message buffer fills up
         if (needsSummarisation(userId)) {
+          console.log(`[michael] summarisation | queued | ${username} (${userId})`);
           const fresh = loadUserMemory(userId);
           summariseUserHistory(username, fresh.prompts, fresh.impression)
-            .then(imp => updateImpression(userId, imp))
-            .catch(err => console.error('Summarisation failed:', err));
+            .then(imp => {
+              updateImpression(userId, imp);
+              console.log(`[michael] summarisation | done | ${username} (${userId})`);
+            })
+            .catch(err => console.error('[michael] summarisation failed:', err));
         }
 
         // ~25% chance of a thematic Giphy embed (same API as uitverkorene)
         let gifUrl = null;
         if (process.env.GIPHY_API_KEY && Math.random() < 0.25) {
           gifUrl = await fetchGiphyGif(getMichaelOptionalGifQuery(cosmicRole));
+          if (gifUrl) console.log(`[michael] praatmetmichael | gif | ${username}`);
         }
         const patchBody = { content: `> ${safeInput}\n\n${michaelMessage}` };
         if (gifUrl) patchBody.embeds = [{ image: { url: gifUrl } }];
@@ -853,7 +862,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const invokerUsername = invokerMem.username || invokerUserId;
       const currentMood = invokerMem.currentMood ?? 'afwezig';
       saveUserMemory(invokerUserId, invokerUsername, `[date:${path}]`, currentMood, dateScore, nextMood(currentMood, dateScore));
-      console.log(`[date] ${invokerUsername} | path: ${path} | score: +${dateScore}`);
+      console.log(`[michael] dateer | ${invokerUsername} | path=${path} | +${dateScore}`);
 
       const consequence = dateScore >= 3
         ? '\n\n*iets in het veld verschoof     permanent     Michael onthoudt dit*'
@@ -949,9 +958,9 @@ cron.schedule('*/15 * * * *', async () => {
           },
         });
         markShadowReplied(pick.messageId);
-        console.log(`[shadow] replied to old message ${pick.messageId} in channel ${pick.channelId}`);
+        console.log(`[michael] shadow-reply | msg=${pick.messageId} | ch=${pick.channelId}`);
       } catch (err) {
-        console.error('[shadow] reply failed:', err.message);
+        console.error('[michael] shadow-reply failed:', err.message);
       }
     }
   }
@@ -1018,14 +1027,14 @@ cron.schedule('*/15 * * * *', async () => {
     // Slightly darken mood for lingering resentment — don't add to prompt history
     patchUserState(userId, -1, nextMood(mood, -1));
 
-    console.log(`[consequence] fired for ${user.username || userId} | "${item.prompt.slice(0, 50)}" | channel ${targetChannel}`);
+    console.log(`[michael] delayed-consequence | ${user.username || userId} | ch=${targetChannel} | "${item.prompt.slice(0, 50)}"`);
 
     // Feature 5 — maybe append a post-revision edit to the consequence message
     if (sentMsg?.id) {
       schedulePostRevision(targetChannel, sentMsg.id, message, mood, 'consequence');
     }
   } catch (err) {
-    console.error('[consequence] failed:', err.message);
+    console.error('[michael] delayed-consequence failed:', err.message);
     lastConsequenceAt = 0; // reset so we can retry sooner
   }
 
