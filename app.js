@@ -17,7 +17,7 @@ import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter, generateDelayedConsequence, generatePostRevision } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState } from './utils/michael-memory.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage } from './utils/michael-memory.js';
 import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
 
@@ -713,12 +713,18 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const memorySummary = realPrompts.length ? realPrompts.slice(-3).join(' / ') : null;
         const cosmicRole = getCosmicRole(userId);
 
+        // After 2 explicit requests, unlock; full target-language replies only when they write in that language (or ask again)
+        const unlocked = recordLanguageRequest(userId, username, userInput) ?? preMemory.languagePermission ?? null;
+        const asksAgain = unlocked && getRequestedLanguageCode(userInput) === unlocked.code;
+        const speaksIt = unlocked && userSpeaksUnlockedLanguage(unlocked, userInput);
+        const languagePermission = unlocked && (speaksIt || asksAgain) ? unlocked : null;
+
         // Feature 2 — Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
 
         // Run message generation and AI scoring in parallel — no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
-          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint),
+          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission),
           scoreMichaelMessage(userInput),
         ]);
 

@@ -40,6 +40,8 @@ function defaultUser(username) {
     lastChannelId:     null,   // most recent channel this user was active in
     unfinishedBusiness: [],    // Feature 1 — items Michael hasn't let go of
     recentThemes:      [],     // Feature 2 — topic snapshots for contradiction engine
+    languagePermission: null, // unlocked after repeated requests for a non-Dutch language
+    languageRequestCounts: {}, // { en: 2, fr: 1 } — per-language tallies toward unlock
   };
 }
 
@@ -55,6 +57,10 @@ export function loadUserMemory(userId) {
   if (user.lastChannelId === undefined)    user.lastChannelId = null;
   if (user.unfinishedBusiness === undefined) user.unfinishedBusiness = [];
   if (user.recentThemes === undefined)     user.recentThemes = [];
+  if (user.languagePermission === undefined) user.languagePermission = null;
+  if (user.languageRequestCounts === undefined || typeof user.languageRequestCounts !== 'object') {
+    user.languageRequestCounts = {};
+  }
   return user;
 }
 
@@ -73,6 +79,10 @@ export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0, n
   if (user.impression     === undefined) user.impression = null;
   if (user.unfinishedBusiness === undefined) user.unfinishedBusiness = [];
   if (user.recentThemes   === undefined) user.recentThemes = [];
+  if (user.languagePermission === undefined) user.languagePermission = null;
+  if (user.languageRequestCounts === undefined || typeof user.languageRequestCounts !== 'object') {
+    user.languageRequestCounts = {};
+  }
   user.judgementScore += scoreDelta;
   if (nextMood  !== null) user.currentMood  = nextMood;
   if (channelId !== null) user.lastChannelId = channelId;
@@ -110,6 +120,119 @@ export function patchUserState(userId, scoreDelta = 0, nextMoodVal = null) {
   if (nextMoodVal !== null) user.currentMood = nextMoodVal;
   all[userId] = user;
   saveAll(all);
+}
+
+// ─── Language permission (earned by repeatedly asking for another language) ───
+
+const LANG_UNLOCK_THRESHOLD = 2;
+
+// First matching pattern wins. User must ask this many times (across sessions) to unlock.
+const LANG_SPECS = [
+  { code: 'en', displayName: 'English', promptName: 'English', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(engels|english|in\s+english|spreek\s+engels|praat\s+engels|talk\s+english|speak\s+english)\b/i },
+  { code: 'de', displayName: 'German', promptName: 'German', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(duits|german|deutsch|spreek\s+duits|auf\s+deutsch)\b/i },
+  { code: 'fr', displayName: 'French', promptName: 'French', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(frans|french|français|francais|spreek\s+frans)\b/i },
+  { code: 'es', displayName: 'Spanish', promptName: 'Spanish', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(spaans|spanish|español|espanol|spreek\s+spaans)\b/i },
+  { code: 'it', displayName: 'Italian', promptName: 'Italian', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(italiaans|italian|italiano|spreek\s+italiaans)\b/i },
+  { code: 'pt', displayName: 'Portuguese', promptName: 'Portuguese', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(portugees|portuguese|português|portugues)\b/i },
+  { code: 'ar', displayName: 'Arabic', promptName: 'Arabic', signOffHint: 'End with 2 to 6 dots followed by ميخائيل (Michael in Arabic script).', re: /\b(arabisch|arabic|بالعربية|in\s+het\s+arabisch)\b/i },
+  { code: 'ja', displayName: 'Japanese', promptName: 'Japanese', signOffHint: 'End with 2 to 6 dots followed by ミカエル or Michael in katakana.', re: /\b(japans|japanese|日本語|nihongo)\b/i },
+  { code: 'ru', displayName: 'Russian', promptName: 'Russian', signOffHint: 'End with 2 to 6 dots followed by Михаил or Michael in Cyrillic.', re: /\b(russisch|russian|по-русски|rus(sisch)?)\b/i },
+];
+
+function detectRequestedLanguage(userInput) {
+  for (const spec of LANG_SPECS) {
+    if (spec.re.test(userInput)) return spec;
+  }
+  return null;
+}
+
+/** Language code if the message explicitly asks Michael to use a given language (Dutch or English phrasing). */
+export function getRequestedLanguageCode(userInput) {
+  return detectRequestedLanguage(userInput)?.code ?? null;
+}
+
+/**
+ * True when the user's message is actually written in their unlocked language
+ * (not just Dutch). Used so Michael only switches to full target-language mode
+ * when they "speak it to him"; otherwise he stays on default Dutch + occasional mix.
+ */
+export function userSpeaksUnlockedLanguage(perm, userInput) {
+  if (!perm || !userInput?.trim()) return false;
+  const s = userInput.trim();
+
+  switch (perm.code) {
+    case 'en': {
+      const en = /\b(the|you|your|yours|what|when|where|why|how|please|thanks|thank you|hello|hi |hey |about|don't|I'm|I am|it's|isn't|can't|could|would|should|really|feel|feeling|want|know|think|sorry|love|hate|good|bad|nice)\b/i;
+      const nl = /\b(het|een|niet|maar|van|voor|met|dat|die|deze|dit|waarom|hoe|graag|jij|jou |zijn|ben |heb |hebben|kunnen|moeten|willen|mijn|jouw|ook |nog |toch|gewoon|iets|niets)\b/i;
+      if (nl.test(s) && !en.test(s)) return false;
+      if (en.test(s)) return true;
+      if (s.length > 12 && /^[a-z0-9\s.,!?'"\-]+$/i.test(s) && !nl.test(s)) return true;
+      return false;
+    }
+    case 'de':
+      return /\b(der|die|das|und|ich|du|er|sie|nicht|was|wie|warum|bitte|hallo|danke|können|schon|auch)\b/i.test(s);
+    case 'fr':
+      return /\b(le|la|les|un|une|vous|nous|pour|avec|sans|merci|bonjour|salut|comment|pourquoi|être|avez|avez-vous)\b/i.test(s) || /[àâçéèêëîïôùûüœ]/i.test(s);
+    case 'es':
+      return /\b(qué|cómo|por\s+favor|hola|gracias|está|este|esta|usted|tengo|quiero|pero|muy|más|los|las)\b/i.test(s) || /[ñáéíóúü]/i.test(s);
+    case 'it':
+      return /\b(che|come|però|perché|grazie|ciao|buongiorno|questo|quello|sono|non |molto)\b/i.test(s) || /\bper\s+favore\b/i.test(s);
+    case 'pt':
+      return /\b(você|voces|obrigado|obrigada|como|por\s+favor|olá|não|muito|mais|vocês|está)\b/i.test(s);
+    case 'ar':
+      return /[\u0600-\u06FF]/.test(s);
+    case 'ja':
+      return /[\u3040-\u30ff\u4e00-\u9fff]/.test(s);
+    case 'ru':
+      return /[\u0400-\u04FF]/.test(s);
+    default:
+      return false;
+  }
+}
+
+/**
+ * If this message asks Michael to use another language, bump that language's counter.
+ * After LANG_UNLOCK_THRESHOLD requests for the same language, sets languagePermission
+ * so Michael may answer in that language when the user writes in it (or asks again).
+ *
+ * Call from /praatmetmichael before generating a reply. Creates/updates the user row.
+ *
+ * @returns {object|null} The effective permission after this message: { code, displayName, promptName, signOffHint } or null
+ */
+export function recordLanguageRequest(userId, username, userInput) {
+  const detected = detectRequestedLanguage(userInput);
+  const all = loadAll();
+  const existing = all[userId];
+
+  if (!detected) {
+    return existing?.languagePermission ?? null;
+  }
+
+  const user = existing ?? defaultUser(username);
+  if (user.languagePermission === undefined) user.languagePermission = null;
+  if (user.languageRequestCounts === undefined || typeof user.languageRequestCounts !== 'object') {
+    user.languageRequestCounts = {};
+  }
+
+  if (user.languagePermission?.code === detected.code) {
+    return user.languagePermission;
+  }
+
+  user.languageRequestCounts[detected.code] = (user.languageRequestCounts[detected.code] ?? 0) + 1;
+
+  if (user.languageRequestCounts[detected.code] >= LANG_UNLOCK_THRESHOLD) {
+    user.languagePermission = {
+      code:        detected.code,
+      displayName: detected.displayName,
+      promptName:  detected.promptName,
+      signOffHint: detected.signOffHint,
+    };
+    console.log(`[language] unlocked ${detected.code} for user ${userId} (${username})`);
+  }
+
+  all[userId] = user;
+  saveAll(all);
+  return user.languagePermission;
 }
 
 // ─── Summarisation helpers ────────────────────────────────────────────────────
