@@ -880,19 +880,31 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         const rl = lang.rollUI;
         const sign = roll.modifier >= 0 ? '+' : '−';
-        const outcome = forgiven ? rl.succeededLabel : rl.failedLabel;
-        const moodLine = forgiven
-          ? `${rl.moodLabel}    ${moodName(lang, currentMood)} → ${moodName(lang, newMood)}`
-          : `${rl.moodLabel}    ${moodName(lang, currentMood)} (${rl.moodUnchanged})`;
         const oordeelSign = oordeelDelta > 0 ? '+' : '';
-        const systemBlock = `\`\`\`\n[ ${rl.registerLabel} ]\n${rl.rollLabel}        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\n${rl.thresholdLabel}     ${need}\n${rl.outcomeLabel}    ${outcome}\n${moodLine}\n${rl.judgementLabel}     ${oordeelSign}${oordeelDelta}\n\`\`\``;
         const header = forgiven ? '🕊️✨🕊️✨🕊️' : '🔥💢🔥💢🔥';
-        const content = `${header}\n${narrative}\n\n${systemBlock}`;
+        const moodValue = forgiven
+          ? `${moodName(lang, currentMood)} → ${moodName(lang, newMood)}`
+          : `${moodName(lang, currentMood)} *(${rl.moodUnchanged})*`;
         console.log(`[michael] vergeefmij | ${username} | roll=${roll.total} need=${need} forgiven=${forgiven}`);
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content, components: [] },
+          body: {
+            content: header,
+            embeds: [{
+              color: forgiven ? 0x22c55e : 0xef4444,
+              title: rl.registerLabel,
+              description: narrative,
+              fields: [
+                { name: rl.rollLabel,      value: `${roll.raw} ${sign}${Math.abs(roll.modifier)} = **${roll.total}**`, inline: true },
+                { name: rl.thresholdLabel, value: `${need}`,                                                            inline: true },
+                { name: rl.outcomeLabel,   value: forgiven ? `✅ ${rl.succeededLabel}` : `❌ ${rl.failedLabel}`,        inline: true },
+                { name: rl.moodLabel,      value: moodValue,                                                             inline: false },
+                { name: rl.judgementLabel, value: `${oordeelSign}${oordeelDelta}`,                                       inline: true },
+              ],
+            }],
+            components: [],
+          },
         });
 
         // Divine pardon — scheduled AFTER successful send so it only fires if the user saw the result
@@ -979,16 +991,27 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         const rl = lang.rollUI;
         const sign = roll.modifier >= 0 ? '+' : '−';
-        const outcome = success ? rl.succeededLabel : rl.failedLabel;
         const oordeelSign = oordeelDelta > 0 ? '+' : '';
-        const systemBlock = `\`\`\`\n[ ${rl.registerLabel} ]\n${rl.rollLabel}        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\n${rl.thresholdLabel}     ${dc}\n${rl.outcomeLabel}    ${outcome}\n${rl.judgementLabel}     ${oordeelSign}${oordeelDelta}\n\`\`\``;
         const header = success ? '📜✨📜✨📜' : '🔥📜🔥📜🔥';
-        const content = `${header}\n${lang.ui.onderhandelenRegisterHeader.split('\n').slice(-1)[0]}\n*"${verzoek.slice(0, 80)}"*\n\n${narrative}\n\n${systemBlock}`;
         console.log(`[michael] onderhandelen | ${username} | roll=${roll.total} dc=${dc} success=${success} | ${verzoek.slice(0, 50)}`);
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content, components: [] },
+          body: {
+            content: header,
+            embeds: [{
+              color: success ? 0x22c55e : 0xef4444,
+              title: rl.registerLabel,
+              description: `*"${verzoek.slice(0, 200)}"*\n\n${narrative}`,
+              fields: [
+                { name: rl.rollLabel,      value: `${roll.raw} ${sign}${Math.abs(roll.modifier)} = **${roll.total}**`, inline: true },
+                { name: rl.thresholdLabel, value: `${dc}`,                                                              inline: true },
+                { name: rl.outcomeLabel,   value: success ? `✅ ${rl.succeededLabel}` : `❌ ${rl.failedLabel}`,         inline: true },
+                { name: rl.judgementLabel, value: `${oordeelSign}${oordeelDelta}`,                                       inline: true },
+              ],
+            }],
+            components: [],
+          },
         });
 
         // Divine pardon — scheduled AFTER successful send so it only fires if the user saw the result
