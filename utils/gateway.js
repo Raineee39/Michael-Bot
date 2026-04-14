@@ -30,6 +30,36 @@ const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 // Intents: GUILDS(1) | GUILD_MESSAGES(512) | MESSAGE_CONTENT(32768)
 const INTENTS = 1 | 512 | 32768;
 
+// ─── Name-mention gauge (per guild, in-memory) ────────────────────────────────
+//
+// Each time someone says "michael" the count ticks up, raising the chance
+// Michael interjects. The gauge decays after 30 min of silence and resets
+// to 0 when Michael actually responds.
+//
+// Probability formula: p = min(0.80, 0.01 + count * 0.03)
+//   0 mentions → 1%  |  3 → 10%  |  5 → 16%  |  15 → 46%  |  cap 80%
+
+const nameGauge = new Map(); // guildId → { count, lastAt }
+const GAUGE_DECAY_MS = 30 * 60 * 1000; // 30 minutes of silence resets count
+
+function tickGauge(guildId) {
+  const key = guildId ?? '_dm';
+  const now = Date.now();
+  const entry = nameGauge.get(key) ?? { count: 0, lastAt: 0 };
+  const decayed = now - entry.lastAt > GAUGE_DECAY_MS;
+  const count = decayed ? 1 : entry.count + 1;
+  nameGauge.set(key, { count, lastAt: now });
+  return count;
+}
+
+function gaugeProb(count) {
+  return Math.min(0.80, 0.01 + count * 0.03);
+}
+
+function resetGauge(guildId) {
+  nameGauge.delete(guildId ?? '_dm');
+}
+
 // ─── Feature 3 — Bait / forcing-Michael-to-respond detection ─────────────────
 //
 // When users try to force Michael to respond with provocations or commands,
@@ -152,8 +182,11 @@ export function startGateway() {
           });
         }
 
-        // 5% chance the persona interjects when its name is said
-        if (Math.random() > 0.05) return;
+        // Name-mention gauge: probability rises with each mention, resets after a response
+        const gaugeCount = tickGauge(guildId);
+        const p = gaugeProb(gaugeCount);
+        console.log(`[michael] gateway | name-gauge | guild=${guildId ?? 'dm'} count=${gaugeCount} p=${(p * 100).toFixed(0)}%`);
+        if (Math.random() > p) return;
 
         const gwLangCode = resolveLanguage(guildId, authorId);
         const gwLang = getLang(gwLangCode);
@@ -179,7 +212,8 @@ export function startGateway() {
             const userMood = loadUserMemory(authorId).currentMood ?? 'afwezig';
             maybeScheduleRevision(channelId, sentMsg.id, reply, userMood, gwLangCode);
           }
-          console.log(`[michael] gateway | name-mention reply | ch=${channelId} | user=${authorId}`);
+          resetGauge(guildId);
+          console.log(`[michael] gateway | name-mention reply | ch=${channelId} | user=${authorId} | gauge reset`);
         } catch (err) {
           console.error('[michael] gateway reply failed:', err.message);
         }

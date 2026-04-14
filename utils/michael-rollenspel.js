@@ -340,7 +340,20 @@ export function maybePassiveRollBlock(userId, userInput) {
  * Executes the passive dice roll (called when user clicks the button).
  * Applies oordeel delta and returns the system block line + roll data.
  */
-export function executePassiveRoll(userId) {
+export function executePassiveRoll(userId, langCode = 'nl') {
+  const tierLabels = {
+    nl: { poor: 'zwaar teleurstellend', weak: 'matig', acceptable: 'aanvaardbaar', strong: 'gunstig', favoured: 'ongewoon begunstigd' },
+    en: { poor: 'deeply disappointing', weak: 'mediocre', acceptable: 'acceptable', strong: 'favourable', favoured: 'unusually blessed' },
+    ar: { poor: 'مُخيِّب للآمال جداً', weak: 'متوسط', acceptable: 'مقبول', strong: 'مواتٍ', favoured: 'مُبارَك بشكل غير عادي' },
+  };
+  const ui = {
+    nl: { register: 'KOSMISCH REGISTER', roll: 'worp', judgement: 'oordeel' },
+    en: { register: 'COSMIC REGISTER',   roll: 'roll', judgement: 'judgement' },
+    ar: { register: 'السِّجِلُّ الكَوْنِي', roll: 'الرَّمْية', judgement: 'الحُكْم' },
+  };
+  const tl  = tierLabels[langCode] ?? tierLabels.nl;
+  const uis = ui[langCode] ?? ui.nl;
+
   const user = loadUserMemory(userId);
   const mood = user.currentMood ?? 'afwezig';
   const roll = computeMichaelRoll(user, mood, { context: 'general' });
@@ -356,8 +369,9 @@ export function executePassiveRoll(userId) {
   }
 
   const sign = roll.modifier >= 0 ? '+' : '−';
-  const oordeelLine = oordeelDelta ? `\noordeel  +${oordeelDelta}` : '';
-  const line = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp    ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}  (${roll.tier.label})${oordeelLine}\n\`\`\``;
+  const tierLabel = tl[roll.tier.key] ?? roll.tier.label;
+  const oordeelLine = oordeelDelta ? `\n${uis.judgement}  +${oordeelDelta}` : '';
+  const line = `\`\`\`\n[ ${uis.register} ]\n${uis.roll}    ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}  (${tierLabel})${oordeelLine}\n\`\`\``;
 
   return { roll, oordeelDelta, line };
 }

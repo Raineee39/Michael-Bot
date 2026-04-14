@@ -1117,7 +1117,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         },
       });
       try {
-        const { line } = executePassiveRoll(ownerId);
+        const { line } = executePassiveRoll(ownerId, langCode);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: prev + '\n\n' + line, components: [] },
