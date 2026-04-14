@@ -23,7 +23,7 @@ import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn } from './utils/michael-memory.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
@@ -451,7 +451,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           .map(([name, v]) => `${name.padEnd(maxNameLen)}  ${statBar(v ?? 0)}  ${String(v ?? '?').padStart(2)}`)
           .join('\n');
 
-        console.log(`[michael] mijnrol | ${username} (${userId}) | archetype=${character.archetype}`);
+        const displayArchetype = resolveField(character.archetype, langCode);
+        const displayLineage   = resolveField(character.lineage, langCode);
+        const displayTitle     = resolveField(character.title, langCode);
+        console.log(`[michael] mijnrol | ${username} (${userId}) | archetype=${displayArchetype}`);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: {
@@ -461,9 +464,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
               title: embedTitle,
               description: `${mr.subtitle}\n\n*${safeComment}*`,
               fields: [
-                { name: mr.archetypeLabel.replace(/\*\*/g, ''), value: character.archetype,    inline: false },
-                { name: mr.lineageLabel.replace(/\*\*/g, ''),   value: character.lineage,      inline: false },
-                { name: mr.titleLabel.replace(/\*\*/g, ''),     value: `*${character.title}*`, inline: false },
+                { name: mr.archetypeLabel.replace(/\*\*/g, ''), value: displayArchetype,       inline: false },
+                { name: mr.lineageLabel.replace(/\*\*/g, ''),   value: displayLineage,         inline: false },
+                { name: mr.titleLabel.replace(/\*\*/g, ''),     value: `*${displayTitle}*`,    inline: false },
                 { name: '\u200b', value: `\`\`\`\n${statsBlock}\n\`\`\``,                      inline: false },
               ],
             }],
@@ -559,7 +562,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         ];
 
         if (character) {
-          lines.push(`${vc.kosmischeRolLabel}    ${character.archetype} • ${character.lineage} — *${character.title.slice(0, 60)}*`);
+          lines.push(`${vc.kosmischeRolLabel}    ${resolveField(character.archetype, langCode)} • ${resolveField(character.lineage, langCode)} — *${resolveField(character.title, langCode).slice(0, 60)}*`);
         }
 
         lines.push(``, comment);
@@ -665,7 +668,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Rollenspel — use existing character sheet if present; generate one in background after reply
         const existingCharacter = preMemory.michaelCharacter ?? null;
         const characterBlock = existingCharacter && shouldReferenceCharacterThisTurn()
-          ? formatCharacterForPrompt(existingCharacter)
+          ? formatCharacterForPrompt(existingCharacter, langCode)
           : '';
 
         // After 2 explicit requests, unlock; full target-language replies only when they write in that language (or ask again)
@@ -673,7 +676,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const asksAgain = unlocked && getRequestedLanguageCode(userInput) === unlocked.code;
         const speaksIt = unlocked && userSpeaksUnlockedLanguage(unlocked, userInput);
         const languagePermission = unlocked && (speaksIt || asksAgain) ? unlocked : null;
-        console.log(`[michael] chat | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${existingCharacter?.archetype ?? 'nieuw'} | ${username}`);
+          console.log(`[michael] chat | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${existingCharacter ? resolveField(existingCharacter.archetype, langCode) : 'nieuw'} | ${username}`);
 
         // Feature 2 — Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
@@ -1011,16 +1014,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           if (!mechanical) return null;
           const mr = lang.mijnrol ?? {};
           const sn = mr.statNames ?? {};
+          const rv = (v) => typeof v === 'object' ? resolveField(v, langCode) : (v ?? '');
           if (mechanical.kind === 'stat') {
             const label = sn[mechanical.field] ?? mechanical.field;
-            return success
-              ? `${label} +1`
-              : `${label} ${mechanical.delta < 0 ? mechanical.delta : '+' + mechanical.delta}`;
+            return `${label} +1`;
           }
-          if (mechanical.kind === 'title_worse') return mechanical.newValue?.slice(0, 80) ?? null;
-          if (mechanical.kind === 'title')     return mechanical.newValue?.slice(0, 80) ?? null;
-          if (mechanical.kind === 'archetype') return mechanical.newValue ?? null;
-          if (mechanical.kind === 'lineage')   return mechanical.newValue ?? null;
+          if (mechanical.kind === 'title_worse') return rv(mechanical.newValue).slice(0, 80) || null;
+          if (mechanical.kind === 'title')       return rv(mechanical.newValue).slice(0, 80) || null;
+          if (mechanical.kind === 'archetype')   return rv(mechanical.newValue) || null;
+          if (mechanical.kind === 'lineage')     return rv(mechanical.newValue) || null;
           return null;
         })();
         const statPenaltySummary = mechanical?.statPenalty

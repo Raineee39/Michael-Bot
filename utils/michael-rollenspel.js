@@ -19,30 +19,6 @@ export { formatCharacterForPrompt, shouldReferenceCharacterThisTurn };
 
 const STAT_KEYS = ['aura', 'discipline', 'chaos', 'inzicht', 'volharding'];
 
-const SUCCESS_TITLE_FRAGMENTS = {
-  nl: [
-    'van de herziene inschrijving',
-    'der tweede akte',
-    'met het zachtere zegel',
-    'van de heropenbare lijn',
-    'met de betwiste maar erkende claim',
-  ],
-  en: [
-    'of the revised entry',
-    'of the second act',
-    'with the softer seal',
-    'of the reopened line',
-    'with the contested but recognised claim',
-  ],
-  ar: [
-    'المُعاد تسجيله',
-    'ذو الفصل الثاني',
-    'بالختم المُخفَّف',
-    'السطر المُعاد فتحه',
-    'صاحب المطالبة المُعترَض عليها',
-  ],
-};
-
 const WORSE_FRAGMENTS = {
   nl: [
     ' — en de registers vernauwen zich',
@@ -75,30 +51,29 @@ function pick(arr) {
 export async function ensureMichaelCharacter(userId, username, langCode = 'nl') {
   const mem = loadUserMemory(userId);
   if (mem.michaelCharacter) {
-    // Heal titles that accumulated duplicate fragments from past language-switch regenerations
-    const allFragments = [
-      ...WORSE_FRAGMENTS.nl, ...WORSE_FRAGMENTS.en, ...WORSE_FRAGMENTS.ar,
-      ...SUCCESS_TITLE_FRAGMENTS.nl, ...SUCCESS_TITLE_FRAGMENTS.en, ...SUCCESS_TITLE_FRAGMENTS.ar,
-    ];
-    const raw = mem.michaelCharacter.title ?? '';
-    // Detect stacking: same fragment appears more than once, or multiple language variants of the same fragment
-    const seen = new Set();
-    let anyDupe = false;
-    for (const f of allFragments) {
-      const count = (raw.split(f).length - 1);
-      if (count > 1) { anyDupe = true; break; }
-      if (count === 1) {
-        if (seen.has(f)) { anyDupe = true; break; }
-        seen.add(f);
+    const titleField = mem.michaelCharacter.title;
+    // Heal old-format string titles that accumulated mixed-language fragments.
+    // New-format {nl,en,ar} objects have per-language titles and don't need healing.
+    if (typeof titleField === 'string') {
+      const allFragments = [...WORSE_FRAGMENTS.nl, ...WORSE_FRAGMENTS.en, ...WORSE_FRAGMENTS.ar];
+      const seen = new Set();
+      let anyDupe = false;
+      for (const f of allFragments) {
+        const count = (titleField.split(f).length - 1);
+        if (count > 1) { anyDupe = true; break; }
+        if (count === 1) {
+          if (seen.has(f)) { anyDupe = true; break; }
+          seen.add(f);
+        }
       }
-    }
-    if (anyDupe) {
-      // Strip ALL known fragments from title, leaving only the base
-      let base = raw;
-      for (const f of allFragments) base = base.split(f).join('');
-      const cleaned = base.trim().slice(0, 100);
-      patchMichaelCharacter(userId, { title: cleaned });
-      return { ...mem.michaelCharacter, title: cleaned };
+      if (anyDupe) {
+        let base = titleField;
+        for (const f of allFragments) base = base.split(f).join('');
+        const cleaned = base.trim().slice(0, 100);
+        // Store as object to upgrade old string format at the same time
+        patchMichaelCharacter(userId, { title: { nl: cleaned } });
+        return { ...mem.michaelCharacter, title: { nl: cleaned } };
+      }
     }
     return mem.michaelCharacter;
   }
@@ -113,7 +88,6 @@ export async function ensureMichaelCharacter(userId, username, langCode = 'nl') 
     langCode,
   );
   const normalized = normalizeMichaelCharacter(sheet);
-  normalized.lang = langCode;
   saveMichaelCharacter(userId, username, normalized);
   return normalized;
 }
@@ -141,111 +115,100 @@ export function forgivenessThreshold(mood) {
   return 8;
 }
 
-const SUCCESS_ARCHETYPES = {
-  nl: ['maanridder', 'archiefmagiër', 'veldkluizenaar', 'schaduwklerk', 'mistbard', 'altaarwachter',
-       'ketterpaladijn', 'auradruïde', 'zwerfmonnik', 'uitgeputte ziener', 'perkamentgeleerde',
-       'sluipdienaar', 'struikziener', 'wachtkruiper', 'leegte-beoefenaar', 'duisterverbondene'],
-  en: ['moon rider', 'archive mage', 'field hermit', 'shadow clerk', 'mist bard', 'altar warden',
-       'heretic paladin', 'aura druid', 'wandering monk', 'exhausted seer', 'parchment scholar',
-       'lurk-servant', 'hedge seer', 'watch-crawler', 'void practitioner', 'dark-bound one'],
-  ar: ['راكب القمر', 'ساحر الأرشيف', 'ناسك الميدان', 'كاتب الظل', 'مُنشد الضباب', 'حارس المذبح',
-       'الفارس الهرطوقي', 'درويش الهالة', 'الراهب التائه', 'الرائي المُنهَك', 'عالم المخطوطات',
-       'خادم التخفي', 'عرّاف الحواف', 'زاحف الحراسة', 'ممارس الفراغ', 'المُقيَّد بالعهد'],
-};
-
-const SUCCESS_LINEAGES = {
-  nl: ['half-orakel', 'maanwezen', 'veldheksbloed', 'schaduwelf', 'sterveling', 'moerasmens',
-       'woudelv', 'halveling', 'tiefling', 'helsbloed', 'gevallen lichtdrager', 'half-orc',
-       'elementaalkind', 'laag-elf', 'dubbelnatuur', 'bergdwerg'],
-  en: ['half-oracle', 'moon-being', 'hedge-witch blood', 'shadow elf', 'mortal', 'marsh-born',
-       'wood elf', 'halfling', 'tiefling', 'hellblood', 'fallen light-bearer', 'half-orc',
-       'elemental child', 'low elf', 'dual-natured', 'mountain dwarf'],
-  ar: ['نصف العرّاف', 'كائن القمر', 'دم ساحرة الحواف', 'ظل الآلف', 'فانٍ', 'ابن المستنقع',
-       'الآلف الحرجي', 'النصف-آلف', 'شيطاني الدم', 'هلبلود', 'حامل النور الساقط', 'نصف الأورك',
-       'طفل العناصر', 'الآلف الأدنى', 'مزدوج الطبيعة', 'دوارف الجبل'],
-};
-
 /**
  * Detect what category of change the user is requesting.
  * Returns 'lineage' | 'archetype' | 'stat' | 'title' | null.
  */
 function detectRequestKind(verzoek) {
   const v = verzoek.toLowerCase();
-  if (/\b(elf|elv|orc|tiefling|halfling|dwerg|dwarf|half-orc|half-orc|moerasmens|schaduwelf|woudelv|laag-elf|bergdwerg|maanwezen|half-orakel|sterveling|helsbloed|dubbelnatuur|elementaalkind|gevallen|oracle|mortal|marsh|shadow elf|wood elf|low elf|mountain dwarf|moon.?being|hedge.?witch|dual.?natured|elemental|hellblood|light.?bearer)\b/.test(v)) return 'lineage';
-  if (/\b(ridder|knight|magi|magiër|tovenaar|bard|druïde|druid|paladin|monnik|monk|kluizenaar|hermit|ziener|seer|clerk|archivist|archivaris|wachter|warden|dienaar|servant|kruiper|crawler|beoefenaar|practitioner|schaduw|shadow|mist|altaar|altar|auradru)\b/.test(v)) return 'archetype';
+  if (/\b(elf|elv|orc|tiefling|halfling|dwerg|dwarf|half-orc|moerasmens|maanwezen|sterveling|helsbloed|elementaalkind|gevallen|oracle|mortal|marsh|moon.?being|hedge.?witch|elemental|hellblood|light.?bearer|species|ras|afstamming|lineage|bloed|blood|geboren|born)\b/.test(v)) return 'lineage';
+  if (/\b(ridder|knight|magi|magiër|tovenaar|bard|druïde|druid|paladin|monnik|monk|kluizenaar|hermit|ziener|seer|clerk|archivaris|wachter|warden|dienaar|servant|beoefenaar|practitioner|schaduw|shadow|mist|altaar|altar|archetype|klasse|class|rol\b|role)\b/.test(v)) return 'archetype';
   if (/\b(aura|discipline|chaos|inzicht|insight|volharding|persever|stat|statistiek)\b/.test(v)) return 'stat';
-  if (/\b(titel|title|epitheton|naam|name|inschrijving|entry)\b/.test(v)) return 'title';
+  if (/\b(titel|title|epitheton|naam|name|inschrijving|entry|epithet)\b/.test(v)) return 'title';
   return null;
 }
 
-/** Pick the option from a list that best matches keywords in the verzoek. Falls back to random. */
-function pickBestMatch(pool, verzoek) {
-  const words = verzoek.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  const scored = pool.map(item => {
-    const il = item.toLowerCase();
-    const hits = words.filter(w => il.includes(w) || w.includes(il.split(/\s|-/)[0]));
-    return { item, hits: hits.length };
-  });
-  const best = scored.filter(s => s.hits > 0);
-  if (best.length) return pick(best.map(s => s.item));
-  return pick(pool);
+/** Get the {nl, en, ar} title object from a character (handles old string format). */
+function getTitleObj(character) {
+  const t = character.title;
+  if (!t) return { nl: '', en: '', ar: '' };
+  if (typeof t === 'string') return { nl: t, en: t, ar: t };
+  return { nl: t.nl ?? '', en: t.en ?? t.nl ?? '', ar: t.ar ?? t.nl ?? '' };
 }
 
-function applyNegotiationSuccess(userId, character, langCode = 'nl', verzoek = '') {
-  const successFragments = SUCCESS_TITLE_FRAGMENTS[langCode] ?? SUCCESS_TITLE_FRAGMENTS.nl;
-  const archetypes       = SUCCESS_ARCHETYPES[langCode] ?? SUCCESS_ARCHETYPES.nl;
-  const lineages         = SUCCESS_LINEAGES[langCode] ?? SUCCESS_LINEAGES.nl;
+/** Strip all known worse fragments from a title string. */
+function stripWorseFragments(base) {
+  let s = base;
+  for (const lang of ['nl', 'en', 'ar']) {
+    for (const f of WORSE_FRAGMENTS[lang]) s = s.split(f).join('');
+  }
+  return s.trim();
+}
 
+/** Michael generates a new value for a character field in all 3 languages via LLM. */
+async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzoek = '') {
   // Bias toward the category the user actually asked for
   const requestedKind = detectRequestKind(verzoek);
   let branch = Math.random();
-  if      (requestedKind === 'lineage')   branch = 0.82 + Math.random() * 0.18; // → lineage branch
-  else if (requestedKind === 'archetype') branch = 0.62 + Math.random() * 0.20; // → archetype branch
-  else if (requestedKind === 'title')     branch = 0.38 + Math.random() * 0.24; // → title branch
-  else if (requestedKind === 'stat')      branch = Math.random() * 0.38;         // → stat branch
+  if      (requestedKind === 'lineage')   branch = 0.82 + Math.random() * 0.18;
+  else if (requestedKind === 'archetype') branch = 0.62 + Math.random() * 0.20;
+  else if (requestedKind === 'title')     branch = 0.38 + Math.random() * 0.24;
+  else if (requestedKind === 'stat')      branch = Math.random() * 0.38;
 
   if (branch < 0.38) {
-    // Stat branch — prefer a stat the user mentioned
+    // Stat branch — prefer a stat the user mentioned, no LLM needed
     const mentionedStat = STAT_KEYS.find(k => verzoek.toLowerCase().includes(k));
     const k = mentionedStat ?? pick(STAT_KEYS);
     const v = character.stats[k] + 1;
     patchMichaelCharacter(userId, { stats: { [k]: Math.min(18, v) } });
     return { kind: 'stat', field: k, delta: +1 };
   }
+
+  const { generateCharacterFieldChange } = await import('./openai.js');
+
   if (branch < 0.62) {
-    // Title branch
-    const frag = pick(successFragments);
-    const allWorse = [...WORSE_FRAGMENTS.nl, ...WORSE_FRAGMENTS.en, ...WORSE_FRAGMENTS.ar];
-    let base = character.title;
-    for (const w of allWorse) base = base.replace(w, '');
-    const newTitle = `${base.trim()} ${frag}`.trim().slice(0, 118);
+    // Title branch — LLM generates a new title in all 3 languages
+    // Strip existing worse fragments from each lang's title before passing to LLM
+    const raw = getTitleObj(character);
+    const cleaned = {
+      title: {
+        nl: stripWorseFragments(raw.nl),
+        en: stripWorseFragments(raw.en),
+        ar: stripWorseFragments(raw.ar),
+      },
+      stats: character.stats,
+    };
+    const newTitle = await generateCharacterFieldChange('title', { verzoek, characterBefore: cleaned, langCode });
     patchMichaelCharacter(userId, { title: newTitle });
     return { kind: 'title', field: 'title', newValue: newTitle };
   }
+
   if (branch < 0.82) {
-    // Archetype branch — try to match what the user named
-    const next = pickBestMatch(archetypes, verzoek);
-    patchMichaelCharacter(userId, { archetype: next });
-    return { kind: 'archetype', field: 'archetype', newValue: next };
+    // Archetype branch — LLM generates new archetype in all 3 languages
+    const newArchetype = await generateCharacterFieldChange('archetype', { verzoek, characterBefore: character, langCode });
+    patchMichaelCharacter(userId, { archetype: newArchetype });
+    return { kind: 'archetype', field: 'archetype', newValue: newArchetype };
   }
-  // Lineage branch — try to match what the user named (e.g. "elf" → schaduwelf / wood elf)
-  const lin = pickBestMatch(lineages, verzoek);
-  patchMichaelCharacter(userId, { lineage: lin });
-  return { kind: 'lineage', field: 'lineage', newValue: lin };
+
+  // Lineage branch — LLM generates new lineage in all 3 languages
+  const newLineage = await generateCharacterFieldChange('lineage', { verzoek, characterBefore: character, langCode });
+  patchMichaelCharacter(userId, { lineage: newLineage });
+  return { kind: 'lineage', field: 'lineage', newValue: newLineage };
 }
 
 function applyNegotiationFailure(userId, character, langCode = 'nl') {
-  const worseFragments = WORSE_FRAGMENTS[langCode] ?? WORSE_FRAGMENTS.nl;
-  // Pick a fragment not already present in the title to prevent stacking duplicates
-  const available = worseFragments.filter(f => !character.title.includes(f));
-  const pool = available.length ? available : worseFragments;
-  const frag = pick(pool);
-  if (character.title.includes(frag)) {
-    return { kind: 'title_worse', newValue: character.title };
+  const titleObj = getTitleObj(character);
+  const newTitle = {};
+  for (const lang of ['nl', 'en', 'ar']) {
+    const worseFragments = WORSE_FRAGMENTS[lang];
+    const base = titleObj[lang];
+    // Pick a worse fragment not already in this language's title
+    const available = worseFragments.filter(f => !base.includes(f));
+    const frag = pick(available.length ? available : worseFragments);
+    newTitle[lang] = `${base}${frag}`.trim().slice(0, 120);
   }
-  const t = `${character.title}${frag}`.trim().slice(0, 120);
-  patchMichaelCharacter(userId, { title: t });
-  return { kind: 'title_worse', newValue: t };
+  patchMichaelCharacter(userId, { title: newTitle });
+  return { kind: 'title_worse', newValue: newTitle };
 }
 
 /**
@@ -264,7 +227,7 @@ export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl
 
   let oordeelDelta = 0;
   if (success) {
-    mechanical = applyNegotiationSuccess(userId, characterBefore, langCode, verzoek);
+    mechanical = await applyNegotiationSuccess(userId, characterBefore, langCode, verzoek);
     oordeelDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 2 : 1;
     patchUserState(userId, oordeelDelta, mood);
   } else {

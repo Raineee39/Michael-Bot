@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import OpenAI from "openai";
 import { getLang } from './lang/index.js';
+import { resolveField } from './michael-memory.js';
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -328,7 +329,7 @@ export async function generateVibecheckComment(username, judgementLabel, impress
   const cosmicBlock = cosmicRoleBlock(lang, cosmicRole);
 
   const characterBlock = character
-    ? `\nCosmic role: ${character.archetype} (${character.lineage}) — ${character.title}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, insight ${character.stats?.inzicht ?? '?'}, perseverance ${character.stats?.volharding ?? '?'}`
+    ? `\nCosmic role: ${resolveField(character.archetype, langCode)} (${resolveField(character.lineage, langCode)}) — ${resolveField(character.title, langCode)}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, insight ${character.stats?.inzicht ?? '?'}, perseverance ${character.stats?.volharding ?? '?'}`
     : '';
 
   const response = await client.responses.create({
@@ -386,6 +387,95 @@ ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with
  * Generate a new Michael-assigned character sheet for a user.
  * Returns a plain object — caller must normalize + persist.
  */
+/**
+ * Ask Michael to generate a new value for one character field (archetype, lineage, or title)
+ * in all three languages based on what the user requested in their negotiation.
+ * Returns { nl, en, ar }.
+ */
+export async function generateCharacterFieldChange(kind, { verzoek, characterBefore, langCode }) {
+  const currentNl = resolveField(characterBefore[kind], 'nl');
+  const currentEn = resolveField(characterBefore[kind], 'en') || currentNl;
+  const currentAr = resolveField(characterBefore[kind], 'ar') || currentNl;
+
+  const hints = {
+    archetype: 'Archetypes are cosmic role labels e.g. "wandering monk", "shadow clerk", "mist bard", "hedge seer", "void practitioner". Keep them short (1–3 words).',
+    lineage:   'Lineages are species or bloodlines e.g. "mortal", "shadow elf", "tiefling", "moon-being", "marsh-born", "half-oracle". Keep them short (1–3 words).',
+    title:     'Titles are epithets appended to the name e.g. "of hesitant questions", "with the contested seal", "of the second act". Keep them under 10 words.',
+  }[kind] ?? '';
+
+  try {
+    const response = await client.responses.create({
+      model: 'gpt-4.1-mini',
+      max_output_tokens: 130,
+      input: `
+You are Michael (Archangel in Dutch/English, Imru' al-Qais the classical Arabic poet in Arabic), maintaining a cosmic RPG register.
+
+A user's negotiation succeeded. Their request: "${verzoek}"
+
+Current ${kind}:
+- Dutch: "${currentNl}"
+- English: "${currentEn}"
+- Arabic: "${currentAr}"
+
+Generate a new ${kind} that partially honors the request. ${hints}
+Keep Arabic in the style of Imru' al-Qais — poetic, ancient, weighty epithets.
+Keep Dutch/English in Michael's cosmic bureaucratic register.
+
+Return ONLY a JSON object (no markdown, no extra text):
+{"nl": "...", "en": "...", "ar": "..."}
+      `.trim(),
+    });
+    const raw = response.output[0].content[0].text.trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+    // Ensure all three languages are present; fall back to source lang if missing
+    return {
+      nl: parsed.nl || currentNl,
+      en: parsed.en || currentEn,
+      ar: parsed.ar || currentAr,
+    };
+  } catch {
+    return { nl: currentNl, en: currentEn, ar: currentAr };
+  }
+}
+
+/**
+ * Translate archetype, lineage and title from one language to the other two.
+ * Returns a partial {nl?, en?, ar?} object for each field.
+ */
+async function translateCharacterFields({ archetype, lineage, title }, fromLang) {
+  const others = ['nl', 'en', 'ar'].filter(l => l !== fromLang);
+  const langNames = { nl: 'Dutch', en: 'English', ar: 'Arabic' };
+  try {
+    const response = await client.responses.create({
+      model: 'gpt-4.1-mini',
+      max_output_tokens: 180,
+      input: `
+Translate these RPG character sheet fields for a celestial Discord bot persona.
+Source (${langNames[fromLang]}):
+- archetype: "${archetype}"
+- lineage: "${lineage}"
+- title: "${title}"
+
+Translate to ${others.map(l => langNames[l]).join(' and ')}.
+For Arabic keep the style of Imru' al-Qais — poetic, ancient, weighty epithets.
+For Dutch/English keep the cosmic bureaucratic angelic register.
+
+Return ONLY a JSON object (no markdown):
+{
+  "${others[0]}": { "archetype": "...", "lineage": "...", "title": "..." },
+  "${others[1]}": { "archetype": "...", "lineage": "...", "title": "..." }
+}
+      `.trim(),
+    });
+    const raw = response.output[0].content[0].text.trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    return JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+  } catch {
+    return {};
+  }
+}
+
 export async function generateMichaelCharacterSheet(username, judgementLabel, impression, currentMood, langCode = 'nl') {
   const lang = getLang(langCode);
   const cs = lang.characterSheet;
@@ -427,18 +517,42 @@ ${cs.schemaInstruction}
     `.trim(),
   });
 
+  const fallback = {
+    archetype: { nl: 'zwerfmonnik', en: 'wandering monk', ar: 'الراهب التائه' },
+    lineage:   { nl: 'sterveling', en: 'mortal', ar: 'فانٍ' },
+    title:     { nl: 'van de onduidelijke afstemming', en: 'of unclear attunement', ar: 'ذو الانسجام الغامض' },
+    stats:     { aura: 9, discipline: 8, chaos: 12, inzicht: 10, volharding: 7 },
+  };
+
+  let sheet;
   try {
     const raw = response.output[0].content[0].text.trim();
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    return JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+    sheet = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
   } catch {
-    return {
-      archetype: langCode === 'ar' ? 'الراهب التائه' : langCode === 'en' ? 'wandering monk' : 'zwerfmonnik',
-      lineage:   langCode === 'ar' ? 'فانٍ' : langCode === 'en' ? 'mortal' : 'sterveling',
-      title:     langCode === 'ar' ? 'ذو الانسجام الغامض' : langCode === 'en' ? 'of unclear attunement' : 'van de onduidelijke afstemming',
-      stats: { aura: 9, discipline: 8, chaos: 12, inzicht: 10, volharding: 7 },
-    };
+    return fallback;
   }
+
+  // Translate archetype, lineage, title to the other two languages
+  const translations = await translateCharacterFields(
+    { archetype: sheet.archetype, lineage: sheet.lineage, title: sheet.title },
+    langCode,
+  );
+
+  const buildField = (key) => {
+    const result = { [langCode]: sheet[key] };
+    for (const [l, t] of Object.entries(translations)) {
+      if (t?.[key]) result[l] = t[key];
+    }
+    return result;
+  };
+
+  return {
+    archetype: buildField('archetype'),
+    lineage:   buildField('lineage'),
+    title:     buildField('title'),
+    stats:     sheet.stats ?? fallback.stats,
+  };
 }
 
 /**
@@ -447,7 +561,11 @@ ${cs.schemaInstruction}
 export async function generateMijnRolComment(username, character, judgementLabel, currentMood, langCode = 'nl') {
   const lang = getLang(langCode);
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
-  const { archetype, lineage, title, stats } = character;
+  const { stats } = character;
+  // Resolve multilingual fields to the active language
+  const archetype = resolveField(character.archetype, langCode);
+  const lineage   = resolveField(character.lineage, langCode);
+  const title     = resolveField(character.title, langCode);
 
   // Use language-appropriate stat names if available
   const statNames = lang.characterSheet?.statNames ?? { aura: 'aura', discipline: 'discipline', chaos: 'chaos', inzicht: 'inzicht', volharding: 'volharding' };
@@ -499,17 +617,30 @@ export async function generateOnderhandelenNarrative({
 
   function describeMechanical(m) {
     if (!m) return 'nothing concrete';
+    const val = (v) => typeof v === 'object' ? (v[langCode] ?? v.nl ?? JSON.stringify(v)) : v;
     if (m.kind === 'stat') return `stat "${m.field}" +1`;
-    if (m.kind === 'title') return `title changed to "${m.newValue}"`;
-    if (m.kind === 'archetype') return `archetype changed to "${m.newValue}"`;
-    if (m.kind === 'lineage') return `lineage changed to "${m.newValue}"`;
-    if (m.kind === 'title_worse') return `title worsened to "${m.newValue}"${m.statPenalty ? `, stat "${m.statPenalty}" −1` : ''}`;
+    if (m.kind === 'title') return `title changed to "${val(m.newValue)}"`;
+    if (m.kind === 'archetype') return `archetype changed to "${val(m.newValue)}"`;
+    if (m.kind === 'lineage') return `lineage changed to "${val(m.newValue)}"`;
+    if (m.kind === 'title_worse') return `title worsened to "${val(m.newValue)}"${m.statPenalty ? `, stat "${m.statPenalty}" −1` : ''}`;
     return JSON.stringify(m);
   }
 
   const resultDesc = success
     ? `The request succeeds. What changed: ${describeMechanical(mechanical)}.`
     : `The request fails. What worsened: ${describeMechanical(mechanical)}.`;
+
+  // Resolve multilingual fields to active language for the narrative prompt
+  const rBefore = {
+    archetype: resolveField(characterBefore.archetype, langCode),
+    lineage:   resolveField(characterBefore.lineage, langCode),
+    title:     resolveField(characterBefore.title, langCode),
+  };
+  const rAfter = {
+    archetype: resolveField(characterAfter.archetype, langCode),
+    lineage:   resolveField(characterAfter.lineage, langCode),
+    title:     resolveField(characterAfter.title, langCode),
+  };
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
@@ -522,8 +653,8 @@ ${personaIntro(langCode)} ${langCode === 'ar'
 ${langCode === 'ar' ? 'طلب المستخدم' : "User's request"}: "${verzoek}"
 ${langCode === 'ar' ? 'الرمية' : 'Roll'}: ${rollLine} — ${tierLabel}
 ${resultDesc}
-${langCode === 'ar' ? 'النمط كان' : 'Archetype was'}: ${characterBefore.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${characterBefore.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${characterBefore.title}"
-${langCode === 'ar' ? 'النمط الآن' : 'Archetype now'}: ${characterAfter.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${characterAfter.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${characterAfter.title}"
+${langCode === 'ar' ? 'النمط كان' : 'Archetype was'}: ${rBefore.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${rBefore.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${rBefore.title}"
+${langCode === 'ar' ? 'النمط الآن' : 'Archetype now'}: ${rAfter.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${rAfter.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${rAfter.title}"
 ${langCode === 'ar' ? 'الحكم الآن' : 'Verdict now'}: ${judgementScore}
 
 ${langCode === 'ar'

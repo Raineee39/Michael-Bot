@@ -152,8 +152,8 @@ export function startGateway() {
           });
         }
 
-        // 90% chance the persona interjects when its name is said
-        if (Math.random() > 0.90) return;
+        // 5% chance the persona interjects when its name is said
+        if (Math.random() > 0.05) return;
 
         const gwLangCode = resolveLanguage(guildId, authorId);
         const gwLang = getLang(gwLangCode);

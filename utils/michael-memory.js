@@ -436,6 +436,33 @@ function clampStat(n) {
   return Math.max(3, Math.min(18, Math.round(x)));
 }
 
+/**
+ * Resolve a multilingual character field to a string for the given language.
+ * Accepts either old-format strings (returned as-is) or new-format {nl,en,ar} objects.
+ */
+export function resolveField(field, langCode = 'nl') {
+  if (!field) return '?';
+  if (typeof field === 'string') return field;
+  return field[langCode] ?? field.nl ?? field.en ?? field.ar ?? Object.values(field)[0] ?? '?';
+}
+
+/** Normalise a raw text field into a {nl, en, ar} object (or preserve existing object). */
+function normalizeTextField(raw, fallbacks, maxLen = 100) {
+  if (!raw) return { ...fallbacks };
+  if (typeof raw === 'string') {
+    // Old string format — store under nl; other langs will be filled by translation
+    return { nl: raw.slice(0, maxLen) };
+  }
+  if (typeof raw === 'object') {
+    const out = {};
+    for (const lang of ['nl', 'en', 'ar']) {
+      if (raw[lang]) out[lang] = String(raw[lang]).slice(0, maxLen);
+    }
+    return Object.keys(out).length ? out : { ...fallbacks };
+  }
+  return { ...fallbacks };
+}
+
 /** Normalize a character object from AI or templates before saving. */
 export function normalizeMichaelCharacter(raw) {
   const now = Date.now();
@@ -445,9 +472,12 @@ export function normalizeMichaelCharacter(raw) {
     stats[k] = clampStat(statsIn[k] ?? 10);
   }
   return {
-    archetype: String(raw?.archetype ?? 'onbenoemde zwerver').slice(0, 80),
-    lineage: String(raw?.lineage ?? 'sterveling').slice(0, 80),
-    title: String(raw?.title ?? 'zonder erkenbare titel').slice(0, 120),
+    archetype: normalizeTextField(raw?.archetype,
+      { nl: 'onbenoemde zwerver', en: 'unnamed wanderer', ar: 'الناسك المجهول' }, 80),
+    lineage:   normalizeTextField(raw?.lineage,
+      { nl: 'sterveling', en: 'mortal', ar: 'فانٍ' }, 80),
+    title:     normalizeTextField(raw?.title,
+      { nl: 'zonder erkenbare titel', en: 'of unrecognised title', ar: 'بلا لقب معترَف به' }, 120),
     stats,
     assignedAt: typeof raw?.assignedAt === 'number' ? raw.assignedAt : now,
     lastUpdatedAt: now,
@@ -528,15 +558,33 @@ export function saveMichaelCharacter(userId, username, character) {
   saveAll(all);
 }
 
-/** Shallow-merge fields into michaelCharacter. */
+/** Deep-merge fields into michaelCharacter.
+ *  Multilingual text fields (archetype, lineage, title) are object-merged so
+ *  existing language translations are preserved when only some langs are updated. */
 export function patchMichaelCharacter(userId, partial) {
   const all = loadAll();
   const user = all[userId];
   if (!user?.michaelCharacter) return null;
   migrateMichaelRollenspel(user);
   const prev = user.michaelCharacter;
-  const next = { ...prev, ...partial };
-  next.stats = { ...prev.stats, ...(partial.stats ?? {}) };
+  const next = { ...prev };
+
+  for (const [k, v] of Object.entries(partial)) {
+    if (k === 'stats') {
+      next.stats = { ...prev.stats, ...v };
+    } else if (k === 'archetype' || k === 'lineage' || k === 'title') {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        // Deep-merge: preserve existing translations, add/overwrite supplied langs
+        const prevObj = (prev[k] && typeof prev[k] === 'object') ? prev[k] : { nl: prev[k] ?? '' };
+        next[k] = { ...prevObj, ...v };
+      } else {
+        next[k] = v;
+      }
+    } else {
+      next[k] = v;
+    }
+  }
+
   for (const k of STAT_KEYS) {
     next.stats[k] = clampStat(next.stats[k]);
   }
@@ -547,11 +595,14 @@ export function patchMichaelCharacter(userId, partial) {
   return next;
 }
 
-/** One-line summary for LLM prompts (no JSON). */
-export function formatCharacterForPrompt(character) {
+/** One-line summary for LLM prompts. Resolves multilingual fields to the requested language. */
+export function formatCharacterForPrompt(character, langCode = 'nl') {
   if (!character) return '';
-  const { archetype, lineage, title, stats } = character;
-  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${archetype}", ras/afstamming "${lineage}", titel/epitheton "${title}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}.`;
+  const a = resolveField(character.archetype, langCode);
+  const l = resolveField(character.lineage, langCode);
+  const t = resolveField(character.title, langCode);
+  const { stats } = character;
+  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${a}", ras/afstamming "${l}", titel/epitheton "${t}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}.`;
 }
 
 /** ~12% suggestion: Michael may nod at the role in a reply. */
