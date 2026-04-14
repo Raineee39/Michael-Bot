@@ -19,21 +19,53 @@ export { formatCharacterForPrompt, shouldReferenceCharacterThisTurn };
 
 const STAT_KEYS = ['aura', 'discipline', 'chaos', 'inzicht', 'volharding'];
 
-const SUCCESS_TITLE_FRAGMENTS = [
-  'van de herziene inschrijving',
-  'der tweede akte',
-  'met het zachtere zegel',
-  'van de heropenbare lijn',
-  'met de betwiste maar erkende claim',
-];
+const SUCCESS_TITLE_FRAGMENTS = {
+  nl: [
+    'van de herziene inschrijving',
+    'der tweede akte',
+    'met het zachtere zegel',
+    'van de heropenbare lijn',
+    'met de betwiste maar erkende claim',
+  ],
+  en: [
+    'of the revised entry',
+    'of the second act',
+    'with the softer seal',
+    'of the reopened line',
+    'with the contested but recognised claim',
+  ],
+  ar: [
+    'المُعاد تسجيله',
+    'ذو الفصل الثاني',
+    'بالختم المُخفَّف',
+    'السطر المُعاد فتحه',
+    'صاحب المطالبة المُعترَض عليها',
+  ],
+};
 
-const WORSE_FRAGMENTS = [
-  ' — en de registers vernauwen zich',
-  ' — Michaël noteert verzet',
-  ' — titel ingekort door het veld',
-  ' — de aanvechter',
-  ' — der onwaardige inschrijving',
-];
+const WORSE_FRAGMENTS = {
+  nl: [
+    ' — en de registers vernauwen zich',
+    ' — Michaël noteert verzet',
+    ' — titel ingekort door het veld',
+    ' — de aanvechter',
+    ' — der onwaardige inschrijving',
+  ],
+  en: [
+    ' — and the registers narrow',
+    ' — Michael notes resistance',
+    ' — title amended by the field',
+    ' — the challenger',
+    ' — of the unworthy enrolment',
+  ],
+  ar: [
+    ' — والسجلات تضيق',
+    ' — امرؤ القيس يُدوِّن العصيان',
+    ' — اللقب مختصَر من الميدان',
+    ' — المُنازِع',
+    ' — التسجيل الناقص',
+  ],
+};
 
 function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -82,7 +114,36 @@ export function forgivenessThreshold(mood) {
   return 8;
 }
 
-function applyNegotiationSuccess(userId, character) {
+const SUCCESS_ARCHETYPES = {
+  nl: ['maanridder', 'archiefmagiër', 'veldkluizenaar', 'schaduwklerk', 'mistbard', 'altaarwachter',
+       'ketterpaladijn', 'auradruïde', 'zwerfmonnik', 'uitgeputte ziener', 'perkamentgeleerde',
+       'sluipdienaar', 'struikziener', 'wachtkruiper', 'leegte-beoefenaar', 'duisterverbondene'],
+  en: ['moon rider', 'archive mage', 'field hermit', 'shadow clerk', 'mist bard', 'altar warden',
+       'heretic paladin', 'aura druid', 'wandering monk', 'exhausted seer', 'parchment scholar',
+       'lurk-servant', 'hedge seer', 'watch-crawler', 'void practitioner', 'dark-bound one'],
+  ar: ['راكب القمر', 'ساحر الأرشيف', 'ناسك الميدان', 'كاتب الظل', 'مُنشد الضباب', 'حارس المذبح',
+       'الفارس الهرطوقي', 'درويش الهالة', 'الراهب التائه', 'الرائي المُنهَك', 'عالم المخطوطات',
+       'خادم التخفي', 'عرّاف الحواف', 'زاحف الحراسة', 'ممارس الفراغ', 'المُقيَّد بالعهد'],
+};
+
+const SUCCESS_LINEAGES = {
+  nl: ['half-orakel', 'maanwezen', 'veldheksbloed', 'schaduwelf', 'sterveling', 'moerasmens',
+       'woudelv', 'halveling', 'tiefling', 'helsbloed', 'gevallen lichtdrager', 'half-orc',
+       'elementaalkind', 'laag-elf', 'dubbelnatuur', 'bergdwerg'],
+  en: ['half-oracle', 'moon-being', 'hedge-witch blood', 'shadow elf', 'mortal', 'marsh-born',
+       'wood elf', 'halfling', 'tiefling', 'hellblood', 'fallen light-bearer', 'half-orc',
+       'elemental child', 'low elf', 'dual-natured', 'mountain dwarf'],
+  ar: ['نصف العرّاف', 'كائن القمر', 'دم ساحرة الحواف', 'ظل الآلف', 'فانٍ', 'ابن المستنقع',
+       'الآلف الحرجي', 'النصف-آلف', 'شيطاني الدم', 'هلبلود', 'حامل النور الساقط', 'نصف الأورك',
+       'طفل العناصر', 'الآلف الأدنى', 'مزدوج الطبيعة', 'دوارف الجبل'],
+};
+
+function applyNegotiationSuccess(userId, character, langCode = 'nl') {
+  const successFragments = SUCCESS_TITLE_FRAGMENTS[langCode] ?? SUCCESS_TITLE_FRAGMENTS.nl;
+  const worseFragments   = WORSE_FRAGMENTS[langCode] ?? WORSE_FRAGMENTS.nl;
+  const archetypes       = SUCCESS_ARCHETYPES[langCode] ?? SUCCESS_ARCHETYPES.nl;
+  const lineages         = SUCCESS_LINEAGES[langCode] ?? SUCCESS_LINEAGES.nl;
+
   const branch = Math.random();
   if (branch < 0.38) {
     const k = pick(STAT_KEYS);
@@ -91,41 +152,35 @@ function applyNegotiationSuccess(userId, character) {
     return { kind: 'stat', field: k, delta: +1 };
   }
   if (branch < 0.62) {
-    const frag = pick(SUCCESS_TITLE_FRAGMENTS);
-    const newTitle = `${character.title.replace(/\s+—\s+de (aanvechter|onwaardige inschrijving).*$/i, '').trim()} ${frag}`.trim().slice(0, 118);
+    const frag = pick(successFragments);
+    // Strip any existing worse fragments before appending the success one
+    const allWorse = [...WORSE_FRAGMENTS.nl, ...WORSE_FRAGMENTS.en, ...WORSE_FRAGMENTS.ar];
+    let base = character.title;
+    for (const w of allWorse) base = base.replace(w, '');
+    const newTitle = `${base.trim()} ${frag}`.trim().slice(0, 118);
     patchMichaelCharacter(userId, { title: newTitle });
     return { kind: 'title', field: 'title', newValue: newTitle };
   }
   if (branch < 0.82) {
-    const alt = [
-      'maanridder', 'archiefmagiër', 'veldkluizenaar', 'schaduwklerk', 'mistbard', 'altaarwachter',
-      'ketterpaladijn', 'auradruïde', 'zwerfmonnik', 'uitgeputte ziener', 'perkamentgeleerde',
-      'sluipdienaar', 'struikziener', 'wachtkruiper', 'leegte-beoefenaar', 'duisterverbondene',
-    ];
-    const next = pick(alt);
+    const next = pick(archetypes);
     patchMichaelCharacter(userId, { archetype: next });
     return { kind: 'archetype', field: 'archetype', newValue: next };
   }
-  const lineages = [
-    'half-orakel', 'maanwezen', 'veldheksbloed', 'schaduwelf', 'sterveling', 'moerasmens',
-    'woudelv', 'halveling', 'tiefling', 'helsbloed', 'gevallen lichtdrager', 'half-orc',
-    'elementaalkind', 'laag-elf', 'dubbelnatuur', 'bergdwerg',
-  ];
   const lin = pick(lineages);
   patchMichaelCharacter(userId, { lineage: lin });
   return { kind: 'lineage', field: 'lineage', newValue: lin };
 }
 
-function applyNegotiationFailure(userId, character) {
+function applyNegotiationFailure(userId, character, langCode = 'nl') {
+  const worseFragments = WORSE_FRAGMENTS[langCode] ?? WORSE_FRAGMENTS.nl;
   // Pick a fragment not already present in the title to prevent stacking duplicates
-  const available = WORSE_FRAGMENTS.filter(f => !character.title.includes(f));
-  const pool = available.length ? available : WORSE_FRAGMENTS;
+  const available = worseFragments.filter(f => !character.title.includes(f));
+  const pool = available.length ? available : worseFragments;
   const frag = pick(pool);
-  // If title already contains this exact fragment, just return without changing
   if (character.title.includes(frag)) {
     return { kind: 'title_worse', newValue: character.title };
   }
-  let t = `${character.title}${frag}`.trim().slice(0, 120);
+  const t = `${character.title}${frag}`.trim().slice(0, 120);
   patchMichaelCharacter(userId, { title: t });
   return { kind: 'title_worse', newValue: t };
 }
@@ -146,11 +201,11 @@ export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl
 
   let oordeelDelta = 0;
   if (success) {
-    mechanical = applyNegotiationSuccess(userId, characterBefore);
+    mechanical = applyNegotiationSuccess(userId, characterBefore, langCode);
     oordeelDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 2 : 1;
     patchUserState(userId, oordeelDelta, mood);
   } else {
-    mechanical = applyNegotiationFailure(userId, characterBefore);
+    mechanical = applyNegotiationFailure(userId, characterBefore, langCode);
     oordeelDelta = -1;
     patchUserState(userId, oordeelDelta, mood);
     if (Math.random() < 0.35) {
