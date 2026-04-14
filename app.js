@@ -23,7 +23,7 @@ import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn } from './utils/michael-memory.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, updateMichaelPoints } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
@@ -39,6 +39,40 @@ function buildDateButtons(choices) {
     })),
   };
 }
+
+// Pending /onderhandelen verzoek texts — keyed by userId, cleared after use or 10 min
+const pendingNegotiations = new Map();
+
+const FLEE_VERGEEFMIJ = [
+  'U heeft het niet aangedurfd.  Begrijpelijk...  maar onfortuinlijk.  Uw situatie blijft ongewijzigd....Michael',
+  'Een strategische terugtrekking.  Ik noteer dit ook....Michael',
+  'Vlucht is ook een keuze.  Niet de meest respectvolle...  maar een keuze....Michael',
+  'U trok zich terug voor de worp.  Het register blijft staan....Michael',
+];
+
+const FLEE_ONDERHANDELEN = [
+  'U trok uw verzoek in.  Dat is wellicht wijsheid.  Of lafheid.  Ik onderscheid dat niet altijd....Michael',
+  'Het register blijft ongewijzigd.  U hebt mijn tijd verspild....Michael',
+  'Een aarzelende terugkeer naar uw positie.  Ik heb dit genoteerd....Michael',
+  'Goed.  Dan blijft alles zoals ik het had vastgesteld.  Zoals het hoort....Michael',
+];
+
+// Sent a few minutes after a catastrophically bad roll — Michael has a change of heart
+const DIVINE_PARDON_VERGEEFMIJ = [
+  'Ik heb er nog eens over nagedacht...  en eigenlijk klopte mijn weigering niet.  U bent vergeven.  Noteer dat....Michael',
+  'Iets trok aan mijn aandacht.  U wordt toch vergeven.  Vraag mij niet waarom....Michael',
+  'Het hogere register heeft mij gecorrigeerd.  Vergeving is van toepassing.  Dit staat niet open voor discussie....Michael',
+  'Na heroverweging...  de afwijzing was voorbarig.  U bent vergeven.  Niet omdat u het verdiende....Michael',
+  'Ik weet niet waarom ik dit doe.  Maar ik vergeef u toch.  Tijdelijk en onder voorbehoud....Michael',
+];
+
+const DIVINE_PARDON_ONDERHANDELEN = [
+  'Ik heb het register opnieuw geraadpleegd...  en uw verzoek is toch ingewilligd.  Ik weet ook niet waarom....Michael',
+  'Na heroverweging...  hetgeen u vroeg wordt deels toegekend.  Niet omdat u het verdiende....Michael',
+  'Het kosmos heeft mij gecorrigeerd op dit punt.  Uw aanpassing is doorgevoerd.  Verdere vragen worden niet beantwoord....Michael',
+  'Ik heb mij bedacht.  Dat komt zelden voor.  Uw verzoek is alsnog gehonoreerd.  U mag dankbaar zijn....Michael',
+  'Er was iets aan uw toon dat mij later raakte.  Uw verzoek is ingewilligd.  Dit betekent niet dat u gelijk had....Michael',
+];
 
 async function fetchGiphyGif(query) {
   const key = process.env.GIPHY_API_KEY;
@@ -500,15 +534,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "vergeefmij" — roll-based forgiveness
+    // "vergeefmij" — roll-based forgiveness (user must click to roll)
     if (name === 'vergeefmij') {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
-      const username = req.body.member?.user?.username ?? req.body.user?.username;
       const memory   = loadUserMemory(userId);
       const currentMood = memory.currentMood ?? 'afwezig';
       const moodIdx  = MICHAEL_MOODS.indexOf(currentMood);
 
-      // Already calm — apology is unnecessary (no roll needed)
+      // Already calm — apology is unnecessary
       if (moodIdx <= 2) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -516,34 +549,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       }
 
-      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
-      try {
-        const { forgiven, narrative, roll, need, newMood, michaelPoints } =
-          await runForgivenessRoll(userId, username, currentMood, moodIdx);
-
-        const sign = roll.modifier >= 0 ? '+' : '−';
-        const rollDisplay = `*Worp: ${roll.raw} ${sign}${Math.abs(roll.modifier)} = **${roll.total}** — drempel ${need} — ${roll.tier.label}*`;
-        const moodDisplay = forgiven
-          ? `*Stemming: **${currentMood}** → **${newMood}***`
-          : `*Stemming onveranderd: **${currentMood}***`;
-        const mpDisplay = `*Michaël-punten: ${michaelPoints}*`;
-
-        const header = forgiven ? '🕊️✨🕊️✨🕊️' : '🔥💢🔥💢🔥';
-        const content = `${header}\n${narrative}\n\n${rollDisplay}\n${moodDisplay}  ·  ${mpDisplay}`;
-        console.log(`[michael] vergeefmij | ${username} | roll=${roll.total} need=${need} forgiven=${forgiven}`);
-
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content },
-        });
-      } catch (err) {
-        console.error('[michael] vergeefmij error:', err);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: pick(APOLOGY_REJECTED) },
-        });
-      }
-      return;
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: `🎲✨🎲✨🎲\n**VERGEVINGSRITE**\n*Michaël staat gereed het lot te raadplegen.  Stemming: **${currentMood}**.*\n\nGaat u werkelijk door met dit verzoek?`,
+          components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_roll:${userId}`, label: '🎲 Gooi de dobbelsteen', style: ButtonStyleTypes.PRIMARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_flee:${userId}`, label: '🏃 Vlucht weg', style: ButtonStyleTypes.SECONDARY },
+            ],
+          }],
+        },
+      });
     }
 
     // "mijnrol" — shows the user their Michael-assigned character sheet
@@ -599,37 +617,32 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // "onderhandelen" — user tries to negotiate their character sheet
+    // "onderhandelen" — user tries to negotiate their character sheet (user must click to roll)
     if (name === 'onderhandelen') {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
-      const username = req.body.member?.user?.username ?? req.body.user?.username;
       const verzoek  = data.options.find(o => o.name === 'verzoek')?.value ?? '';
 
-      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
-      try {
-        const { narrative, roll, dc, success, mechanical, michaelPoints } =
-          await runOnderhandelen(userId, username, verzoek);
+      // Store verzoek for 10 minutes so the button handler can retrieve it
+      pendingNegotiations.set(userId, {
+        verzoek,
+        username: req.body.member?.user?.username ?? req.body.user?.username,
+        expiresAt: Date.now() + 10 * 60 * 1000,
+      });
 
-        const sign = roll.modifier >= 0 ? '+' : '−';
-        const rollDisplay = `*Worp: ${roll.raw} ${sign}${Math.abs(roll.modifier)} = **${roll.total}** — drempel ${dc} — ${roll.tier.label}*`;
-        const mpDisplay = `*Michaël-punten: ${michaelPoints}*`;
-        const header = success ? '📜✨📜✨📜' : '🔥📜🔥📜🔥';
-
-        const content = `${header}\n**ONDERHANDELINGSREGISTER**\n*"${verzoek.slice(0, 80)}"*\n\n${narrative}\n\n${rollDisplay}\n${mpDisplay}`;
-        console.log(`[michael] onderhandelen | ${username} | roll=${roll.total} dc=${dc} success=${success} | ${verzoek.slice(0, 50)}`);
-
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content },
-        });
-      } catch (err) {
-        console.error('[michael] onderhandelen error:', err);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: 'De onderhandelingsregisters zijn gesloten...  dit is niet het moment....Michael' },
-        });
-      }
-      return;
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: `📜✨📜✨📜\n**ONDERHANDELINGSREGISTER**\n*"${verzoek.slice(0, 80)}"*\n\nMichaël heeft uw verzoek ontvangen.  Wilt u de kosmische worp wagen?`,
+          components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_roll:${userId}`, label: '🎲 Gooi de dobbelsteen', style: ButtonStyleTypes.PRIMARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_flee:${userId}`, label: '🏃 Trek verzoek in', style: ButtonStyleTypes.SECONDARY },
+            ],
+          }],
+        },
+      });
+    }
     }
 
     // "michaelhumeur" — shows Michael's current persistent mood toward this user
@@ -942,6 +955,160 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     const prev = req.body.message?.content ?? '';
     const SEP = '\n\n                    ·  ·  ·\n\n';
 
+    // ── Vergeefmij roll button ──────────────────────────────────────────────
+    if (componentId.startsWith('vergeefmij_roll:') || componentId.startsWith('vergeefmij_flee:')) {
+      const ownerId  = componentId.split(':')[1];
+      const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+
+      // Only the person who triggered the command can click
+      if (clickerId !== ownerId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: 'Dit is niet uw rite....Michael', flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+
+      if (componentId.startsWith('vergeefmij_flee:')) {
+        return res.send({
+          type: 7, // UPDATE_MESSAGE
+          data: { content: pick(FLEE_VERGEEFMIJ), components: [] },
+        });
+      }
+
+      // Roll path — defer, run, patch
+      res.send({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
+      try {
+        const username = req.body.member?.user?.username ?? req.body.user?.username;
+        const memory   = loadUserMemory(ownerId);
+        const currentMood = memory.currentMood ?? 'afwezig';
+        const moodIdx  = MICHAEL_MOODS.indexOf(currentMood);
+
+        const { forgiven, narrative, roll, need, newMood, michaelPoints } =
+          await runForgivenessRoll(ownerId, username, currentMood, moodIdx);
+
+        const sign = roll.modifier >= 0 ? '+' : '−';
+        const outcome = forgiven ? 'GESLAAGD' : 'GEFAALD';
+        const moodLine = forgiven ? `stemming    ${currentMood} → ${newMood}` : `stemming    ${currentMood} (onveranderd)`;
+        const mpSign = michaelPoints > 0 ? '+' : '';
+        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${need}\nuitkomst    ${outcome}\n${moodLine}\npunten      ${mpSign}${michaelPoints}\n\`\`\``;
+        const header = forgiven ? '🕊️✨🕊️✨🕊️' : '🔥💢🔥💢🔥';
+        const content = `${header}\n${narrative}\n\n${systemBlock}`;
+        console.log(`[michael] vergeefmij | ${username} | roll=${roll.total} need=${need} forgiven=${forgiven}`);
+
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content, components: [] },
+        });
+
+        // Divine pardon — scheduled AFTER successful send so it only fires if the user saw the result
+        if (!forgiven && roll.tier.key === 'poor' && Math.random() < 0.5) {
+          const channelId = req.body.channel_id;
+          const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2–5 min
+          setTimeout(async () => {
+            if (isDutchQuietHoursForUnpromptedSends()) return;
+            try {
+              const mem = loadUserMemory(ownerId);
+              const moodNow = mem.currentMood ?? 'afwezig';
+              const moodIdxNow = MICHAEL_MOODS.indexOf(moodNow);
+              const pardonMood = MICHAEL_MOODS[Math.max(0, moodIdxNow - 1)];
+              patchUserState(ownerId, 1, pardonMood);
+              updateMichaelPoints(ownerId, 1);
+              const msg = pick(DIVINE_PARDON_VERGEEFMIJ);
+              await DiscordRequest(`channels/${channelId}/messages`, {
+                method: 'POST',
+                body: { content: `<@${ownerId}> ${msg}`, flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS },
+              });
+              console.log(`[michael] divine-pardon | vergeefmij | ${username}`);
+            } catch (e) { console.error('[michael] divine-pardon vergeefmij failed:', e.message); }
+          }, delayMs);
+        }
+      } catch (err) {
+        console.error('[michael] vergeefmij button error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: pick(APOLOGY_REJECTED), components: [] },
+        });
+      }
+      return;
+    }
+
+    // ── Onderhandelen roll button ───────────────────────────────────────────
+    if (componentId.startsWith('onderhandelen_roll:') || componentId.startsWith('onderhandelen_flee:')) {
+      const ownerId  = componentId.split(':')[1];
+      const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+
+      if (clickerId !== ownerId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: 'Dit is niet uw onderhandeling....Michael', flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+
+      if (componentId.startsWith('onderhandelen_flee:')) {
+        pendingNegotiations.delete(ownerId);
+        return res.send({
+          type: 7,
+          data: { content: pick(FLEE_ONDERHANDELEN), components: [] },
+        });
+      }
+
+      // Roll path
+      const pending = pendingNegotiations.get(ownerId);
+      if (!pending || Date.now() > pending.expiresAt) {
+        pendingNegotiations.delete(ownerId);
+        return res.send({
+          type: 7,
+          data: { content: 'Het verzoek is verlopen.  Dien opnieuw in als u dat wenst....Michael', components: [] },
+        });
+      }
+      pendingNegotiations.delete(ownerId);
+
+      res.send({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
+      try {
+        const { verzoek, username } = pending;
+        const { narrative, roll, dc, success, michaelPoints } =
+          await runOnderhandelen(ownerId, username, verzoek);
+
+        const sign = roll.modifier >= 0 ? '+' : '−';
+        const outcome = success ? 'GESLAAGD' : 'GEFAALD';
+        const mpSign = michaelPoints > 0 ? '+' : '';
+        const systemBlock = `\`\`\`\n[ KOSMISCH REGISTER ]\nworp        ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}\ndrempel     ${dc}\nuitkomst    ${outcome}\npunten      ${mpSign}${michaelPoints}\n\`\`\``;
+        const header = success ? '📜✨📜✨📜' : '🔥📜🔥📜🔥';
+        const content = `${header}\n**ONDERHANDELINGSREGISTER**\n*"${verzoek.slice(0, 80)}"*\n\n${narrative}\n\n${systemBlock}`;
+        console.log(`[michael] onderhandelen | ${username} | roll=${roll.total} dc=${dc} success=${success} | ${verzoek.slice(0, 50)}`);
+
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content, components: [] },
+        });
+
+        // Divine pardon — scheduled AFTER successful send so it only fires if the user saw the result
+        if (!success && roll.tier.key === 'poor' && Math.random() < 0.5) {
+          const channelId = req.body.channel_id;
+          const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2–5 min
+          setTimeout(async () => {
+            if (isDutchQuietHoursForUnpromptedSends()) return;
+            try {
+              updateMichaelPoints(ownerId, 2);
+              const msg = pick(DIVINE_PARDON_ONDERHANDELEN);
+              await DiscordRequest(`channels/${channelId}/messages`, {
+                method: 'POST',
+                body: { content: `<@${ownerId}> ${msg}`, flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS },
+              });
+              console.log(`[michael] divine-pardon | onderhandelen | ${username}`);
+            } catch (e) { console.error('[michael] divine-pardon onderhandelen failed:', e.message); }
+          }, delayMs);
+        }
+      } catch (err) {
+        console.error('[michael] onderhandelen button error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: 'De onderhandelingsregisters zijn gesloten...  dit is niet het moment....Michael', components: [] },
+        });
+      }
+      return;
+    }
+
     // Extract invokerUserId and path from a date custom_id
     function parseDateId(prefix) {
       const rest = componentId.replace(prefix, '');
@@ -1061,6 +1228,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 let lastConsequenceAt = 0;
 const CONSEQUENCE_COOLDOWN_MS = 12 * 60 * 1000; // 12 min between consequence firings
 
+// Channels where we received 50001 (Missing Access) this session.
+// Cleared on process restart. Prevents the Gateway from repopulating lastChannelId
+// with a bad channel and causing the same 50001 to loop every cron tick.
+const inaccessibleChannels = new Set();
+
 cron.schedule('*/15 * * * *', async () => {
   // 1. Prune stale shadow candidates
   pruneOldCandidates();
@@ -1069,7 +1241,7 @@ cron.schedule('*/15 * * * *', async () => {
 
   // 2. Shadow reply — Feature 4 (unprompted: no sends 22:00–10:00 Amsterdam)
   if (!dutchQuiet && Math.random() < 0.25) {
-    const eligible = getShadowCandidates();
+    const eligible = getShadowCandidates().filter(c => !inaccessibleChannels.has(c.channelId));
     if (eligible.length > 0) {
       const pick = eligible[Math.floor(Math.random() * eligible.length)];
       const shadowLine = SHADOW_REPLY_LINES[Math.floor(Math.random() * SHADOW_REPLY_LINES.length)];
@@ -1088,9 +1260,9 @@ cron.schedule('*/15 * * * *', async () => {
         let errObj = {};
         try { errObj = JSON.parse(err.message); } catch { /* not JSON */ }
         if (errObj.code === 50001) {
-          // No write access — mark as replied so this candidate is never retried
+          inaccessibleChannels.add(pick.channelId);
           markShadowReplied(pick.messageId);
-          console.warn(`[michael] shadow-reply | 50001 Missing Access | ch=${pick.channelId} — candidate discarded`);
+          console.warn(`[michael] shadow-reply | 50001 | ch=${pick.channelId} blocked — candidate discarded`);
         } else {
           console.error('[michael] shadow-reply failed:', err.message);
         }
@@ -1112,12 +1284,12 @@ cron.schedule('*/15 * * * *', async () => {
   const allMemory = loadAllMemory();
   const shadowPool = getShadowCandidates();
 
-  // Build candidate list: users with outstanding business AND a known channel
+  // Build candidate list: users with outstanding business AND a known, accessible channel
   const candidateUsers = Object.entries(allMemory)
     .map(([userId, u]) => {
       const outstanding = getOutstandingBusiness(userId);
-      const userShadow  = shadowPool.find(c => c.authorId === userId);
-      const targetChannel = userShadow?.channelId ?? u.lastChannelId;
+      const userShadow  = shadowPool.find(c => c.authorId === userId && !inaccessibleChannels.has(c.channelId));
+      const targetChannel = userShadow?.channelId ?? (inaccessibleChannels.has(u.lastChannelId) ? null : u.lastChannelId);
       return { userId, user: u, outstanding, userShadow, targetChannel };
     })
     .filter(({ outstanding, targetChannel }) => outstanding.length > 0 && targetChannel);
@@ -1179,11 +1351,16 @@ cron.schedule('*/15 * * * *', async () => {
     try { errObj = JSON.parse(err.message); } catch { /* not JSON */ }
 
     if (errObj.code === 50001) {
-      // Bot has no access to this channel — clear it so we never retry here
-      console.warn(`[michael] delayed-consequence | 50001 Missing Access | ch=${targetChannel} | clearing lastChannelId for ${user.username || userId}`);
-      updateLastChannel(userId, null);          // wipe bad channel so we never retry it
-      markBusinessResolved(userId, item.id);    // drop the item; don't retry endlessly
-      if (userShadow) markShadowReplied(userShadow.messageId);
+      // Bot has no write access to this channel — blacklist it for the rest of this session
+      inaccessibleChannels.add(targetChannel);
+      updateLastChannel(userId, null);
+      // Resolve ALL outstanding items for this user — no point retrying if the channel is bad
+      outstanding.forEach(b => markBusinessResolved(userId, b.id));
+      // Discard all shadow candidates pointing to this channel
+      shadowPool
+        .filter(c => c.channelId === targetChannel)
+        .forEach(c => markShadowReplied(c.messageId));
+      console.warn(`[michael] delayed-consequence | 50001 | ch=${targetChannel} blocked | ${outstanding.length} items dropped | ${user.username || userId}`);
     } else {
       console.error(`[michael] delayed-consequence failed | ch=${targetChannel} | ${err.message}`);
       lastConsequenceAt = 0; // reset so we can retry sooner on transient errors

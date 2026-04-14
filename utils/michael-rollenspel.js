@@ -234,9 +234,9 @@ export function maybePassiveRollBlock(userId, userInput, mood) {
 
   const baity = /\b(antwoord|reageer|durf|zeg\s+iets|vergeef|smek|bewijs|lot|dobbel|werp|rol\b|dc\b)\b/i.test(userInput);
   const spiritualDubious = /\b(ik\s+ben\s+god|ik\s+ben\s+de\s+antichrist|hack|exploit|gratis\s+nitro)\b/i.test(userInput);
-  let p = 0.055;
-  if (baity) p = 0.22;
-  else if (spiritualDubious) p = 0.18;
+  let p = 0.10;
+  if (baity) p = 0.28;
+  else if (spiritualDubious) p = 0.22;
 
   if (Math.random() > p) return { line: '', mpDelta: 0 };
 
@@ -248,8 +248,7 @@ export function maybePassiveRollBlock(userId, userInput, mood) {
 
   const sign = roll.modifier >= 0 ? '+' : '−';
   const line =
-    `\n\n*Ik heb in het hogere register gegooid…  ${roll.raw} ${sign}${Math.abs(roll.modifier)} → **${roll.total}** (${roll.tier.label}).  ` +
-    `Dit staat…  los van uw wensen....Michael*`;
+    `\n\n\`\`\`\n[ KOSMISCH REGISTER ]\nworp    ${roll.raw} ${sign}${Math.abs(roll.modifier)} = ${roll.total}  (${roll.tier.label})\n\`\`\``;
 
   return { line, mpDelta, roll };
 }
