@@ -939,11 +939,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           }, delayMs);
         }
       } catch (err) {
-        console.error('[michael] vergeefmij button error:', err);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: pick(lang.ui.apologyRejected), components: [] },
-        });
+        console.error('[michael] vergeefmij button error:', err.message);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: pick(lang.ui.apologyRejected), components: [] },
+          });
+        } catch { /* token expired — nothing to patch */ }
       }
       return;
     }
@@ -1043,11 +1045,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           }, delayMs);
         }
       } catch (err) {
-        console.error('[michael] onderhandelen button error:', err);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: lang.ui.onderhandelenError, components: [] },
-        });
+        console.error('[michael] onderhandelen button error:', err.message);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.onderhandelenError, components: [] },
+          });
+        } catch { /* token expired — nothing to patch */ }
       }
       return;
     }
@@ -1266,8 +1270,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 //      unfinished business, generate an AI callback and post it.
 //      A global 25-minute cooldown prevents back-to-back firings.
 
-let lastConsequenceAt = 0;
-const CONSEQUENCE_COOLDOWN_MS = 30 * 60 * 1000; // 30 min between consequence firings
+const lastConsequencePerGuild = new Map(); // guildId → timestamp
+const CONSEQUENCE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours per guild between consequence firings
 
 // Channels where we received 50001 (Missing Access) this session.
 // Cleared on process restart. Prevents the Gateway from repopulating lastChannelId
@@ -1323,20 +1327,24 @@ cron.schedule('*/15 * * * *', async () => {
     return;
   }
 
-  if (now - lastConsequenceAt < CONSEQUENCE_COOLDOWN_MS) return;
-
   const allMemory = loadAllMemory();
   const shadowPool = getShadowCandidates();
 
   // Build candidate list: users with outstanding business AND a known, accessible channel
+  // whose guild is not still in the per-guild cooldown window
   const candidateUsers = Object.entries(allMemory)
     .map(([userId, u]) => {
       const outstanding = getOutstandingBusiness(userId);
       const userShadow  = shadowPool.find(c => c.authorId === userId && !inaccessibleChannels.has(c.channelId));
       const targetChannel = userShadow?.channelId ?? (inaccessibleChannels.has(u.lastChannelId) ? null : u.lastChannelId);
-      return { userId, user: u, outstanding, userShadow, targetChannel };
+      const guildId = userShadow?.guildId ?? null;
+      return { userId, user: u, outstanding, userShadow, targetChannel, guildId };
     })
-    .filter(({ outstanding, targetChannel }) => outstanding.length > 0 && targetChannel);
+    .filter(({ outstanding, targetChannel, guildId }) => {
+      if (!outstanding.length || !targetChannel) return false;
+      const lastFired = lastConsequencePerGuild.get(guildId ?? '_dm') ?? 0;
+      return now - lastFired >= CONSEQUENCE_COOLDOWN_MS;
+    });
 
   if (!candidateUsers.length) return;
 
@@ -1350,12 +1358,12 @@ cron.schedule('*/15 * * * *', async () => {
   }
   chosen = chosen ?? candidateUsers[0];
 
-  const { userId, user, outstanding, userShadow, targetChannel } = chosen;
+  const { userId, user, outstanding, userShadow, targetChannel, guildId } = chosen;
   const item           = outstanding[0];
   const mood           = user.currentMood ?? 'afwezig';
   const judgementLabel = getJudgementLabel(user.judgementScore ?? 0);
 
-  lastConsequenceAt = now;
+  lastConsequencePerGuild.set(guildId ?? '_dm', now);
 
   try {
     const consequenceLangCode = userShadow?.guildId ? getGuildLanguage(userShadow.guildId) : 'nl';
@@ -1409,7 +1417,7 @@ cron.schedule('*/15 * * * *', async () => {
       console.warn(`[michael] delayed-consequence | 50001 | ch=${targetChannel} blocked | ${outstanding.length} items dropped | ${user.username || userId}`);
     } else {
       console.error(`[michael] delayed-consequence failed | ch=${targetChannel} | ${err.message}`);
-      lastConsequenceAt = 0; // reset so we can retry sooner on transient errors
+      lastConsequencePerGuild.delete(guildId ?? '_dm'); // reset so we can retry sooner on transient errors
     }
   }
 
