@@ -22,7 +22,7 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, updateMichaelPoints } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
@@ -654,54 +654,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "auracheck" — Michael reads the aura of another user
-    if (name === 'auracheck') {
-      const targetUser = data.resolved?.users
-        ? Object.values(data.resolved.users)[0]
-        : null;
-      if (!targetUser) {
-        return res.send({
-          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: 'Michael ziet niemand hier...  misschien is die persoon te vaag voor het veld....Michael' },
-        });
-      }
 
-      const targetId = targetUser.id;
-      const targetUsername = targetUser.username;
-      const targetMemory = loadUserMemory(targetId);
-      const judgementLabel = getJudgementLabel(targetMemory.judgementScore ?? 0);
-      const cosmicRole = getCosmicRole(targetId);
-
-      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
-
-      try {
-        const reading = await generateAuraCheck(
-          targetUsername,
-          judgementLabel,
-          targetMemory.impression ?? null,
-          targetMemory.currentMood ?? 'afwezig',
-          cosmicRole,
-        );
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: `👁️✨👁️✨👁️\n**Aura-lezing voor <@${targetId}>**\n\n${reading}` },
-        });
-      } catch (err) {
-        console.error('auracheck error:', err);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: 'Het veld is troebel...  Michael kan de aura op dit moment niet lezen....Michael' },
-        });
-      }
-      return;
-    }
-
-    // "vibecheck" command — Michael's in-character verdict on you
+    // "vibecheck" command — full points dashboard + improvement tips
     if (name === 'vibecheck') {
-      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const userId   = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
-      const memory = loadUserMemory(userId);
-      const label = getJudgementLabel(memory.judgementScore ?? 0);
+      const memory   = loadUserMemory(userId);
+      const label    = getJudgementLabel(memory.judgementScore ?? 0);
+      const mp       = memory.michaelPoints ?? 0;
+      const character = memory.michaelCharacter ?? null;
 
       const scoreBar = (() => {
         const s = memory.judgementScore ?? 0;
@@ -712,6 +673,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         return '🟩🟩🟩🟩🟩';
       })();
 
+      const mpSign = mp > 0 ? '+' : '';
+
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
       try {
@@ -721,14 +684,26 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           memory.impression ?? null,
           memory.prompts.filter(p => !p.startsWith('[')).slice(-3),
           getCosmicRole(userId),
+          character,
+          mp,
         );
 
         const lines = [
-          `**Michaëls oordeel over ${username}:** ${label}   ${scoreBar}   *(score: ${memory.judgementScore ?? 0})*`,
-          memory.impression ? `**Langetermijnindruk:** *${memory.impression}*` : null,
+          `📊 **MICHAËLS DOSSIER: ${username}**`,
           ``,
-          comment,
-        ].filter(l => l !== null);
+          `**Oordeel**          ${label}   ${scoreBar}   *(${memory.judgementScore ?? 0})*`,
+          `**Michaël-punten**   ${mpSign}${mp}`,
+        ];
+
+        if (character) {
+          lines.push(`**Kosmische rol**    ${character.archetype} • ${character.lineage} — *${character.title}*`);
+        }
+
+        if (memory.impression) {
+          lines.push(`**Indruk**           *${memory.impression}*`);
+        }
+
+        lines.push(``, comment);
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -974,8 +949,20 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       }
 
-      // Roll path — defer, run, patch
-      res.send({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
+      // Roll path — immediately update message with loading state + disabled buttons, then patch result
+      res.send({
+        type: 7, // UPDATE_MESSAGE
+        data: {
+          content: `🎲✨🎲✨🎲\n**VERGEVINGSRITE**\n*Michaël raadpleegt het hogere register...*`,
+          components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_roll:${ownerId}`, label: '⏳ Aan het gooien...', style: ButtonStyleTypes.PRIMARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `vergeefmij_flee:${ownerId}`, label: '🏃 Vlucht weg', style: ButtonStyleTypes.SECONDARY, disabled: true },
+            ],
+          }],
+        },
+      });
       try {
         const username = req.body.member?.user?.username ?? req.body.user?.username;
         const memory   = loadUserMemory(ownerId);
@@ -1062,7 +1049,20 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       }
       pendingNegotiations.delete(ownerId);
 
-      res.send({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
+      // Immediately update with loading state + disabled buttons, then patch result
+      res.send({
+        type: 7, // UPDATE_MESSAGE
+        data: {
+          content: `📜✨📜✨📜\n**ONDERHANDELINGSREGISTER**\n*"${pending.verzoek.slice(0, 80)}"*\n\n*Michaël overweegt uw verzoek...*`,
+          components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_roll:${ownerId}`, label: '⏳ Aan het gooien...', style: ButtonStyleTypes.PRIMARY, disabled: true },
+              { type: MessageComponentTypes.BUTTON, custom_id: `onderhandelen_flee:${ownerId}`, label: '🏃 Trek verzoek in', style: ButtonStyleTypes.SECONDARY, disabled: true },
+            ],
+          }],
+        },
+      });
       try {
         const { verzoek, username } = pending;
         const { narrative, roll, dc, success, michaelPoints } =
@@ -1336,8 +1336,9 @@ cron.schedule('*/15 * * * *', async () => {
       markBusinessMentioned(userId, item.id);
     }
 
-    // Slightly darken mood for lingering resentment — don't add to prompt history
-    patchUserState(userId, -1, nextMood(mood, -1));
+    // Darken mood for lingering resentment, but don't touch judgement score —
+    // score should only move from real interactions, not background timers
+    patchUserState(userId, 0, nextMood(mood, -1));
 
     console.log(`[michael] delayed-consequence | ${user.username || userId} | ch=${targetChannel} | "${item.prompt.slice(0, 50)}"`);
 

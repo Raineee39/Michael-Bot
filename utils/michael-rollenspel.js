@@ -242,8 +242,9 @@ export function maybePassiveRollBlock(userId, userInput, mood) {
 
   const roll = computeMichaelRoll(user, mood, { context: 'general' });
   let mpDelta = 0;
-  if (roll.tier.key === 'poor') mpDelta = -1;
-  else if (roll.tier.key === 'favoured' && Math.random() < 0.5) mpDelta = 1;
+  if (roll.tier.key === 'favoured') mpDelta = 1;
+  else if (roll.tier.key === 'strong' && Math.random() < 0.35) mpDelta = 1;
+  // poor rolls carry no penalty — passive rolls can only benefit the user
   if (mpDelta) updateMichaelPoints(userId, mpDelta);
 
   const sign = roll.modifier >= 0 ? '+' : '−';

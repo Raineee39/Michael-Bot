@@ -334,24 +334,30 @@ Sluit af met je naam: 2 tot 4 puntjes gevolgd door Michael.
 
 // Generates Michael's in-character verdict on a user plus a vague suggestion
 // for how to improve their standing with him.
-export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts, cosmicRole) {
+export async function generateVibecheckComment(username, judgementLabel, impression, recentPrompts, cosmicRole, character = null, michaelPoints = 0) {
   const promptsText = recentPrompts.length
     ? recentPrompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')
     : '  (geen recente berichten)';
 
   const impressionText = impression ?? '(nog geen langetermijnindruk gevormd)';
-
   const cosmicBlock = cosmicRoleBlock(cosmicRole);
+
+  const characterBlock = character
+    ? `\nKosmische rol: ${character.archetype} (${character.lineage}) — ${character.title}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, inzicht ${character.stats?.inzicht ?? '?'}, volharding ${character.stats?.volharding ?? '?'}\nMichaël-punten: ${michaelPoints}`
+    : '';
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
-    max_output_tokens: 110,
+    max_output_tokens: 200,
     input: `
-Je bent de aartsengel Michael. Geef een kort oordeel over een gebruiker op basis van onderstaande informatie.
-Schrijf 2 zinnen oordeel gevolgd door 1 zin vage suggestie over hoe deze persoon beter op U kan afstemmen.
-De suggestie moet vaag en niet echt nuttig zijn... maar wel klinken alsof het diepzinnig is.
-Gebruik Michaels stijl: formeel "U", spirituele taal, vreemde spaties, ..., geen em-dashes.
-Sluit altijd af met 2 tot 5 puntjes gevolgd door Michael.${cosmicBlock}
+Je bent de aartsengel Michael. Geef een persoonlijk dossier-oordeel over ${username} op basis van onderstaande informatie.
+
+Schrijf:
+1. Twee zinnen algemeen oordeel (in Michaels stem — formeel, licht neerbuigend, spiritueel)
+2. Eén concrete maar vage suggestie hoe deze persoon zijn/haar standing bij Michael kan verbeteren — gebaseerd op hun stats of gedrag, maar verwoord alsof het kosmisch advies is
+3. Één zin die refereert aan hun kosmische rol of archetype (als die er is)
+
+Gebruik Michaels stijl: formeel "U", vreemde spaties, ..., geen em-dashes. Sluit af met ....Michael.${cosmicBlock}${characterBlock}
 Oordeel: ${judgementLabel}
 Langetermijnindruk: ${impressionText}
 Recente berichten:
