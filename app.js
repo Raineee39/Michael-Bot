@@ -85,7 +85,7 @@ async function buildUitverkoreneMessage(guildId, lang) {
   const humans = members.filter(m => !m.user.bot);
   const chosen = humans[Math.floor(Math.random() * humans.length)];
   const userId = chosen.user.id;
-  const gif = await fetchGiphyGif(getRandomGifQuery());
+  const gif = await fetchGiphyGif(getRandomGifQuery(lang.code));
 
   const boodschap = pick(lang.uitverkorene.boodschappen);
 
@@ -719,7 +719,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // ~25% chance of a thematic Giphy embed (same API as uitverkorene)
         let gifUrl = null;
         if (process.env.GIPHY_API_KEY && Math.random() < 0.25) {
-          gifUrl = await fetchGiphyGif(getMichaelOptionalGifQuery(cosmicRole));
+          gifUrl = await fetchGiphyGif(getMichaelOptionalGifQuery(cosmicRole, langCode));
           if (gifUrl) console.log(`[michael] chat | gif | ${username}`);
         }
         const messageBase = `> ${safeInput}\n\n${michaelMessage}`;
@@ -1489,8 +1489,7 @@ app.post(
       'cd /root/michael-bot',
       'git fetch origin main',
       'git reset --hard origin/main',
-      'npm install',
-      'node commands.js',
+      'npm install --prefer-offline',
       'pm2 restart michael-bot --update-env',
     ].join(' && ');
 

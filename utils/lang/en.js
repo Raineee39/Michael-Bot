@@ -207,8 +207,8 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
 'the hesitant', 'of the droning gait', 'of the blunt sword', 'of stagnant growth',
 'of incomplete initiation', 'of dubious intentions', 'of the second attempt',
 'of premature conclusions', 'of limited aura reserves', 'of half-hearted commitment'`,
-    statNames: { aura: 'aura', discipline: 'discipline', chaos: 'chaos', insight: 'insight', perseverance: 'perseverance' },
-    schemaInstruction: 'Rules:\n- Archetype and lineage should be recognizably D&D-inspired but filtered through Michael\'s lens\n- Be specific but subtly condescending — this is Michael\'s judgement, not a compliment\n- Stats should not all be equal; spread is more realistic\n- Return ONLY the JSON object, no explanation, no markdown\n\nNote: use English stat names in the JSON: "aura", "discipline", "chaos", "insight", "perseverance"',
+    statNames: { aura: 'aura', discipline: 'discipline', chaos: 'chaos', inzicht: 'insight', volharding: 'perseverance' },
+    schemaInstruction: 'Rules:\n- Archetype and lineage should be recognizably D&D-inspired but filtered through Michael\'s lens\n- Be specific but subtly condescending — this is Michael\'s judgement, not a compliment\n- Stats should not all be equal; spread is more realistic\n- Return ONLY the JSON object, no explanation, no markdown\n\nIMPORTANT: use EXACTLY these JSON stat key names (do not translate them): "aura", "discipline", "chaos", "inzicht", "volharding"',
   },
 
   // ─── Static UI strings ───────────────────────────────────────────────────────
@@ -423,6 +423,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     titleLabel: '**Title**',
     statNames: { aura: 'aura', discipline: 'discipline', chaos: 'chaos', inzicht: 'insight', volharding: 'perseverance' },
   },
+
 
   // ─── Vibecheck UI labels ──────────────────────────────────────────────────────
   vibecheck: {
