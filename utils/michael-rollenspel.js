@@ -71,10 +71,37 @@ function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-/** Create and persist a character sheet if missing, or if the language changed. */
+/** Create and persist a character sheet if missing. Character persists across all servers and languages. */
 export async function ensureMichaelCharacter(userId, username, langCode = 'nl') {
   const mem = loadUserMemory(userId);
-  if (mem.michaelCharacter && mem.michaelCharacter.lang === langCode) return mem.michaelCharacter;
+  if (mem.michaelCharacter) {
+    // Heal titles that accumulated duplicate fragments from past language-switch regenerations
+    const allFragments = [
+      ...WORSE_FRAGMENTS.nl, ...WORSE_FRAGMENTS.en, ...WORSE_FRAGMENTS.ar,
+      ...SUCCESS_TITLE_FRAGMENTS.nl, ...SUCCESS_TITLE_FRAGMENTS.en, ...SUCCESS_TITLE_FRAGMENTS.ar,
+    ];
+    const raw = mem.michaelCharacter.title ?? '';
+    // Detect stacking: same fragment appears more than once, or multiple language variants of the same fragment
+    const seen = new Set();
+    let anyDupe = false;
+    for (const f of allFragments) {
+      const count = (raw.split(f).length - 1);
+      if (count > 1) { anyDupe = true; break; }
+      if (count === 1) {
+        if (seen.has(f)) { anyDupe = true; break; }
+        seen.add(f);
+      }
+    }
+    if (anyDupe) {
+      // Strip ALL known fragments from title, leaving only the base
+      let base = raw;
+      for (const f of allFragments) base = base.split(f).join('');
+      const cleaned = base.trim().slice(0, 100);
+      patchMichaelCharacter(userId, { title: cleaned });
+      return { ...mem.michaelCharacter, title: cleaned };
+    }
+    return mem.michaelCharacter;
+  }
 
   const { generateMichaelCharacterSheet } = await import('./openai.js');
   const judgementLabel = getJudgementLabel(mem.judgementScore ?? 0);
