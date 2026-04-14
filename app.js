@@ -434,10 +434,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const { stats } = character;
         const mr = lang.mijnrol;
         const statBar = (v) => '█'.repeat(Math.round(v / 3)) + '░'.repeat(6 - Math.round(v / 3));
-        const statVal = (v) => `${statBar(v ?? 0)}  ${String(v ?? '?').padStart(2)}`;
         const safeComment = comment.slice(0, 300);
         const embedColor = langCode === 'ar' ? 0xd97706 : 0x7c3aed; // desert gold / cosmic purple
         const embedTitle = mr.title.replace(/^#+\s*/, ''); // strip markdown heading prefix
+
+        // Build stat list: pad names to the same width for monospace alignment
+        const statEntries = [
+          [mr.statNames.aura,       stats.aura],
+          [mr.statNames.discipline, stats.discipline],
+          [mr.statNames.chaos,      stats.chaos],
+          [mr.statNames.inzicht,    stats.inzicht],
+          [mr.statNames.volharding, stats.volharding],
+        ];
+        const maxNameLen = Math.max(...statEntries.map(([n]) => n.length));
+        const statsBlock = statEntries
+          .map(([name, v]) => `${name.padEnd(maxNameLen)}  ${statBar(v ?? 0)}  ${String(v ?? '?').padStart(2)}`)
+          .join('\n');
 
         console.log(`[michael] mijnrol | ${username} (${userId}) | archetype=${character.archetype}`);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
@@ -449,14 +461,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
               title: embedTitle,
               description: `${mr.subtitle}\n\n*${safeComment}*`,
               fields: [
-                { name: mr.archetypeLabel.replace(/\*\*/g, ''), value: character.archetype,          inline: false },
-                { name: mr.lineageLabel.replace(/\*\*/g, ''),   value: character.lineage,            inline: false },
-                { name: mr.titleLabel.replace(/\*\*/g, ''),     value: `*${character.title}*`,       inline: false },
-                { name: mr.statNames.aura,       value: `\`${statVal(stats.aura)}\``,       inline: true },
-                { name: mr.statNames.discipline, value: `\`${statVal(stats.discipline)}\``, inline: true },
-                { name: mr.statNames.chaos,      value: `\`${statVal(stats.chaos)}\``,      inline: true },
-                { name: mr.statNames.inzicht,    value: `\`${statVal(stats.inzicht)}\``,    inline: true },
-                { name: mr.statNames.volharding, value: `\`${statVal(stats.volharding)}\``, inline: true },
+                { name: mr.archetypeLabel.replace(/\*\*/g, ''), value: character.archetype,    inline: false },
+                { name: mr.lineageLabel.replace(/\*\*/g, ''),   value: character.lineage,      inline: false },
+                { name: mr.titleLabel.replace(/\*\*/g, ''),     value: `*${character.title}*`, inline: false },
+                { name: '\u200b', value: `\`\`\`\n${statsBlock}\n\`\`\``,                      inline: false },
               ],
             }],
           },
