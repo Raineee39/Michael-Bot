@@ -821,11 +821,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const memorySummary = realPrompts.length ? realPrompts.slice(-3).join(' / ') : null;
         const cosmicRole = getCosmicRole(userId);
 
-        // Rollenspel — ensure character sheet exists (fire-and-forget if user is new)
-        const character = await ensureMichaelCharacter(userId, username).catch(() => null);
-        const freshMem = loadUserMemory(userId);
-        const characterBlock = character && shouldReferenceCharacterThisTurn()
-          ? formatCharacterForPrompt(character, freshMem.michaelPoints ?? 0)
+        // Rollenspel — use existing character sheet if present; generate one in background after reply
+        const existingCharacter = preMemory.michaelCharacter ?? null;
+        const characterBlock = existingCharacter && shouldReferenceCharacterThisTurn()
+          ? formatCharacterForPrompt(existingCharacter, preMemory.michaelPoints ?? 0)
           : '';
 
         // After 2 explicit requests, unlock; full target-language replies only when they write in that language (or ask again)
@@ -833,7 +832,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const asksAgain = unlocked && getRequestedLanguageCode(userInput) === unlocked.code;
         const speaksIt = unlocked && userSpeaksUnlockedLanguage(unlocked, userInput);
         const languagePermission = unlocked && (speaksIt || asksAgain) ? unlocked : null;
-        console.log(`[michael] praatmetmichael | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${character?.archetype ?? 'nieuw'} | ${username}`);
+        console.log(`[michael] praatmetmichael | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${existingCharacter?.archetype ?? 'nieuw'} | ${username}`);
 
         // Feature 2 — Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
@@ -911,6 +910,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           } catch {
             // non-critical — skip revision if we can't fetch the message ID
           }
+        }
+
+        // Rollenspel — generate character in background after reply so it never blocks the response
+        if (!existingCharacter) {
+          ensureMichaelCharacter(userId, username).catch(err =>
+            console.error(`[michael] background character generation failed | ${username}:`, err.message)
+          );
         }
       } catch (err) {
         console.error('praatmetmichael error:', err);

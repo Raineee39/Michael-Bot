@@ -70,13 +70,15 @@ export function negotiationDC(user, mood) {
   return dc;
 }
 
-/** Forgiveness check: total must meet or beat this. */
+/** Forgiveness check: total must meet or beat this.
+ *  Targets roughly: woedend ~50%, streng ~60%, lower moods ~70–80%.
+ */
 export function forgivenessThreshold(mood) {
-  if (mood === 'woedend') return 16;
-  if (mood === 'streng') return 14;
-  if (mood === 'passief-agressief') return 13;
-  if (mood === 'verward') return 12;
-  return 11;
+  if (mood === 'woedend') return 13;
+  if (mood === 'streng') return 11;
+  if (mood === 'passief-agressief') return 10;
+  if (mood === 'verward') return 9;
+  return 8;
 }
 
 function applyNegotiationSuccess(userId, character) {
@@ -189,13 +191,9 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx)
       michaelPoints: user.michaelPoints,
     });
   } else {
-    mpDelta = -1;
-    if (roll.tier.key === 'poor') {
-      mpDelta -= 1;
-      judgementDelta = -1;
-    }
-    updateMichaelPoints(userId, mpDelta);
-    if (judgementDelta) patchUserState(userId, judgementDelta, null);
+    // Failure: mild discourage only — no judgement penalty, Michael just doesn't forgive
+    mpDelta = roll.tier.key === 'poor' ? -1 : 0;
+    if (mpDelta) updateMichaelPoints(userId, mpDelta);
     user = loadUserMemory(userId);
     narrative = await generateForgivenessRollNarrative({
       accepted: false,

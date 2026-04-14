@@ -3,6 +3,8 @@ import OpenAI from "openai";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: 20000,  // 20 s per attempt — rejects hung requests so the catch block can fire
+  maxRetries: 1,   // 1 auto-retry on timeout/network error → 40 s worst case (fine, Discord gives 15 min after defer)
 });
 
 const MOOD_DESCRIPTIONS = {
