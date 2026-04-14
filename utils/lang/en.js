@@ -342,7 +342,13 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',
       ar: '✅ **ميخائيل يتحدث الآن بالعربية.**\nستكون جميع ردود ميخائيل باللغة العربية من الآن....ميخائيل',
     },
-    michaeltaalPrompt: 'Choose the language for Michael Bot on this server:\n\n🇳🇱 **Nederlands** — Michael speaks Dutch\n🇬🇧 **English** — the current selection\n🇸🇦 **العربية** — ميخائيل يتحدث العربية',
+    michaeltaalPrompt: 'Choose the language for Michael Bot on this server:\n\n🇳🇱 **Nederlands** — Michael speaks Dutch\n🇬🇧 **English** — the current selection\n🇸🇾 **العربية** — ميخائيل يتحدث العربية',
+    michaeltaalPromptDM: 'Choose your personal language for Michael Bot in DMs:\n\n🇳🇱 **Nederlands** — Michael speaks Dutch\n🇬🇧 **English** — the current selection\n🇸🇾 **العربية** — ميخائيل يتحدث العربية',
+    michaeltaalSetDM: {
+      nl: '✅ **Michael will now speak Dutch with you in DMs.**...Michael',
+      en: '✅ **Michael will now speak English with you in DMs.**...Michael',
+      ar: '✅ **Imru\' al-Qais will now speak Arabic with you in DMs.**...Imru\' al-Qais',
+    },
     michaeltaalNoPermission: 'You do not have permission to change the server language....Michael',
   },
 

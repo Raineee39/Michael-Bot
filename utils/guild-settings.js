@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { getUserLanguage } from './user-settings.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SETTINGS_PATH = join(__dirname, '../data/guild-settings.json');
@@ -36,4 +37,14 @@ export function setGuildLanguage(guildId, langCode) {
   all[guildId] = { ...(all[guildId] ?? {}), language: langCode };
   saveAll(all);
   console.log(`[michael] guild language set | guild=${guildId} | lang=${langCode}`);
+}
+
+/**
+ * Resolves the active language for an interaction.
+ * Guild language takes priority (shared context); falls back to user language (DMs);
+ * then defaults to Dutch.
+ */
+export function resolveLanguage(guildId, userId) {
+  if (guildId) return getGuildLanguage(guildId);
+  return getUserLanguage(userId);
 }

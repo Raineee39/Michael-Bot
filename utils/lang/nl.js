@@ -342,7 +342,13 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',
       ar: '✅ **ميخائيل يتحدث الآن بالعربية.**\nستكون جميع ردود ميخائيل باللغة العربية من الآن....ميخائيل',
     },
-    michaeltaalPrompt: 'Kies de taal voor Michael Bot op deze server:\n\n🇳🇱 **Nederlands** — de standaardtaal\n🇬🇧 **English** — Michael speaks English\n🇸🇦 **العربية** — ميخائيل يتحدث العربية',
+    michaeltaalPrompt: 'Kies de taal voor Michael Bot op deze server:\n\n🇳🇱 **Nederlands** — de standaardtaal\n🇬🇧 **English** — Michael speaks English\n🇸🇾 **العربية** — ميخائيل يتحدث العربية',
+    michaeltaalPromptDM: 'Kies jouw persoonlijke taal voor Michael Bot in DMs:\n\n🇳🇱 **Nederlands** — de standaardtaal\n🇬🇧 **English** — Michael speaks English\n🇸🇾 **العربية** — ميخائيل يتحدث العربية',
+    michaeltaalSetDM: {
+      nl: '✅ **Michael spreekt nu Nederlands met jou in DMs.**...Michael',
+      en: '✅ **Michael will now speak English with you in DMs.**...Michael',
+      ar: '✅ **امرؤ القيس سيتحدث معك بالعربية في الرسائل الخاصة.**...امرؤ القيس',
+    },
     michaeltaalNoPermission: 'U heeft geen toestemming om de servertaal te wijzigen....Michael',
   },
 

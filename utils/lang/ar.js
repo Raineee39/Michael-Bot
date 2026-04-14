@@ -346,7 +346,13 @@ export default {
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',
       ar: '✅ **امرؤ القيس يتحدث الآن بالعربية.**\nستكون جميع ردود هذا البوت باللغة العربية — بصوت الشاعر الجاهلي....امرؤ القيس',
     },
-    michaeltaalPrompt: 'اختر لغة Michael Bot على هذا الخادم:\n\n🇳🇱 **Nederlands** — Michael يتحدث الهولندية\n🇬🇧 **English** — Michael يتحدث الإنجليزية\n🇸🇦 **العربية** — امرؤ القيس يتكلَّم (التحديد الحالي)',
+    michaeltaalPrompt: 'اختر لغة Michael Bot على هذا الخادم:\n\n🇳🇱 **Nederlands** — Michael يتحدث الهولندية\n🇬🇧 **English** — Michael يتحدث الإنجليزية\n🇸🇾 **العربية** — امرؤ القيس يتكلَّم (التحديد الحالي)',
+    michaeltaalPromptDM: 'اختر لغتك الشخصية لهذا البوت في الرسائل الخاصة:\n\n🇳🇱 **Nederlands** — الهولندية\n🇬🇧 **English** — الإنجليزية\n🇸🇾 **العربية** — لغة امرؤ القيس',
+    michaeltaalSetDM: {
+      nl: '✅ سيتحدث Michael معك بالهولندية في الرسائل الخاصة....Michael',
+      en: '✅ سيتحدث Michael معك بالإنجليزية في الرسائل الخاصة....Michael',
+      ar: '✅ **امرؤ القيس سيتكلَّم معك بالعربية في الرسائل الخاصة.**\nقُل ما شئت — الشاعر ينتظر....امرؤ القيس',
+    },
     michaeltaalNoPermission: 'ليس لديك صلاحية لتغيير لغة الخادم....امرؤ القيس',
   },
 

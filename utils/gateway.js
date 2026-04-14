@@ -22,7 +22,7 @@ import { appendEditWithinDiscordLimit, DiscordRequest } from '../utils.js';
 import { addShadowCandidate } from './shadow-store.js';
 import { addUnfinishedBusiness, loadUserMemory, updateLastChannel } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
-import { getGuildLanguage } from './guild-settings.js';
+import { resolveLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
@@ -153,7 +153,7 @@ export function startGateway() {
         // 90% chance the persona interjects when its name is said
         if (Math.random() > 0.90) return;
 
-        const gwLangCode = guildId ? getGuildLanguage(guildId) : 'nl';
+        const gwLangCode = resolveLanguage(guildId, authorId);
         const gwLang = getLang(gwLangCode);
 
         // In Arabic mode: if someone said "michael" (not the poet's name), use the

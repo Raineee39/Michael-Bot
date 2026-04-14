@@ -27,7 +27,8 @@ import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, 
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
-import { getGuildLanguage, setGuildLanguage } from './utils/guild-settings.js';
+import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
+import { getUserLanguage, setUserLanguage } from './utils/user-settings.js';
 import { getLang } from './utils/lang/index.js';
 
 function buildDateButtons(choices) {
@@ -238,11 +239,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
   // Resolve guild language for all subsequent handlers
   const guildId = req.body.guild_id;
-  const langCode = getGuildLanguage(guildId);
-  const lang = getLang(langCode);
-
-  // Check if the invoking user is the current antichrist
   const invokingUserId = req.body.member?.user?.id ?? req.body.user?.id;
+  const langCode = resolveLanguage(guildId, invokingUserId);
+  const lang = getLang(langCode);
   if (isAntichrist(invokingUserId) && !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)) {
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -770,8 +769,28 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // "michaeltaal" — set the server language (requires Manage Guild permission)
+    // "michaeltaal" — set language (server or personal in DMs)
     if (name === 'michaeltaal') {
+      // DM context — no guild, so set per-user language instead
+      if (!guildId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: lang.ui.michaeltaalPromptDM ?? lang.ui.michaeltaalPrompt,
+            flags: InteractionResponseFlags.EPHEMERAL,
+            components: [{
+              type: MessageComponentTypes.ACTION_ROW,
+              components: [
+                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_nl:${invokingUserId}`, label: '🇳🇱 Nederlands', style: ButtonStyleTypes.SECONDARY },
+                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_en:${invokingUserId}`, label: '🇬🇧 English', style: ButtonStyleTypes.SECONDARY },
+                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_ar:${invokingUserId}`, label: '🇸🇾 العربية', style: ButtonStyleTypes.SECONDARY },
+              ],
+            }],
+          },
+        });
+      }
+
+      // Guild context — requires Manage Guild permission
       const member = req.body.member;
       const permissions = BigInt(member?.permissions ?? '0');
       const MANAGE_GUILD = BigInt(0x20);
@@ -792,7 +811,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             components: [
               { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_nl:${guildId}`, label: '🇳🇱 Nederlands', style: ButtonStyleTypes.SECONDARY },
               { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_en:${guildId}`, label: '🇬🇧 English', style: ButtonStyleTypes.SECONDARY },
-              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_ar:${guildId}`, label: '🇸🇦 العربية', style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_ar:${guildId}`, label: '🇸🇾 العربية', style: ButtonStyleTypes.SECONDARY },
             ],
           }],
         },
@@ -1148,14 +1167,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // ── Language selector buttons ───────────────────────────────────────────
+    // ── Language selector buttons (guild) ──────────────────────────────────
     if (componentId.startsWith('michaeltaal_')) {
       const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
       const member = req.body.member;
       const permissions = BigInt(member?.permissions ?? '0');
       const MANAGE_GUILD = BigInt(0x20);
       if (!(permissions & MANAGE_GUILD)) {
-        const noPermLang = getLang(getGuildLanguage(guildId));
+        const noPermLang = getLang(resolveLanguage(guildId, clickerId));
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: { content: noPermLang.ui.michaeltaalNoPermission, flags: InteractionResponseFlags.EPHEMERAL },
@@ -1167,6 +1186,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       setGuildLanguage(targetGuildId, newLangCode);
       const newLang = getLang(newLangCode);
       const confirmMsg = newLang.ui.michaeltaalSet[newLangCode] ?? newLang.ui.michaeltaalSet.nl;
+
+      return res.send({
+        type: 7, // UPDATE_MESSAGE
+        data: { content: confirmMsg, components: [] },
+      });
+    }
+
+    // ── Language selector buttons (DM / per-user) ──────────────────────────
+    if (componentId.startsWith('michaeltaaldm_')) {
+      const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+      const newLangCode = componentId.replace('michaeltaaldm_', '').split(':')[0]; // nl / en / ar
+      setUserLanguage(clickerId, newLangCode);
+      const newLang = getLang(newLangCode);
+      const confirmMsg = newLang.ui.michaeltaalSetDM?.[newLangCode]
+        ?? newLang.ui.michaeltaalSet?.[newLangCode]
+        ?? newLang.ui.michaeltaalSet.nl;
 
       return res.send({
         type: 7, // UPDATE_MESSAGE
