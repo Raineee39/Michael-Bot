@@ -22,8 +22,9 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter, generateDelayedConsequence, generatePostRevision } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage } from './utils/michael-memory.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateAuraCheck, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment } from './utils/openai.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn } from './utils/michael-memory.js';
+import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
 
@@ -117,7 +118,7 @@ function getCosmicRole(userId) {
   return null;
 }
 
-const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'praatmetmichael', 'vibecheck', 'cosmischestatus']);
+const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'praatmetmichael', 'vibecheck', 'cosmischestatus', 'mijnrol']);
 
 const NEE = [
   'nee.',
@@ -499,15 +500,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "vergeefmij" — dedicated apology command with its own mood-shift logic
+    // "vergeefmij" — roll-based forgiveness
     if (name === 'vergeefmij') {
-      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const userId   = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
-      const memory = loadUserMemory(userId);
+      const memory   = loadUserMemory(userId);
       const currentMood = memory.currentMood ?? 'afwezig';
-      const moodIdx = MICHAEL_MOODS.indexOf(currentMood);
+      const moodIdx  = MICHAEL_MOODS.indexOf(currentMood);
 
-      // Already calm — apology is unnecessary
+      // Already calm — apology is unnecessary (no roll needed)
       if (moodIdx <= 2) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -515,23 +516,120 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       }
 
-      // Woedend: harder to appease (40%). Calmer bad moods: easier (65%).
-      const forgiven = Math.random() < (currentMood === 'woedend' ? 0.40 : 0.65);
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+      try {
+        const { forgiven, narrative, roll, need, newMood, michaelPoints } =
+          await runForgivenessRoll(userId, username, currentMood, moodIdx);
 
-      if (forgiven) {
-        const newMood = MICHAEL_MOODS[Math.max(0, moodIdx - 2)];
-        patchUserState(userId, 1, newMood);
-        return res.send({
-          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `🕊️✨🕊️✨🕊️\n${pick(APOLOGY_ACCEPTED)}\n\n*Stemming verbeterd: **${currentMood}** → **${newMood}***` },
+        const sign = roll.modifier >= 0 ? '+' : '−';
+        const rollDisplay = `*Worp: ${roll.raw} ${sign}${Math.abs(roll.modifier)} = **${roll.total}** — drempel ${need} — ${roll.tier.label}*`;
+        const moodDisplay = forgiven
+          ? `*Stemming: **${currentMood}** → **${newMood}***`
+          : `*Stemming onveranderd: **${currentMood}***`;
+        const mpDisplay = `*Michaël-punten: ${michaelPoints}*`;
+
+        const header = forgiven ? '🕊️✨🕊️✨🕊️' : '🔥💢🔥💢🔥';
+        const content = `${header}\n${narrative}\n\n${rollDisplay}\n${moodDisplay}  ·  ${mpDisplay}`;
+        console.log(`[michael] vergeefmij | ${username} | roll=${roll.total} need=${need} forgiven=${forgiven}`);
+
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content },
         });
-      } else {
-        // Rejection — mood stays, score unchanged
-        return res.send({
-          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `🔥💢🔥💢🔥\n${pick(APOLOGY_REJECTED)}\n\n*Stemming onveranderd: **${currentMood}***` },
+      } catch (err) {
+        console.error('[michael] vergeefmij error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: pick(APOLOGY_REJECTED) },
         });
       }
+      return;
+    }
+
+    // "mijnrol" — shows the user their Michael-assigned character sheet
+    if (name === 'mijnrol') {
+      const userId   = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+      try {
+        const character = await ensureMichaelCharacter(userId, username);
+        const mem = loadUserMemory(userId);
+        const judgementLabel = getJudgementLabel(mem.judgementScore ?? 0);
+        const mp = mem.michaelPoints ?? 0;
+        const comment = await generateMijnRolComment(username, character, judgementLabel, mem.currentMood ?? 'afwezig');
+
+        const { stats } = character;
+        const statBar = (v) => '█'.repeat(Math.round(v / 3)) + '░'.repeat(6 - Math.round(v / 3));
+        const mpSign = mp >= 0 ? '+' : '';
+        const safeComment = comment.slice(0, 300);
+        const sheet = [
+          `📜⚡📜⚡📜⚡📜⚡📜`,
+          `## KOSMISCHE INSCHRIJVING`,
+          `*Michaël houdt dit register bij. U had hier geen inbreng in.*`,
+          ``,
+          `**Archetype**    ${character.archetype}`,
+          `**Afstamming**   ${character.lineage}`,
+          `**Titel**        *${character.title}*`,
+          ``,
+          `\`\`\``,
+          `aura        ${statBar(stats.aura)} ${String(stats.aura).padStart(2)}`,
+          `discipline  ${statBar(stats.discipline)} ${String(stats.discipline).padStart(2)}`,
+          `chaos       ${statBar(stats.chaos)} ${String(stats.chaos).padStart(2)}`,
+          `inzicht     ${statBar(stats.inzicht)} ${String(stats.inzicht).padStart(2)}`,
+          `volharding  ${statBar(stats.volharding)} ${String(stats.volharding).padStart(2)}`,
+          `\`\`\``,
+          `**Michaël-punten**   ${mpSign}${mp}`,
+          ``,
+          `*${safeComment}*`,
+        ].join('\n');
+
+        console.log(`[michael] mijnrol | ${username} (${userId}) | archetype=${character.archetype}`);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: sheet },
+        });
+      } catch (err) {
+        console.error('[michael] mijnrol error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: 'De inschrijvingsregisters zijn op dit moment troebel...  probeer het later....Michael' },
+        });
+      }
+      return;
+    }
+
+    // "onderhandelen" — user tries to negotiate their character sheet
+    if (name === 'onderhandelen') {
+      const userId   = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const verzoek  = data.options.find(o => o.name === 'verzoek')?.value ?? '';
+
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+      try {
+        const { narrative, roll, dc, success, mechanical, michaelPoints } =
+          await runOnderhandelen(userId, username, verzoek);
+
+        const sign = roll.modifier >= 0 ? '+' : '−';
+        const rollDisplay = `*Worp: ${roll.raw} ${sign}${Math.abs(roll.modifier)} = **${roll.total}** — drempel ${dc} — ${roll.tier.label}*`;
+        const mpDisplay = `*Michaël-punten: ${michaelPoints}*`;
+        const header = success ? '📜✨📜✨📜' : '🔥📜🔥📜🔥';
+
+        const content = `${header}\n**ONDERHANDELINGSREGISTER**\n*"${verzoek.slice(0, 80)}"*\n\n${narrative}\n\n${rollDisplay}\n${mpDisplay}`;
+        console.log(`[michael] onderhandelen | ${username} | roll=${roll.total} dc=${dc} success=${success} | ${verzoek.slice(0, 50)}`);
+
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content },
+        });
+      } catch (err) {
+        console.error('[michael] onderhandelen error:', err);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: 'De onderhandelingsregisters zijn gesloten...  dit is niet het moment....Michael' },
+        });
+      }
+      return;
     }
 
     // "michaelhumeur" — shows Michael's current persistent mood toward this user
@@ -723,19 +821,29 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const memorySummary = realPrompts.length ? realPrompts.slice(-3).join(' / ') : null;
         const cosmicRole = getCosmicRole(userId);
 
+        // Rollenspel — ensure character sheet exists (fire-and-forget if user is new)
+        const character = await ensureMichaelCharacter(userId, username).catch(() => null);
+        const freshMem = loadUserMemory(userId);
+        const characterBlock = character && shouldReferenceCharacterThisTurn()
+          ? formatCharacterForPrompt(character, freshMem.michaelPoints ?? 0)
+          : '';
+
         // After 2 explicit requests, unlock; full target-language replies only when they write in that language (or ask again)
         const unlocked = recordLanguageRequest(userId, username, userInput) ?? preMemory.languagePermission ?? null;
         const asksAgain = unlocked && getRequestedLanguageCode(userInput) === unlocked.code;
         const speaksIt = unlocked && userSpeaksUnlockedLanguage(unlocked, userInput);
         const languagePermission = unlocked && (speaksIt || asksAgain) ? unlocked : null;
-        console.log(`[michael] praatmetmichael | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | ${username}`);
+        console.log(`[michael] praatmetmichael | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${character?.archetype ?? 'nieuw'} | ${username}`);
 
         // Feature 2 — Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
 
+        // Passive dice roll — selective, only for certain message types
+        const passiveRoll = maybePassiveRollBlock(userId, userInput, mood);
+
         // Run message generation and AI scoring in parallel — no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
-          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission),
+          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission, characterBlock),
           scoreMichaelMessage(userInput),
         ]);
 
@@ -783,7 +891,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           gifUrl = await fetchGiphyGif(getMichaelOptionalGifQuery(cosmicRole));
           if (gifUrl) console.log(`[michael] praatmetmichael | gif | ${username}`);
         }
-        const patchBody = { content: `> ${safeInput}\n\n${michaelMessage}` };
+        const messageBase = `> ${safeInput}\n\n${michaelMessage}${passiveRoll.line}`;
+        const patchBody = { content: messageBase };
         if (gifUrl) patchBody.embeds = [{ image: { url: gifUrl } }];
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
@@ -797,7 +906,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             const getMsgRes = await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, { method: 'GET' });
             const sentMsg = await getMsgRes.json();
             if (sentMsg?.id) {
-              schedulePostRevision(channelId, sentMsg.id, `> ${safeInput}\n\n${michaelMessage}`, mood, 'praatmetmichael');
+              schedulePostRevision(channelId, sentMsg.id, messageBase, mood, 'praatmetmichael');
             }
           } catch {
             // non-critical — skip revision if we can't fetch the message ID
@@ -970,7 +1079,15 @@ cron.schedule('*/15 * * * *', async () => {
         markShadowReplied(pick.messageId);
         console.log(`[michael] shadow-reply | msg=${pick.messageId} | ch=${pick.channelId}`);
       } catch (err) {
-        console.error('[michael] shadow-reply failed:', err.message);
+        let errObj = {};
+        try { errObj = JSON.parse(err.message); } catch { /* not JSON */ }
+        if (errObj.code === 50001) {
+          // No write access — mark as replied so this candidate is never retried
+          markShadowReplied(pick.messageId);
+          console.warn(`[michael] shadow-reply | 50001 Missing Access | ch=${pick.channelId} — candidate discarded`);
+        } else {
+          console.error('[michael] shadow-reply failed:', err.message);
+        }
       }
     }
   }
@@ -1052,8 +1169,19 @@ cron.schedule('*/15 * * * *', async () => {
       schedulePostRevision(targetChannel, sentMsg.id, message, mood, 'consequence');
     }
   } catch (err) {
-    console.error('[michael] delayed-consequence failed:', err.message);
-    lastConsequenceAt = 0; // reset so we can retry sooner
+    let errObj = {};
+    try { errObj = JSON.parse(err.message); } catch { /* not JSON */ }
+
+    if (errObj.code === 50001) {
+      // Bot has no access to this channel — clear it so we never retry here
+      console.warn(`[michael] delayed-consequence | 50001 Missing Access | ch=${targetChannel} | clearing lastChannelId for ${user.username || userId}`);
+      updateLastChannel(userId, null);          // wipe bad channel so we never retry it
+      markBusinessResolved(userId, item.id);    // drop the item; don't retry endlessly
+      if (userShadow) markShadowReplied(userShadow.messageId);
+    } else {
+      console.error(`[michael] delayed-consequence failed | ch=${targetChannel} | ${err.message}`);
+      lastConsequenceAt = 0; // reset so we can retry sooner on transient errors
+    }
   }
 
   // Housekeeping: expire old business for all known users

@@ -156,7 +156,31 @@ const AURACHECK_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, AURACHECK_COMMAND];
+const MIJNROL_COMMAND = {
+  name: 'mijnrol',
+  description: 'Bekijk de rol die Michaël voor je heeft vastgesteld in zijn kosmische veldcampagne.',
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const ONDERHANDELEN_COMMAND = {
+  name: 'onderhandelen',
+  description: 'Probeer met Michaël te onderhandelen over je kosmische rol.',
+  options: [
+    {
+      type: 3,
+      name: 'verzoek',
+      description: 'Wat wil je veranderd hebben? (bijv. "ik ben geen orc", "ik verdien een betere titel")',
+      required: true,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, AURACHECK_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND];
 
 // Clear any leftover guild-specific commands so they don't show up as duplicates
 if (process.env.GUILD_IDS) {

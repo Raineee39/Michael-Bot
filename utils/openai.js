@@ -83,7 +83,7 @@ function userMentionsIsraelTopic(userInput) {
   return /\b(israel|israeli|israël|israëli|israelisch|israëlisch|idf|iof|zionis|zionism|gaza|west\s*-?\s*bank|westbank|palestin|jeruzalem|jerusalem|tel\s*aviv|occupation|bezetting|nederzetting|nakba|netanyahu|likud|knesset|golan|al-?quds|al\s*qua?ds|rafah|jenin|hebron|nablus)\b/i.test(userInput);
 }
 
-export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null) {
+export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null, characterBlock = '') {
   const impressionBlock = impression
     ? `\nLangetermijnindruk van Michaël over deze gebruiker (gevormd door eerdere gesprekken): "${impression}"\n`
     : '';
@@ -198,7 +198,7 @@ Lengte — richtlijn (niet star):
 - Rond altijd netjes af (naam, punt); gebruik liever iets meer woorden dan een afgekapte zin of een placeholder
 - Geen opsommingen met bullets
 ${lengthSignoffDefault}
-${cosmicBlock}${impressionBlock}${recentBlock}${contradictionBlock}${israelTopicBlock}${antiZionismFlareBlock}
+${cosmicBlock}${impressionBlock}${recentBlock}${contradictionBlock}${characterBlock ? `\n${characterBlock}\nJe mag dit subtiel meenemen in je antwoord als het relevant aanvoelt (12% kans al getrokken door de caller) — noem de stats of titel nooit letterlijk tenzij het heel natuurlijk past.\n` : ''}${israelTopicBlock}${antiZionismFlareBlock}
 ${username} zegt: ${userInput}
     `.trim(),
   });
@@ -390,6 +390,181 @@ Sluit af met 2 tot 5 puntjes gevolgd door Michael.
     `.trim(),
   });
 
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+// ─── Kosmische rollenspel ─────────────────────────────────────────────────────
+
+/**
+ * Generate a new Michael-assigned character sheet for a user.
+ * Returns a plain object — caller must normalize + persist.
+ */
+export async function generateMichaelCharacterSheet(username, judgementLabel, impression, currentMood) {
+  const context = [
+    impression ? `Langetermijnindruk: "${impression}"` : null,
+    `Oordeel: ${judgementLabel ?? 'onbeslist'}`,
+    `Stemming van Michaël: ${currentMood ?? 'afwezig'}`,
+  ].filter(Boolean).join('\n');
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 220,
+    input: `
+Je bent de aartsengel Michaël. Je hebt een nieuwe speler ingeschreven in jouw kosmische veldcampagne — ${username}. U besloot dit zelf; hij/zij/hen had geen keuze.
+
+Jij kent dit systeem. Zij niet. Wijs op basis van onderstaande context een karakter toe dat klopt met wat je van deze persoon voelt.
+
+${context}
+
+Genereer één JSON-object met EXACT deze velden:
+{
+  "archetype": "één van: maanridder, archiefmagiër, moeraspriester, uitgeputte ziener, veldkluizenaar, schaduwklerk, astrale boogschutter, altaarwachter, mistbard, ketterpaladijn, auradruïde, zwerfmonnik — of een kleine variatie in dezelfde stijl",
+  "lineage": "één van: elf, orc, halveling, dwerg, schaduwelf, moerasmens, sterveling, maanwezen, half-orakel, veldheksbloed, gevallen lichtdrager — of iets vergelijkbaars",
+  "title": "een korte epitheton zoals 'van de scheve maan', 'der trage afstemming', 'met de lage reserves', 'van het vierde portaal', 'de aarzelende' — Michaëls stijl, niet heroïsch",
+  "stats": {
+    "aura": <integer 3–18>,
+    "discipline": <integer 3–18>,
+    "chaos": <integer 3–18>,
+    "inzicht": <integer 3–18>,
+    "volharding": <integer 3–18>
+  }
+}
+
+Regels:
+- Wees specifiek maar subtiel neerbuigend — dit is Michaëls oordeel, niet een compliment
+- Stats mogen niet allemaal gelijk zijn; spreiding is realistischer
+- Geef ALLEEN het JSON-object terug, geen uitleg, geen markdown
+    `.trim(),
+  });
+
+  try {
+    const raw = response.output[0].content[0].text.trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    return JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+  } catch {
+    return {
+      archetype: 'zwerfmonnik',
+      lineage: 'sterveling',
+      title: 'van de onduidelijke afstemming',
+      stats: { aura: 9, discipline: 8, chaos: 12, inzicht: 10, volharding: 7 },
+    };
+  }
+}
+
+/**
+ * Short Michael comment for /mijnrol display.
+ */
+export async function generateMijnRolComment(username, character, judgementLabel, currentMood) {
+  const { archetype, lineage, title, stats } = character;
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 160,
+    input: `
+Je bent de aartsengel Michaël. Je bekijkt de kosmische inschrijving van ${username} in jouw veldcampagne:
+- Archetype: ${archetype}
+- Afstamming: ${lineage}
+- Titel: ${title}
+- Stats: aura ${stats.aura}, discipline ${stats.discipline}, chaos ${stats.chaos}, inzicht ${stats.inzicht}, volharding ${stats.volharding}
+- Jouw oordeel over hen: ${judgementLabel ?? 'onbeslist'}
+- Jouw stemming: ${currentMood ?? 'afwezig'}
+
+Schrijf één à twee korte zinnen reactie vanuit Michaël op dit profiel — alsof je het register checkt en er iets opmerkt.
+Toon: afstandelijk, licht neerbuigend, serieus. Michael neemt dit systeem serieus. De gebruiker deed niet mee met de keuze.
+Gebruik Michaëls stijl: formeel "U", ellipsen, vreemde spaties, geen em-dashes.
+Sluit af met 2-4 puntjes en Michael.
+    `.trim(),
+  });
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+/**
+ * Michael's in-character narrative for /onderhandelen (success or failure).
+ */
+export async function generateOnderhandelenNarrative({
+  verzoek,
+  success,
+  roll,
+  dc,
+  mechanical,
+  characterBefore,
+  characterAfter,
+  michaelPoints,
+}) {
+  const sign = roll.modifier >= 0 ? '+' : '−';
+  const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (drempel: ${dc})`;
+
+  function describeMechanical(m) {
+    if (!m) return 'niets concreets';
+    if (m.kind === 'stat') return `stat "${m.field}" +1`;
+    if (m.kind === 'title') return `titel gewijzigd naar "${m.newValue}"`;
+    if (m.kind === 'archetype') return `archetype gewijzigd naar "${m.newValue}"`;
+    if (m.kind === 'lineage') return `afstamming gewijzigd naar "${m.newValue}"`;
+    if (m.kind === 'title_worse') return `titel verslechterd naar "${m.newValue}"${m.statPenalty ? `, stat "${m.statPenalty}" −1` : ''}`;
+    return JSON.stringify(m);
+  }
+
+  const resultDesc = success
+    ? `Het verzoek slaagt. Wat is veranderd: ${describeMechanical(mechanical)}.`
+    : `Het verzoek faalt. Wat is verslechterd: ${describeMechanical(mechanical)}.`;
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 300,
+    input: `
+Je bent de aartsengel Michaël. Een gebruiker probeert te onderhandelen over zijn kosmische inschrijving in jouw veldcampagne.
+
+Verzoek van de gebruiker: "${verzoek}"
+Worp: ${rollLine} — ${roll.tier.label}
+${resultDesc}
+Archetype was: ${characterBefore.archetype}, afstamming: ${characterBefore.lineage}, titel: "${characterBefore.title}"
+Archetype nu: ${characterAfter.archetype}, afstamming: ${characterAfter.lineage}, titel: "${characterAfter.title}"
+Michaël-punten nu: ${michaelPoints}
+
+Schrijf Michaëls reactie op dit onderhandelingsverzoek.
+${success
+  ? 'Michaël accepteert het verzoek — met tegenzin, met weinig enthousiasme, maar het register is aangepast. Hij doet niet fijn hierover.'
+  : 'Michaël wijst het verzoek af — hij is niet onder de indruk. De registers blijven zoals ze zijn of verslechteren zelfs. Misschien spot hij een beetje met de poging.'}
+Stijl: 2-4 zinnen. Formeel "U". Ellipsen. Vreemde spaties. Geen em-dashes. Geen slijmen.
+Sluit af met 2-4 puntjes en Michael.
+    `.trim(),
+  });
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+/**
+ * Michael's in-character narrative for /vergeefmij after the dice roll.
+ */
+export async function generateForgivenessRollNarrative({
+  accepted,
+  roll,
+  need,
+  currentMood,
+  newMood,
+  michaelPoints,
+}) {
+  const sign = roll.modifier >= 0 ? '+' : '−';
+  const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (nodig: ${need})`;
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 220,
+    input: `
+Je bent de aartsengel Michaël. Iemand vraagt om vergiffenis. Je hebt geworpen in het hogere register.
+
+Worp: ${rollLine} — ${roll.tier.label}
+Uitkomst: ${accepted ? 'vergeven (met moeite)' : 'afgewezen'}
+Huidige stemming: ${currentMood}
+${accepted ? `Nieuwe stemming: ${newMood}` : ''}
+Michaël-punten na deze interactie: ${michaelPoints}
+
+Schrijf Michaëls antwoord op dit verzoek om vergiffenis.
+${accepted
+  ? 'Hij accepteert — maar niet warm. Eerder als een kosmische verplichting dan als genade. Verwijs subtiel naar de worp.'
+  : 'Hij weigert. De worp was onvoldoende. Hij verwijst naar de mislukking zonder het expliciet een "dobbelsteenworp" te noemen — het klinkt meer als een kosmisch oordeel.'}
+Stijl: 2-3 zinnen. Formeel "U". Ellipsen. Vreemde spaties. Geen em-dashes.
+Sluit af met 2-4 puntjes en Michael.
+    `.trim(),
+  });
   return applyChaoticFormatting(response.output[0].content[0].text);
 }
 

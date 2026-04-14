@@ -42,7 +42,14 @@ function defaultUser(username) {
     recentThemes:      [],     // Feature 2 — topic snapshots for contradiction engine
     languagePermission: null, // unlocked after repeated requests for a non-Dutch language
     languageRequestCounts: {}, // { en: 2, fr: 1 } — per-language tallies toward unlock
+    michaelCharacter:  null,   // kosmische rollenspel — persistent sheet
+    michaelPoints:     0,      // campaign standing (separate from judgementScore)
   };
+}
+
+function migrateMichaelRollenspel(user) {
+  if (user.michaelCharacter === undefined) user.michaelCharacter = null;
+  if (user.michaelPoints === undefined || typeof user.michaelPoints !== 'number') user.michaelPoints = 0;
 }
 
 // ─── Public load / save ───────────────────────────────────────────────────────
@@ -61,6 +68,7 @@ export function loadUserMemory(userId) {
   if (user.languageRequestCounts === undefined || typeof user.languageRequestCounts !== 'object') {
     user.languageRequestCounts = {};
   }
+  migrateMichaelRollenspel(user);
   return user;
 }
 
@@ -83,6 +91,7 @@ export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0, n
   if (user.languageRequestCounts === undefined || typeof user.languageRequestCounts !== 'object') {
     user.languageRequestCounts = {};
   }
+  migrateMichaelRollenspel(user);
   user.judgementScore += scoreDelta;
   if (nextMood  !== null) user.currentMood  = nextMood;
   if (channelId !== null) user.lastChannelId = channelId;
@@ -406,4 +415,147 @@ export function detectThemeOverlap(userId, prompt) {
     if (shared >= 2) return true;
   }
   return false;
+}
+
+// ─── Michaëls kosmische rollenspel — stats, rolls, Michael Points ─────────────
+
+const STAT_KEYS = ['aura', 'discipline', 'chaos', 'inzicht', 'volharding'];
+
+/** Tier from total (d20 + modifiers). */
+export function michaelRollTier(total) {
+  if (total <= 5)  return { key: 'poor', label: 'zwaar teleurstellend' };
+  if (total <= 11) return { key: 'weak', label: 'matig' };
+  if (total <= 16) return { key: 'acceptable', label: 'aanvaardbaar' };
+  if (total <= 22) return { key: 'strong', label: 'gunstig' };
+  return { key: 'favoured', label: 'ongewoon begunstigd' };
+}
+
+function clampStat(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 10;
+  return Math.max(3, Math.min(18, Math.round(x)));
+}
+
+/** Normalize a character object from AI or templates before saving. */
+export function normalizeMichaelCharacter(raw) {
+  const now = Date.now();
+  const statsIn = raw?.stats && typeof raw.stats === 'object' ? raw.stats : {};
+  const stats = {};
+  for (const k of STAT_KEYS) {
+    stats[k] = clampStat(statsIn[k] ?? 10);
+  }
+  return {
+    archetype: String(raw?.archetype ?? 'onbenoemde zwerver').slice(0, 80),
+    lineage: String(raw?.lineage ?? 'sterveling').slice(0, 80),
+    title: String(raw?.title ?? 'zonder erkenbare titel').slice(0, 120),
+    stats,
+    assignedAt: typeof raw?.assignedAt === 'number' ? raw.assignedAt : now,
+    lastUpdatedAt: now,
+  };
+}
+
+/**
+ * d20 + modifiers from stats, judgement, mood, Michael Points, context.
+ * @param {object} user — full user memory row
+ * @param {string} mood — current mood key
+ * @param {object} [opts]
+ * @param {string} [opts.context] — 'forgiveness' | 'negotiation' | 'general'
+ * @param {number} [opts.extraModifier] — manual adjustment
+ */
+export function computeMichaelRoll(user, mood, opts = {}) {
+  const raw = Math.floor(Math.random() * 20) + 1;
+  const char = user.michaelCharacter;
+  const st = char?.stats ?? { aura: 10, discipline: 10, chaos: 10, inzicht: 10, volharding: 10 };
+
+  let modifier = 0;
+  modifier += Math.floor((st.inzicht + st.volharding) / 6);
+  modifier += Math.floor(st.aura / 7);
+  modifier -= Math.floor(st.chaos / 8);
+  modifier += Math.floor((user.michaelPoints ?? 0) / 8);
+
+  const js = user.judgementScore ?? 0;
+  if (js <= -5) modifier -= 2;
+  else if (js <= -2) modifier -= 1;
+  else if (js >= 7) modifier += 2;
+  else if (js >= 4) modifier += 1;
+
+  const moodMod = {
+    woedend: -3,
+    streng: -2,
+    'passief-agressief': -1,
+    verward: 0,
+    loom: 0,
+    afwezig: 0,
+    kosmisch: 1,
+  };
+  modifier += moodMod[mood] ?? 0;
+
+  if (opts.context === 'forgiveness') {
+    modifier += Math.floor(st.discipline / 10);
+  }
+  if (opts.context === 'negotiation') {
+    modifier += Math.floor(st.inzicht / 9);
+    modifier -= 1;
+  }
+
+  modifier += opts.extraModifier ?? 0;
+  modifier += Math.floor(Math.random() * 5) - 2;
+
+  const total = raw + modifier;
+  const tier = michaelRollTier(total);
+  return { raw, modifier, total, tier };
+}
+
+export function updateMichaelPoints(userId, delta) {
+  const all = loadAll();
+  const user = all[userId];
+  if (!user) return 0;
+  migrateMichaelRollenspel(user);
+  user.michaelPoints = Math.max(-50, Math.min(99, (user.michaelPoints ?? 0) + delta));
+  all[userId] = user;
+  saveAll(all);
+  return user.michaelPoints;
+}
+
+/** Persist full character sheet (already normalized). */
+export function saveMichaelCharacter(userId, username, character) {
+  const all = loadAll();
+  const user = all[userId] ?? defaultUser(username);
+  migrateMichaelRollenspel(user);
+  user.username = username;
+  user.michaelCharacter = character;
+  user.michaelCharacter.lastUpdatedAt = Date.now();
+  all[userId] = user;
+  saveAll(all);
+}
+
+/** Shallow-merge fields into michaelCharacter. */
+export function patchMichaelCharacter(userId, partial) {
+  const all = loadAll();
+  const user = all[userId];
+  if (!user?.michaelCharacter) return null;
+  migrateMichaelRollenspel(user);
+  const prev = user.michaelCharacter;
+  const next = { ...prev, ...partial };
+  next.stats = { ...prev.stats, ...(partial.stats ?? {}) };
+  for (const k of STAT_KEYS) {
+    next.stats[k] = clampStat(next.stats[k]);
+  }
+  next.lastUpdatedAt = Date.now();
+  user.michaelCharacter = next;
+  all[userId] = user;
+  saveAll(all);
+  return next;
+}
+
+/** One-line summary for LLM prompts (no JSON). */
+export function formatCharacterForPrompt(character, michaelPoints) {
+  if (!character) return '';
+  const { archetype, lineage, title, stats } = character;
+  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${archetype}", ras/afstamming "${lineage}", titel/epitheton "${title}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}, Michaël-punten ${michaelPoints ?? 0}.`;
+}
+
+/** ~12% suggestion: Michael may nod at the role in a reply. */
+export function shouldReferenceCharacterThisTurn() {
+  return Math.random() < 0.12;
 }
