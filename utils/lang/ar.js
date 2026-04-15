@@ -373,6 +373,10 @@ ${context}`,
     babychatError: 'طفل ميخائيل نام…  حاول لاحقاً....امرؤ القيس',
     onderhandelenExpired: 'انتهت صلاحية طلبك.  أعد تقديمه إن كان لا يزال يستحق بيتاً....امرؤ القيس',
 
+    feedbackEmpty: 'النص فارغ.  اكتب شيئاً ثم أعد المحاولة....امرؤ القيس',
+    feedbackThanks: 'شكراً.  وُصِلت ملاحظتك إلى صانع البوت....امرؤ القيس',
+    feedbackError: 'تعذّر تمرير ملاحظتك (ديسكورد أو الشبكة).  أعد المحاولة لاحقاً أو راسل المشرف....امرؤ القيس',
+
     michaeltaalSet: {
       nl: '✅ **Michael spreekt nu Nederlands.**\nAlle reacties van Michael zullen voortaan in het Nederlands zijn....Michael',
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',

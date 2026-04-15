@@ -373,6 +373,11 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     babychatError: 'Baby Michael nodded off…  try again later....Michael',
     onderhandelenExpired: 'Your request has expired.  Resubmit if it is still relevant....Michael',
 
+    feedbackEmpty: 'The message is empty.  Write something and try again....Michael',
+    feedbackThanks: 'Thanks.  Your feedback has been forwarded to the maker....Michael',
+    feedbackError:
+      'Could not forward your feedback (Discord or network).  Try again later or contact a server admin....Michael',
+
     michaeltaalSet: {
       nl: '✅ **Michael spreekt nu Nederlands.**\nAlle reacties van Michael zullen voortaan in het Nederlands zijn....Michael',
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',

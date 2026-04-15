@@ -15,9 +15,11 @@ import {
 import {
   appendEditWithinDiscordLimit,
   DiscordRequest,
+  DISCORD_MESSAGE_CONTENT_MAX,
   getRandomEmoji,
   isDutchQuietHoursForUnpromptedSends,
   MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
+  sendDmToUser,
 } from './utils.js';
 import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
@@ -150,7 +152,10 @@ function getCosmicRole(userId, guildId) {
 }
 
 /** Antichrist gets "nee" on almost everything; only these stay open. */
-const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'uitverkorene', 'chat', 'cosmischestatus']);
+const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'uitverkorene', 'chat', 'cosmischestatus', 'feedback']);
+
+/** Snowflake to receive /feedback DMs (override with FEEDBACK_DM_USER_ID). */
+const FEEDBACK_OWNER_ID = process.env.FEEDBACK_DM_USER_ID || '49627618751811584';
 
 // NEE array is now per-lang: lang.ui.nee
 
@@ -207,6 +212,17 @@ const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s
 /** Returns the localised display name for a mood key, falling back to the raw key. */
 function moodName(lang, key) {
   return lang.moodNames?.[key] ?? key;
+}
+
+/**
+ * Cosmic reroll buttons: cosmic_{uit|ant}_{roll|flee}:{snowflake}
+ * Parsed with a single regex so "flee" can never be mistaken for "roll".
+ */
+function parseCosmicComponentId(id) {
+  if (id == null || typeof id !== 'string') return null;
+  const m = /^cosmic_(uit|ant)_(roll|flee):(\d+)$/.exec(id.trim());
+  if (!m) return null;
+  return { kind: m[1], action: m[2], guildId: m[3] };
 }
 
 // ─── Feature 5...  Post-message revision ────────────────────────────────────────
@@ -289,6 +305,52 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           ]
         },
       });
+    }
+
+    // "feedback"...  DM the bot owner with bug / feature / other reports
+    if (name === 'feedback') {
+      const soort = data.options.find(o => o.name === 'soort')?.value ?? 'other';
+      const rawBericht = data.options.find(o => o.name === 'bericht')?.value ?? '';
+      const bericht = String(rawBericht).trim().replace(/`/g, "'");
+      if (!bericht) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.feedbackEmpty, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username ?? 'unknown';
+      const channelId = req.body.channel_id ?? req.body.channel?.id ?? '?';
+      const kindLabel = { bug: 'Bug', feature: 'Feature', other: 'Other' }[soort] ?? soort;
+      const loc = guildId
+        ? `Server: ${guildId}\nKanaal: ${channelId}`
+        : 'Locatie: DM';
+      const header =
+        `**Michael feedback**\nSoort: ${kindLabel}\nVan: ${username} (<@${userId}>)\nUser-ID: ${userId}\n${loc}\n\nBericht:\n`;
+      const maxUser = Math.max(0, DISCORD_MESSAGE_CONTENT_MAX - header.length);
+      const dmBody = header + bericht.slice(0, maxUser);
+
+      res.send({
+        type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { flags: InteractionResponseFlags.EPHEMERAL },
+      });
+
+      try {
+        await sendDmToUser(FEEDBACK_OWNER_ID, dmBody);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: lang.ui.feedbackThanks, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      } catch (err) {
+        console.error('feedback DM error:', err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.feedbackError, flags: InteractionResponseFlags.EPHEMERAL },
+          });
+        } catch { /* token expired */ }
+      }
+      return;
     }
 
     // "trekkaart" command
@@ -835,7 +897,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // "babychat": toddler Michael; 50% meltdown: -3 judgement, antichrist on servers.
+    // "babychat": toddler Michael; 20% meltdown: -3 judgement, antichrist on servers.
     // Toddler and meltdown replies use OpenAI (gpt-4.1-mini): generateBabyChatToddler / generateBabyChatMeltdown in utils/openai.js.
     if (name === 'babychat') {
       const userInput = data.options.find(o => o.name === 'bericht').value;
@@ -884,7 +946,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         return;
       }
 
-      const infuriated = Math.random() < 0.5;
+      const infuriated = Math.random() < 0.2;
       let typingInterval = null;
       if (channelId) {
         DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
@@ -1092,7 +1154,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   // custom_id format: date_rN_{invokerUserId}_{path}
   // Each handler reads the current message content and APPENDS to it, building the full story.
   if (type === InteractionType.MESSAGE_COMPONENT) {
-    const componentId = data.custom_id;
+    const componentId = data.custom_id != null ? String(data.custom_id) : '';
     const prev = req.body.message?.content ?? '';
     const SEP = '\n\n                    ·  ·  ·\n\n';
 
@@ -1444,50 +1506,36 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // ── Cosmic: replace chosen one / antichrist (roll or flee) ───────────────
-    if (componentId.startsWith('cosmic_uit_flee:') || componentId.startsWith('cosmic_ant_flee:')) {
-      return res.send({
-        type: 7,
-        data: { content: lang.ui.cosmicFledReplace, components: [] },
-      });
-    }
+    const cosmic = parseCosmicComponentId(componentId);
+    if (cosmic) {
+      if (cosmic.action === 'flee') {
+        return res.send({
+          type: 7,
+          data: { content: lang.ui.cosmicFledReplace, components: [] },
+        });
+      }
 
-    if (componentId.startsWith('cosmic_uit_roll:')) {
-      const gid = componentId.split(':')[1];
+      const { guildId: gid, kind } = cosmic;
       res.send({ type: 6 });
       try {
         const rollLang = getLang(getGuildLanguage(gid));
-        const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(gid, rollLang);
-        setUitverkoreneForGuild(gid, chosenUserId);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content, embeds, components: [] },
-        });
-      } catch (err) {
-        console.error('[michael] cosmic_uit_roll:', err.message);
-        try {
-          const errLang = getLang(getGuildLanguage(gid));
+        if (kind === 'uit') {
+          const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(gid, rollLang);
+          setUitverkoreneForGuild(gid, chosenUserId);
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
-            body: { content: errLang.ui.cosmicRollError, components: [] },
+            body: { content, embeds, components: [] },
           });
-        } catch { /* token expired */ }
-      }
-      return;
-    }
-
-    if (componentId.startsWith('cosmic_ant_roll:')) {
-      const gid = componentId.split(':')[1];
-      res.send({ type: 6 });
-      try {
-        const rollLang = getLang(getGuildLanguage(gid));
-        const chosenUserId = await fetchRandomHumanUserId(gid);
-        setAntichristForGuild(gid, chosenUserId, Date.now() + 24 * 60 * 60 * 1000);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: rollLang.antichrist.announcement(chosenUserId), components: [] },
-        });
+        } else {
+          const chosenUserId = await fetchRandomHumanUserId(gid);
+          setAntichristForGuild(gid, chosenUserId, Date.now() + 24 * 60 * 60 * 1000);
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: rollLang.antichrist.announcement(chosenUserId), components: [] },
+          });
+        }
       } catch (err) {
-        console.error('[michael] cosmic_ant_roll:', err.message);
+        console.error(`[michael] cosmic_${kind}_roll:`, err.message);
         try {
           const errLang = getLang(getGuildLanguage(gid));
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {

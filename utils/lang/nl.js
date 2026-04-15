@@ -373,6 +373,11 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     babychatError: 'Baby-Michaël is in slaap gevallen…  probeer het later....Michael',
     onderhandelenExpired: 'Uw verzoek is verlopen.  Dien het opnieuw in als het nog relevant is....Michael',
 
+    feedbackEmpty: 'Het bericht is leeg.  Schrijf iets en probeer opnieuw....Michael',
+    feedbackThanks: 'Bedankt.  Je feedback is doorgestuurd naar de maker....Michael',
+    feedbackError:
+      'Kon je feedback niet doorsturen (Discord of netwerk).  Probeer later opnieuw of neem contact op met de beheerder....Michael',
+
     michaeltaalSet: {
       nl: '✅ **Michael spreekt nu Nederlands.**\nAlle reacties van Michael zullen voortaan in het Nederlands zijn....Michael',
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',

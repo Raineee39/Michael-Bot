@@ -109,3 +109,17 @@ export function appendEditWithinDiscordLimit(
   if (total() <= maxLen) return o + sep + e;
   return `${(o + sep + e).slice(0, maxLen - 1)}…`;
 }
+
+/** Open a DM with `recipientUserId` and send `content` (trimmed to Discord limit). */
+export async function sendDmToUser(recipientUserId, content) {
+  const text = String(content).slice(0, DISCORD_MESSAGE_CONTENT_MAX);
+  const createRes = await DiscordRequest('users/@me/channels', {
+    method: 'POST',
+    body: { recipient_id: String(recipientUserId) },
+  });
+  const ch = await createRes.json();
+  await DiscordRequest(`channels/${ch.id}/messages`, {
+    method: 'POST',
+    body: { content: text },
+  });
+}

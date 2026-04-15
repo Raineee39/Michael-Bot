@@ -126,12 +126,12 @@ const PRAATMETMICHAEL_COMMAND = {
 
 const BABYCHAT_COMMAND = {
   name: 'babychat',
-  description: 'Michael antwoordt als peuter; half van de tijd wordt hij woedend',
+  description: 'Michael antwoordt als peuter; 20% kans dat hij woedend wordt',
   name_localizations: { 'en-US': 'babychat', 'en-GB': 'babychat', ar: 'دردشة-طفل' },
   description_localizations: {
-    'en-US': 'Michael answers like a toddler; half the time he snaps and demotes you',
-    'en-GB': 'Michael answers like a toddler; half the time he snaps and demotes you',
-    ar: 'ميخائيل يردّ كطفل صغير؛ ونصف الوقت ينفجر ويخفضك',
+    'en-US': 'Michael answers like a toddler; 20% chance he snaps and demotes you',
+    'en-GB': 'Michael answers like a toddler; 20% chance he snaps and demotes you',
+    ar: 'ميخائيل يردّ كطفل صغير؛ 20% احتمال أن ينفجر ويخفضك',
   },
   options: [
     {
@@ -235,6 +235,55 @@ const ONDERHANDELEN_COMMAND = {
   contexts: [0, 1, 2],
 };
 
+const FEEDBACK_COMMAND = {
+  name: 'feedback',
+  description: 'Stuur bug, idee of opmerking naar de maker van Michael (privé doorgestuurd).',
+  name_localizations: { 'en-US': 'feedback', 'en-GB': 'feedback', ar: 'ملاحظات' },
+  description_localizations: {
+    'en-US': "Send a bug, idea, or note to Michael's maker (forwarded privately).",
+    'en-GB': "Send a bug, idea, or note to Michael's maker (forwarded privately).",
+    ar: 'أرسل تقريراً أو فكرة أو ملاحظة لصانع ميخائيل (يُمرَّر سراً).',
+  },
+  options: [
+    {
+      type: 3,
+      name: 'soort',
+      description: 'Bug, feature of iets anders?',
+      name_localizations: { 'en-US': 'kind', 'en-GB': 'kind', ar: 'النوع' },
+      description_localizations: {
+        'en-US': 'Bug, feature, or something else?',
+        'en-GB': 'Bug, feature, or something else?',
+        ar: 'خلل، ميزة، أو شيء آخر؟',
+      },
+      required: true,
+      choices: [
+        { name: 'Bug', value: 'bug', name_localizations: { 'en-US': 'Bug', 'en-GB': 'Bug', ar: 'خطأ' } },
+        {
+          name: 'Feature / idee',
+          value: 'feature',
+          name_localizations: { 'en-US': 'Feature / idea', 'en-GB': 'Feature / idea', ar: 'ميزة / فكرة' },
+        },
+        { name: 'Anders', value: 'other', name_localizations: { 'en-US': 'Other', 'en-GB': 'Other', ar: 'آخر' } },
+      ],
+    },
+    {
+      type: 3,
+      name: 'bericht',
+      description: 'Jouw bericht aan de maker',
+      name_localizations: { 'en-US': 'message', 'en-GB': 'message', ar: 'النص' },
+      description_localizations: {
+        'en-US': 'Your message to the maker',
+        'en-GB': 'Your message to the maker',
+        ar: 'نصك لصانع البوت',
+      },
+      required: true,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
 // Language selector...  sets the language Michael uses on this server
 const MICHAELTAAL_COMMAND = {
   name: 'michaeltaal',
@@ -250,7 +299,7 @@ const MICHAELTAAL_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, MICHAELTAAL_COMMAND];
+const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, FEEDBACK_COMMAND, MICHAELTAAL_COMMAND];
 
 // Clear any leftover guild-specific commands so they don't show up as duplicates
 if (process.env.GUILD_IDS) {
