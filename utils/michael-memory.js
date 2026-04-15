@@ -489,7 +489,7 @@ export function normalizeMichaelCharacter(raw) {
     archetype: normalizeTextField(raw?.archetype,
       { nl: 'onbenoemde zwerver', en: 'unnamed wanderer', ar: 'الناسك المجهول' }, 80),
     lineage:   normalizeTextField(raw?.lineage,
-      { nl: 'sterveling', en: 'mortal', ar: 'فانٍ' }, 80),
+      { nl: 'gewone mens', en: 'ordinary human', ar: 'إنسان عادي' }, 80),
     title:     normalizeTextField(raw?.title,
       { nl: 'zonder erkenbare titel', en: 'of unrecognised title', ar: 'بلا لقب معترَف به' }, 120),
     stats,

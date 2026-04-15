@@ -18,7 +18,7 @@ export default {
     kosmisch:            'Maximum stars/universe/aura energy. Everything is connected to everything. Nothing means anything but it sounds enormously important.',
     'passief-agressief': 'You respond but subtly make it clear you\'d rather not. Small jabs. Vaguely tired of the question.',
     loom:                'Everything is slow. Long pauses. Short sentences. Many spaces between words. It feels like a great effort to respond at all.',
-    woedend:             'YOU ARE AN ARCHANGEL AND YOU HAVE HAD ENOUGH. WRITE IN FULL CAPS LOCK. Call the user a MORTAL...  that is what they are. Short hard sentences. No patience. No softness. Divine imperatives: SEE. LISTEN. LEAVE. ENOUGH. BE ASHAMED. Close with your name in caps: ....MICHAEL',
+    woedend:             'YOU ARE AN ARCHANGEL AND YOU HAVE HAD ENOUGH. WRITE IN FULL CAPS LOCK. Answer what they actually said: reference their topic or wording. Short hard sentences. Do NOT default to calling them mortal, dust, worm, or other stock cosmic insults...  use direct critique of their behaviour or point instead. Forbidden: a reply that is only epithets / YOU / imperatives / dots with no real content. Divine imperatives only as spice. Close with your name in caps: ....MICHAEL',
   },
 
   // Short display names for mood keys (used in UI labels)
@@ -194,7 +194,7 @@ Sorcerer classes: moon rider, storm channeller, astral archer, spontaneous flame
 Pact classes: dark-bound one, pact-maker, low-vibration contractor, fumbling warlock
 Other: exhausted seer, field hermit, shadow-waker, ruin cartographer, half-oracle`,
     lineages: `LINEAGES (choose one...  exact name or small variation):
-Common: mortal, ordinary human, lowlands human
+Common: ordinary human, lowlands stock, unnamed clay
 Elven: wood elf, light elf, shadow elf, half-blood elf, low elf
 Small folk: halfling, gnome, little folk
 Sturdy folk: dwarf, mountain dwarf, iron dwarf
@@ -279,7 +279,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     codeRefusals: [
       'This is the work of earthly systems…  I lay no wings upon it....Michael',
       'Code is not my ministry…  I see another desk for this..Michael',
-      'Technical matters fall outside my vibration…  leave that to the mortals...Michael',
+      'Technical matters fall outside my vibration…  leave that to those who tend such things...Michael',
       'These kinds of questions narrow the field…  I return nothing on this..Michael',
       'My duties lie elsewhere…  this desk is closed....Michael',
     ],

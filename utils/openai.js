@@ -656,7 +656,7 @@ ${cs.schemaInstruction}
 
   const fallback = {
     archetype: { nl: 'zwerfmonnik', en: 'wandering monk', ar: 'الراهب التائه' },
-    lineage:   { nl: 'sterveling', en: 'mortal', ar: 'فانٍ' },
+    lineage:   { nl: 'gewone mens', en: 'ordinary human', ar: 'إنسان عادي' },
     title:     { nl: 'van de onduidelijke afstemming', en: 'of unclear attunement', ar: 'ذو الانسجام الغامض' },
     stats:     { aura: 9, discipline: 8, chaos: 12, inzicht: 10, volharding: 7 },
   };
@@ -862,7 +862,21 @@ export async function generatePostRevision(originalText, mood, langCode = 'nl') 
   const lang = getLang(langCode);
   const { outputInstruction, styleHint } = lang.helpers;
 
-  const moodDesc = lang.moodDescriptions[mood] ?? 'Detached and vague.';
+  // Full woedend/streng prompts make the model spam "MORTAL... YOU..." again; edits must be a quieter second beat.
+  const revisionMoodDesc =
+    mood === 'woedend' || mood === 'streng'
+      ? (langCode === 'ar'
+        ? 'كنتَ حاداً في الأصل؛ هذا التعقيب همسٌ أو تردّد لاحق، ليس خطبة ثانية ولا صراخاً.'
+        : langCode === 'en'
+          ? 'You were harsh in the original line. This add-on is a muttered second thought, second-guess, or softer sting...  NOT another full caps rant.'
+          : 'Je was al hard in het origineel. Dit is een nagalm of twijfel, geen tweede volle tirade.')
+      : (lang.moodDescriptions[mood] ?? 'Detached and vague.');
+
+  const revisionAntiLoop = langCode === 'ar'
+    ? 'مهم: لا تكرر نفس جملة الهجاء الحرفية. لا تكتب رداً يقتصر على لقب مهين عام و"أنت" ونقاط فقط.'
+    : langCode === 'en'
+      ? 'CRITICAL: Do NOT repeat stock epithets (mortal, dust, worm), ALL CAPS "YOU", or the same imperatives as the main text. Add new substance (doubt, detail, or a different angle).'
+      : 'BELANGRIJK: herhaal geen vaste scheldaanhef (sterveling e.d.), dezelfde CAPS-bevelenreeks of het origineel. Voeg iets nieuws toe (twijfel, detail, andere kant).';
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
@@ -876,7 +890,8 @@ ${personaIntro(langCode)} ${langCode === 'ar'
 ${langCode === 'ar'
   ? 'اكتب فقط تعقيباً قصيراً...  كأنك بعد الإرسال أدركتَ أن البيت لم يكن مكتملاً. ابدأ بـ"تعقيب:" ثم جملة أو اثنتان (عادةً جملة واحدة). لا تُعد كتابة الرد الأصلي كاملاً.'
   : 'Write ONLY a short afterthought...  as if after sending you realise it wasn\'t quite right. Begin with "Edit:" then 1 to 2 short sentences (usually 1). Do NOT repeat or rewrite the original. Just the edit line.'}
-Tone: ${mood}...  ${moodDesc}
+${revisionAntiLoop}
+Tone: ${mood}...  ${revisionMoodDesc}
 ${outputInstruction} ${styleHint}. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });
