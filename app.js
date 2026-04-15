@@ -1706,12 +1706,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 //   1. Prune stale shadow candidates from the in-memory store.
 //   2. Shadow reply (Feature 4): 25% chance per cycle, pick one eligible
 //      candidate and reply to it directly as if Michael just noticed.
-//   3. Delayed consequence (Feature 1): pick one user with outstanding
-//      unfinished business, generate an AI callback and post it.
-//      A global 25-minute cooldown prevents back-to-back firings.
+//   3. Delayed consequence (Feature 1): 10% chance per cycle; if it fires, pick one user with
+//      outstanding unfinished business, generate an AI callback and post it.
+//      A per-guild cooldown prevents back-to-back firings in the same server.
 
 const lastConsequencePerGuild = new Map(); // guildId → timestamp
 const CONSEQUENCE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours per guild between consequence firings
+/** Probability each cron tick (15 min) that delayed consequence runs when candidates exist. */
+const DELAYED_CONSEQUENCE_ROLL_CHANCE = 0.1;
 
 // Channels where we received 50001 (Missing Access) this session.
 // Cleared on process restart. Prevents the Gateway from repopulating lastChannelId
@@ -1788,6 +1790,11 @@ cron.schedule('*/15 * * * *', async () => {
     });
 
   if (!candidateUsers.length) return;
+
+  if (Math.random() >= DELAYED_CONSEQUENCE_ROLL_CHANCE) {
+    Object.keys(allMemory).forEach(uid => maybeAgeBusiness(uid));
+    return;
+  }
 
   // Weighted random pick...  higher severity weighs more
   const totalWeight = candidateUsers.reduce((s, c) => s + (c.outstanding[0]?.severity ?? 1), 0);
