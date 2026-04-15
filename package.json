@@ -2,7 +2,7 @@
   "name": "michael-bot",
   "private": true,
   "version": "1.0.0",
-  "description": "Aartsengel Michaël — Dutch spiritual boomer Discord bot",
+  "description": "Aartsengel Michaël: Dutch spiritual boomer Discord bot",
   "main": "app.js",
   "type": "module",
   "engines": {

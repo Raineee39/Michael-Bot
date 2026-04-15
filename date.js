@@ -190,12 +190,12 @@ export const ROUND_3 = {
 // Based on emotional depth and genuine connection shown.
 
 export const DATE_SCORES = {
-  // Peak — Michael was as honest as an archangel can be
+  // Peak...  Michael was as honest as an archangel can be
   ccc: 3, cca: 3,
-  // Very good — real warmth, something shifted
+  // Very good...  real warmth, something shifted
   ccb: 2, cac: 2, aab: 2, bca: 2, bbb: 2, abc: 2,
   abb: 2, acb: 2, bcb: 2, cab: 2, cbc: 2, cba: 2, cbb: 2,
-  // Good — sweet, awkward, something landed
+  // Good...  sweet, awkward, something landed
   bab: 1, bbc: 1, bcc: 1, bba: 1, baa: 1, bac: 1,
   aca: 1, acc: 1, aac: 1, aaa: 1, aba: 1, caa: 1,
   // Everything else: 0

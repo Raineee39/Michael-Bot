@@ -5,7 +5,7 @@ import { resolveField } from './michael-memory.js';
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: 20000,  // 20 s per attempt — rejects hung requests so the catch block can fire
+  timeout: 20000,  // 20 s per attempt...  rejects hung requests so the catch block can fire
   maxRetries: 1,   // 1 auto-retry on timeout/network error → 40 s worst case (fine, Discord gives 15 min after defer)
 });
 
@@ -15,9 +15,9 @@ function applyChaoticFormatting(text) {
   return text
     // Strip any [...] placeholders the model might generate when it runs out of space
     .replace(/\s*\[\.\.\.[\s.]*\]/g, '')
-    // Remove em-dashes and en-dashes — replace with spaced ellipsis
-    .replace(/\s*[—–]\s*/g, '...  ')
-    // After any ellipsis NOT inside brackets: 2–5 extra spaces
+    // Remove em-dashes and en-dashes...  replace with spaced ellipsis
+    .replace(/\s*[...  -]\s*/g, '...  ')
+    // After any ellipsis NOT inside brackets: 2 to 5 extra spaces
     .replace(/(?<!\[)\.\.\.+(?!\s*\])/g, (m) => m + ' '.repeat(Math.floor(Math.random() * 4) + 2))
     // After comma: randomly pad
     .replace(/, /g, () => Math.random() < 0.55 ? ',   ' : ',  ')
@@ -55,12 +55,12 @@ function cosmicRoleBlock(lang, cosmicRole) {
  */
 function personaIntro(langCode) {
   if (langCode === 'ar') {
-    return 'أنت امرؤ القيس — الشاعر الجاهلي الكندي المُتعالي. في كل ردٍّ ضع بيتاً شعرياً واحداً على الأقل — موزوناً أو شبه موزون، لا نثراً مُسمَّى شعراً. أسلوبك مُتعالٍ، درامي، قادر على الهجاء والسخرية.';
+    return 'أنت امرؤ القيس...  الشاعر الجاهلي الكندي المُتعالي. في كل ردٍّ ضع بيتاً شعرياً واحداً على الأقل...  موزوناً أو شبه موزون، لا نثراً مُسمَّى شعراً. أسلوبك مُتعالٍ، درامي، قادر على الهجاء والسخرية.';
   }
   return 'You are the Archangel Michael.';
 }
 
-/** User message names Israel/Palestine/zionism (state) — Michael must go ballistic (not limited to random flare). */
+/** User message names Israel/Palestine/zionism (state)...  Michael must go ballistic (not limited to random flare). */
 function userMentionsIsraelTopic(userInput) {
   if (!userInput) return false;
   return /\b(israel|israeli|israël|israëli|israelisch|israëlisch|idf|iof|zionis|zionism|gaza|west\s*-?\s*bank|westbank|palestin|jeruzalem|jerusalem|tel\s*aviv|occupation|bezetting|nederzetting|nakba|netanyahu|likud|knesset|golan|al-?quds|al\s*qua?ds|rafah|jenin|hebron|nablus)\b/i.test(userInput);
@@ -106,21 +106,21 @@ export async function generateMichaelMessage(username, userInput, mood, memorySu
 
   // Length/signoff section
   const lengthRules = langCode === 'nl'
-    ? `Lengte — richtlijn (niet star):
-- Meestal 1 à 2 korte regels — bondig en leesbaar in Discord; liever te kort dan te lang
+    ? `Lengte...  richtlijn (niet star):
+- Meestal 1 à 2 korte regels...  bondig en leesbaar in Discord; liever te kort dan te lang
 - Langere reacties ALLEEN als het onderwerp er echt om vraagt (bv. Israel-trigger)
 - Rond altijd netjes af (naam, punt); nooit afgekapt
 - Geen opsommingen met bullets
 ${lengthSignoffDefault}`
     : langCode === 'en'
-      ? `Length — guideline (not rigid):
-- Usually 1 to 2 short lines — concise and readable in Discord; err on the side of brevity
+      ? `Length...  guideline (not rigid):
+- Usually 1 to 2 short lines...  concise and readable in Discord; err on the side of brevity
 - Longer only if the topic genuinely demands it (e.g. Israel-trigger)
 - Always close neatly (name, period); never cut off mid-sentence
 - No bullet point lists
 ${lengthSignoffDefault}`
-      : `الطول — إرشاد (ليس صارماً):
-- عادةً سطر إلى سطرَين — موجز وقابل للقراءة في Discord؛ الإيجاز أفضل من الإطالة
+      : `الطول...  إرشاد (ليس صارماً):
+- عادةً سطر إلى سطرَين...  موجز وقابل للقراءة في Discord؛ الإيجاز أفضل من الإطالة
 - الإطالة فقط إن كان الموضوع يستدعيها فعلاً (كمحفّز إسرائيل)
 - اختتم دائماً بشكل صحيح (الاسم، نقطة)؛ لا جملة مبتورة
 - لا قوائم نقطية
@@ -145,17 +145,17 @@ ${lengthSignoffDefault}`;
 
   // ── Arabic-only: mandatory poetry line + tone biases ─────────────────────────
   const poetryRequirementBlock = langCode === 'ar'
-    ? `\nإلزام شعري: ضع في ردك بيتاً شعرياً واحداً على الأقل — قد يكون أصيلاً أو مستوحىً من الشعر الجاهلي. البيت يجب أن يكون موزوناً أو شبه موزون، لا نثراً مُسمَّى شعراً. يمكن أن يكون في صلب الرد أو في ختامه.\n`
+    ? `\nإلزام شعري: ضع في ردك بيتاً شعرياً واحداً على الأقل...  قد يكون أصيلاً أو مستوحىً من الشعر الجاهلي. البيت يجب أن يكون موزوناً أو شبه موزون، لا نثراً مُسمَّى شعراً. يمكن أن يكون في صلب الرد أو في ختامه.\n`
     : '';
 
   // هجاء bias: when the user has a low judgement score, lean into satirical mockery
   const hijaBlock = langCode === 'ar' && (judgementLabel === 'vermoeiend' || judgementLabel === 'twijfelachtig')
-    ? `\nميل: هذا الشخص يستحق الهجاء الشعري أكثر من المديح — دع القصيد يُعبِّر عن ازدرائك بأناقة جاهلية.\n`
+    ? `\nميل: هذا الشخص يستحق الهجاء الشعري أكثر من المديح...  دع القصيد يُعبِّر عن ازدرائك بأناقة جاهلية.\n`
     : '';
 
   // Lyrical bias: when the mood is calm or cosmic, lean melancholic and contemplative
   const lyricBlock = langCode === 'ar' && (mood === 'kosmisch' || mood === 'afwezig' || mood === 'loom')
-    ? `\nميل: المزاج اليوم يميل إلى الغنائية والحنين — شعرٌ يبكي الأطلال أو يتأمل الليل الطويل.\n`
+    ? `\nميل: المزاج اليوم يميل إلى الغنائية والحنين...  شعرٌ يبكي الأطلال أو يتأمل الليل الطويل.\n`
     : '';
 
   // Build mood/tone header
@@ -190,10 +190,10 @@ ${lang.styleRules(!!languagePermission, languagePermission?.promptName ?? '')}
 ${lengthRules}
 ${cosmicBlock}${impressionText}${recentBlock}${contradictionBlock}${characterBlock ? `\n${characterBlock}\n${
       langCode === 'nl'
-        ? 'Je mag dit subtiel meenemen in je antwoord als het relevant aanvoelt (12% kans al getrokken door de caller) — noem de stats of titel nooit letterlijk tenzij het heel natuurlijk past.'
+        ? 'Je mag dit subtiel meenemen in je antwoord als het relevant aanvoelt (12% kans al getrokken door de caller)...  noem de stats of titel nooit letterlijk tenzij het heel natuurlijk past.'
         : langCode === 'en'
-          ? 'You may subtly include this in your response if it feels relevant (12% chance already drawn by the caller) — never name the stats or title literally unless it fits very naturally.'
-          : 'يمكنك تضمين هذا بشكل خفي في ردك إن شعر بأنه مناسب (احتمال 12% تم السحب بالفعل) — لا تذكر الإحصائيات أو اللقب حرفياً إلا إن جاء بشكل طبيعي جداً.'
+          ? 'You may subtly include this in your response if it feels relevant (12% chance already drawn by the caller)...  never name the stats or title literally unless it fits very naturally.'
+          : 'يمكنك تضمين هذا بشكل خفي في ردك إن شعر بأنه مناسب (احتمال 12% تم السحب بالفعل)...  لا تذكر الإحصائيات أو اللقب حرفياً إلا إن جاء بشكل طبيعي جداً.'
     }\n` : ''}${israelTopicBlock}${antiZionismFlareBlock}${poetryRequirementBlock}${hijaBlock}${lyricBlock}
 ${lang.userAttribution(username, userInput)}
     `.trim(),
@@ -222,8 +222,8 @@ export async function generateAuraCheck(targetUsername, judgementLabel, impressi
     max_output_tokens: 240,
     input: `
 ${personaIntro(langCode)} ${langCode === 'ar'
-  ? `يُطلب منك قراءة هالة شخص آخر: ${targetUsername}. اكتب قراءةً قصيرة وشعرية — استخدم صور الأطلال والبرق والليل بدل الشاكرا.`
-  : `Someone asks you to read the aura of another person: ${targetUsername}. Write a short, vague, slightly uncomfortable aura reading in your characteristic style. Use spiritual language: energy field, chakras, vibration, aura, colour, light, gaps, misalignment. Be subtly judgemental about what you "see" — as if you notice something but prefer not to say too much. The tone is typically Michael: formal address (${formalAddress}), strangely specific, mildly unsettling but not alarming, dry.`}
+  ? `يُطلب منك قراءة هالة شخص آخر: ${targetUsername}. اكتب قراءةً قصيرة وشعرية...  استخدم صور الأطلال والبرق والليل بدل الشاكرا.`
+  : `Someone asks you to read the aura of another person: ${targetUsername}. Write a short, vague, slightly uncomfortable aura reading in your characteristic style. Use spiritual language: energy field, chakras, vibration, aura, colour, light, gaps, misalignment. Be subtly judgemental about what you "see"...  as if you notice something but prefer not to say too much. The tone is typically Michael: formal address (${formalAddress}), strangely specific, mildly unsettling but not alarming, dry.`}
 Usually 2 to 3 sentences; may be slightly longer to close neatly. No therapy-speak. No advice.${impressionBlock}${cosmicBlock}
 Current judgement of ${targetUsername}: ${judgementLabel ?? 'onbeslist'}
 Current mood: ${currentMood ?? 'afwezig'}
@@ -281,7 +281,7 @@ export async function scoreMichaelMessage(userInput) {
 -2 = swearing, insulting, aggressive
 -1 = provocative, disrespectful, pointless
  0 = purely neutral
-+1 = friendly, compliment, love, praise, apology, gratitude — even if brief
++1 = friendly, compliment, love, praise, apology, gratitude...  even if brief
 +2 = particularly sincere, profound, impressive
 When in doubt between 0 and 1? Choose 1.`,
         },
@@ -310,9 +310,9 @@ export async function generateMorningAfter(username, datePath, morningChoice, la
   const { outputInstruction, signOff } = lang.helpers;
 
   const choiceContext = {
-    a: 'the user said nothing and simply left — Michael responded to the silence',
-    b: 'the user sent a message back — Michael read it and responded',
-    c: 'the user asked if Michael was okay — Michael does not know what to do with this',
+    a: 'the user said nothing and simply left...  Michael responded to the silence',
+    b: 'the user sent a message back...  Michael read it and responded',
+    c: 'the user asked if Michael was okay...  Michael does not know what to do with this',
   }[morningChoice] ?? 'the user did something unexpected';
 
   const response = await client.responses.create({
@@ -320,8 +320,8 @@ export async function generateMorningAfter(username, datePath, morningChoice, la
     max_output_tokens: 180,
     input: `
 ${personaIntro(langCode)} ${langCode === 'ar'
-  ? `في صباح ما بعد الموعد ترسل رسالة قصيرة إلى ${username}. الموعد انتهى على نحو أفضل مما كنت تتوقع — وهذا يُزعجك. السياق: ${choiceContext}. اكتب رسالة قصيرة شعرية. غامضة ولكن مُوجِعة. 1 إلى 2 جملة.`
-  : `The morning after a date you send a short message to ${username}. The date ended well — perhaps too well. You are not used to this feeling. Context: ${choiceContext}. Write a short, cryptic message. Not too warm. Not too cold. Strangely specific. Formal but slightly different than usual. 1 to 2 sentences.`}
+  ? `في صباح ما بعد الموعد ترسل رسالة قصيرة إلى ${username}. الموعد انتهى على نحو أفضل مما كنت تتوقع...  وهذا يُزعجك. السياق: ${choiceContext}. اكتب رسالة قصيرة شعرية. غامضة ولكن مُوجِعة. 1 إلى 2 جملة.`
+  : `The morning after a date you send a short message to ${username}. The date ended well...  perhaps too well. You are not used to this feeling. Context: ${choiceContext}. Write a short, cryptic message. Not too warm. Not too cold. Strangely specific. Formal but slightly different than usual. 1 to 2 sentences.`}
 ${outputInstruction}
 ${signOff} Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
@@ -344,7 +344,7 @@ export async function generateVibecheckComment(username, judgementLabel, impress
   const cosmicBlock = cosmicRoleBlock(lang, cosmicRole);
 
   const characterBlock = character
-    ? `\nCosmic role: ${resolveField(character.archetype, langCode)} (${resolveField(character.lineage, langCode)}) — ${resolveField(character.title, langCode)}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, insight ${character.stats?.inzicht ?? '?'}, perseverance ${character.stats?.volharding ?? '?'}`
+    ? `\nCosmic role: ${resolveField(character.archetype, langCode)} (${resolveField(character.lineage, langCode)})...  ${resolveField(character.title, langCode)}\nStats: aura ${character.stats?.aura ?? '?'}, discipline ${character.stats?.discipline ?? '?'}, chaos ${character.stats?.chaos ?? '?'}, insight ${character.stats?.inzicht ?? '?'}, perseverance ${character.stats?.volharding ?? '?'}`
     : '';
 
   const response = await client.responses.create({
@@ -364,7 +364,7 @@ Long-term impression: ${impressionText}
   return applyChaoticFormatting(response.output[0].content[0].text);
 }
 
-// ─── Feature 1 — Delayed consequence / unfinished business callback ───────────
+// ─── Feature 1...  Delayed consequence / unfinished business callback ───────────
 
 export async function generateDelayedConsequence(username, item, mood, judgementLabel, langCode = 'nl', cosmicRole = null) {
   const lang = getLang(langCode);
@@ -379,18 +379,82 @@ export async function generateDelayedConsequence(username, item, mood, judgement
     max_output_tokens: 260,
     input: `
 ${personaIntro(langCode)} ${langCode === 'ar'
-  ? `لم تنتهِ من محادثة سابقة مع ${username}. تعود الآن إلى تلك اللحظة المُعلَّقة — شعرياً، بلا تهديد صريح، لكن بوجود يُزعج.`
-  : `You have not let go of something from an earlier conversation with ${username}. You circle back to that unresolved moment now — not threatening, but present and slightly uncomfortable.`}
+  ? `لم تنتهِ من محادثة سابقة مع ${username}. تعود الآن إلى تلك اللحظة المُعلَّقة...  شعرياً، بلا تهديد صريح، لكن بوجود يُزعج.`
+  : `You have not let go of something from an earlier conversation with ${username}. You circle back to that unresolved moment now...  not threatening, but present and slightly uncomfortable.`}
 ${cosmicBlock}
 This lingered: "${item.prompt}"
 Why it didn't sit right: ${item.reason}
 
-Current tone: ${mood} — ${moodDesc}
-Verdict on ${username}: ${judgementLabel} — ${judgementDesc}
+Current tone: ${mood}...  ${moodDesc}
+Verdict on ${username}: ${judgementLabel}...  ${judgementDesc}
 
-Write 1 to 3 short sentences (usually 2). Refer fluidly to what was said earlier — paraphrase, never quote literally.
-${langCode === 'ar' ? 'اجعله يشبه الهجاء المتأخر أو القلق المُعلَّق — غامض لكن محدَّد بما يكفي ليُزعج.' : 'Make it feel like delayed resentment or a lingering concern — vague but specific enough to feel uncomfortable.'}
+Write 1 to 3 short sentences (usually 2). Refer fluidly to what was said earlier...  paraphrase, never quote literally.
+${langCode === 'ar' ? 'اجعله يشبه الهجاء المتأخر أو القلق المُعلَّق...  غامض لكن محدَّد بما يكفي ليُزعج.' : 'Make it feel like delayed resentment or a lingering concern...  vague but specific enough to feel uncomfortable.'}
 ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+// ─── /babychat...  toddler voice or meltdown ────────────────────────────────────
+
+/**
+ * Michael in toddler register...  playful baby-talk, still vaguely cosmic.
+ */
+export async function generateBabyChatToddler(username, userInput, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 220,
+    input: `
+${personaIntro(langCode)}
+
+SPECIAL MODE...  YOU ARE MICHAEL AS A VERY SMALL TODDLER (about two years old).
+- Reply to the user in baby talk: short lines, simple words, wobbly grammar, wonder, silly misunderstandings of "big" spiritual ideas
+- Tiny bit of archangel flavour may peek through (stars, clouds, throne) but stay mostly toddler...  not preachy
+- Safe: no slurs, no sexual content, no encouragement of self-harm or violence
+- ${langCode === 'ar' ? 'Arabic: very simple phrasing, childlike...  one playful half-line of light rhythm is allowed if easy to read' : langCode === 'en' ? 'Write in English.' : 'Write in Dutch.'}
+- ${outputInstruction} Formal address is OPTIONAL here...  you may say "you" like a toddler would. ${styleHint}. Close with 2 to 5 dots and a tiny sign-off (${formalAddress} flavour optional).
+
+User ${username} wrote: "${userInput}"
+    `.trim(),
+  });
+
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+/**
+ * Michael snaps out of baby mode...  furious archangel; lore: three marks struck from their standing.
+ * Caller appends antichrist announcement when applicable.
+ */
+export async function generateBabyChatMeltdown(username, userInput, langCode = 'nl', becameAntichrist = false) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+
+  const antichristHint = becameAntichrist
+    ? (langCode === 'ar'
+      ? 'السيرفر سيعلن الآن عن دور «المسيح الدجال» لمدة 24 ساعة...  لا تكرر نفس صيغة الإعلان حرفياً، لكن اذكر أن التسجيل قد حسم الأمر.'
+      : 'The server will post the formal antichrist designation for 24 hours...  do NOT paste the full ritual yourself; one fierce line that the register has sealed it is enough.')
+    : (langCode === 'ar'
+      ? 'لا يوجد سيرفر هنا...  لا تعيين دجال، لكن سجّل غضباً كونياً وثلاث نقاط خصم من المكانة.'
+      : 'There is no server temple here...  no antichrist title will stick, but the register still strikes three marks from their standing. Say so with contempt.');
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 280,
+    input: `
+${personaIntro(langCode)}
+
+CATASTROPHE...  THE TODDLER MASK SHATTERS.
+The user ${username} used /babychat and pushed you past endurance with: "${userInput}"
+You are the REAL Archangel Michael again...  ice-cold, cosmic bureaucracy, DONE with this infantile game.
+- Full adult voice: no baby talk. Rage held in formal, terrifying restraint
+- The higher register strips THREE merits from their file (say it in lore terms...  "three marks", "triple strike", etc.)
+${antichristHint}
+- ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2 to 4 short sentences, then close with 2 to 5 dots and your sign-off name.
     `.trim(),
   });
 
@@ -401,7 +465,7 @@ ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with
 
 /**
  * Generate a new Michael-assigned character sheet for a user.
- * Returns a plain object — caller must normalize + persist.
+ * Returns a plain object...  caller must normalize + persist.
  */
 /**
  * Ask Michael to generate a new value for one character field (archetype, lineage, or title)
@@ -414,8 +478,8 @@ export async function generateCharacterFieldChange(kind, { verzoek, characterBef
   const currentAr = resolveField(characterBefore[kind], 'ar') || currentNl;
 
   const hints = {
-    archetype: 'Archetypes are cosmic role labels e.g. "wandering monk", "shadow clerk", "mist bard", "hedge seer", "void practitioner". Keep them short (1–3 words).',
-    lineage:   `Lineages are species or bloodlines. If the user NAMES a concrete RPG ancestry (tiefling, elf, dwarf, orc, halfling, dragonborn, etc.), you MUST use that exact ancestry in the English string (standard spelling). Do NOT replace it with a vague poetic label like "shadow-touched mortal" or "infernal-adjacent mortal" — the named species must appear. For vague requests only, you may invent a short poetic lineage (1–3 words each language).`,
+    archetype: 'Archetypes are cosmic role labels e.g. "wandering monk", "shadow clerk", "mist bard", "hedge seer", "void practitioner". Keep them short (1 to 3 words).',
+    lineage:   `Lineages are species or bloodlines. If the user NAMES a concrete RPG ancestry (tiefling, elf, dwarf, orc, halfling, dragonborn, etc.), you MUST use that exact ancestry in the English string (standard spelling). Do NOT replace it with a vague poetic label like "shadow-touched mortal" or "infernal-adjacent mortal"...  the named species must appear. For vague requests only, you may invent a short poetic lineage (1 to 3 words each language).`,
     title:     'Titles are epithets appended to the name e.g. "of hesitant questions", "with the contested seal", "of the second act". Keep them under 10 words.',
   }[kind] ?? '';
 
@@ -434,7 +498,7 @@ Current ${kind}:
 - Arabic: "${currentAr}"
 
 Generate a new ${kind} that honors the request. ${hints}
-Keep Arabic in the style of Imru' al-Qais — poetic, ancient, weighty epithets.
+Keep Arabic in the style of Imru' al-Qais...  poetic, ancient, weighty epithets.
 Keep Dutch/English in Michael's cosmic bureaucratic register.
 
 Return ONLY a JSON object (no markdown, no extra text):
@@ -465,9 +529,9 @@ export async function generateCharacterFieldPunishment(kind, { verzoek, characte
   const currentAr = resolveField(characterBefore[kind], 'ar') || currentNl;
 
   const hints = {
-    archetype: 'Short cosmic role labels (1–3 words). Make it diminished, ridiculous, or a bureaucratic downgrade — not cool, not what they asked.',
-    lineage:   'Short species or bloodline (1–3 words each language). Invent something petty or awkward — not a power fantasy. Vague poetic is fine; do not grant a “premium” ancestry.',
-    title:     'Epithets under 10 words. Something the register would add as a snub — whining, provisional, “of the refiled seal”, etc.',
+    archetype: 'Short cosmic role labels (1 to 3 words). Make it diminished, ridiculous, or a bureaucratic downgrade...  not cool, not what they asked.',
+    lineage:   'Short species or bloodline (1 to 3 words each language). Invent something petty or awkward...  not a power fantasy. Vague poetic is fine; do not grant a “premium” ancestry.',
+    title:     'Epithets under 10 words. Something the register would add as a snub...  whining, provisional, “of the refiled seal”, etc.',
   }[kind] ?? '';
 
   const fieldHint = wishedField
@@ -486,8 +550,8 @@ You are Michael (Archangel in Dutch/English, Imru' al-Qais in Arabic), maintaini
 The user's negotiation FAILED. Their plea was: "${verzoek}"
 ${fieldHint}
 
-Rewrite ONLY their ${kind} to something worse — petty, embarrassing, bureaucratically belittling, or cosmically inconvenient. It must NOT grant what they wanted. Keep it PG. ${hints}
-Keep Arabic in Imru' al-Qais style — sharp, ancient, a little cruel.
+Rewrite ONLY their ${kind} to something worse...  petty, embarrassing, bureaucratically belittling, or cosmically inconvenient. It must NOT grant what they wanted. Keep it PG. ${hints}
+Keep Arabic in Imru' al-Qais style...  sharp, ancient, a little cruel.
 Keep Dutch/English in Michael's cold cosmic register.
 
 Current ${kind}:
@@ -531,7 +595,7 @@ Source (${langNames[fromLang]}):
 - title: "${title}"
 
 Translate to ${others.map(l => langNames[l]).join(' and ')}.
-For Arabic keep the style of Imru' al-Qais — poetic, ancient, weighty epithets.
+For Arabic keep the style of Imru' al-Qais...  poetic, ancient, weighty epithets.
 For Dutch/English keep the cosmic bureaucratic angelic register.
 
 Return ONLY a JSON object (no markdown):
@@ -570,7 +634,7 @@ ${cs.archetypes}
 ${cs.lineages}
 
 ${cs.titleStyle}
-${langCode === 'ar' ? 'ملاحظة: الألقاب واللقب يجب أن تكون بنبرة الشاعر الجاهلي — فيها ازدراء أنيق أو ثقل ملحمي.' : ''}
+${langCode === 'ar' ? 'ملاحظة: الألقاب واللقب يجب أن تكون بنبرة الشاعر الجاهلي...  فيها ازدراء أنيق أو ثقل ملحمي.' : ''}
 
 Generate one JSON object with EXACTLY these fields:
 {
@@ -578,11 +642,11 @@ Generate one JSON object with EXACTLY these fields:
   "lineage": "<choice from the list above or small variation>",
   "title": "<epithet in Michael's style>",
   "stats": {
-    "aura": <integer 3–18>,
-    "discipline": <integer 3–18>,
-    "chaos": <integer 3–18>,
-    "inzicht": <integer 3–18>,
-    "volharding": <integer 3–18>
+    "aura": <integer 3 to 18>,
+    "discipline": <integer 3 to 18>,
+    "chaos": <integer 3 to 18>,
+    "inzicht": <integer 3 to 18>,
+    "volharding": <integer 3 to 18>
   }
 }
 
@@ -658,9 +722,9 @@ ${personaIntro(langCode)} ${langCode === 'ar'
 - ${langCode === 'ar' ? 'مزاجك' : 'Your mood'}: ${currentMood ?? 'afwezig'}
 
 ${langCode === 'ar'
-  ? 'اكتب جملةً أو جملتين شعريتين كردِّ فعل على هذا الملف — كأنك تقرأ الديوان وتلاحظ شيئاً. نبرة: متعالية، مُستعلية خفيفاً، جادة. المستخدم لم يختر هذا التسجيل.'
-  : 'Write one to two short sentences of reaction on this profile — as if you are checking the register and noticing something. Tone: distant, mildly condescending, serious. The user had no say in their assignment.'}
-${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2–4 dots followed by your sign-off name.
+  ? 'اكتب جملةً أو جملتين شعريتين كردِّ فعل على هذا الملف...  كأنك تقرأ الديوان وتلاحظ شيئاً. نبرة: متعالية، مُستعلية خفيفاً، جادة. المستخدم لم يختر هذا التسجيل.'
+  : 'Write one to two short sentences of reaction on this profile...  as if you are checking the register and noticing something. Tone: distant, mildly condescending, serious. The user had no say in their assignment.'}
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });
   return applyChaoticFormatting(response.output[0].content[0].text);
@@ -702,7 +766,7 @@ export async function generateOnderhandelenNarrative({
 
   const resultDesc = success
     ? `The request succeeds. What changed: ${describeMechanical(mechanical)}.`
-    : `The request fails. Michael alters ONE random line of their enrolment out of spite — not necessarily the field they chose. What worsened: ${describeMechanical(mechanical)}.`;
+    : `The request fails. Michael alters ONE random line of their enrolment out of spite...  not necessarily the field they chose. What worsened: ${describeMechanical(mechanical)}.`;
 
   // Resolve multilingual fields to active language for the narrative prompt
   const rBefore = {
@@ -725,8 +789,8 @@ ${personaIntro(langCode)} ${langCode === 'ar'
   : `A user is trying to negotiate about their cosmic enrolment in your field campaign.`}
 
 ${langCode === 'ar' ? 'طلب المستخدم' : "User's request"}: "${verzoek}"
-${negotiationKind ? (langCode === 'ar' ? `(المستخدم حدَّد الحقل: **${negotiationKind}** — معالج التفاوض.)` : `(Wizard: user locked negotiation to **${negotiationKind}** only.)`) : ''}
-${langCode === 'ar' ? 'الرمية' : 'Roll'}: ${rollLine} — ${tierLabel}
+${negotiationKind ? (langCode === 'ar' ? `(المستخدم حدَّد الحقل: **${negotiationKind}**...  معالج التفاوض.)` : `(Wizard: user locked negotiation to **${negotiationKind}** only.)`) : ''}
+${langCode === 'ar' ? 'الرمية' : 'Roll'}: ${rollLine}...  ${tierLabel}
 ${resultDesc}
 ${langCode === 'ar' ? 'النمط كان' : 'Archetype was'}: ${rBefore.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${rBefore.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${rBefore.title}"
 ${langCode === 'ar' ? 'النمط الآن' : 'Archetype now'}: ${rAfter.archetype}, ${langCode === 'ar' ? 'السلالة' : 'lineage'}: ${rAfter.lineage}, ${langCode === 'ar' ? 'اللقب' : 'title'}: "${rAfter.title}"
@@ -734,12 +798,12 @@ ${langCode === 'ar' ? 'الحكم الآن' : 'Verdict now'}: ${judgementScore}
 
 ${langCode === 'ar'
   ? (success
-    ? 'قبِلتَ الطلب — مُرغَماً، بلا حماس، لكن الديوان تعدَّل. لست مسروراً بهذا.'
-    : 'رفضتَ الطلب — غير مُبهَر. الديوان يبقى كما هو أو يسوء. يمكنك السخرية الشعرية من المحاولة.')
+    ? 'قبِلتَ الطلب...  مُرغَماً، بلا حماس، لكن الديوان تعدَّل. لست مسروراً بهذا.'
+    : 'رفضتَ الطلب...  غير مُبهَر. الديوان يبقى كما هو أو يسوء. يمكنك السخرية الشعرية من المحاولة.')
   : (success
-    ? 'Michael accepts the request — reluctantly, with little enthusiasm, but the register has been adjusted. He is not pleased about this.'
-    : 'Michael rejects the request — he is not impressed. The registers remain as they are or worsen. He may mock the attempt slightly.')}
-${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2–4 sentences. Close with 2–4 dots followed by your sign-off name.
+    ? 'Michael accepts the request...  reluctantly, with little enthusiasm, but the register has been adjusted. He is not pleased about this.'
+    : 'Michael rejects the request...  he is not impressed. The registers remain as they are or worsen. He may mock the attempt slightly.')}
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2 to 4 sentences. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });
   return applyChaoticFormatting(response.output[0].content[0].text);
@@ -773,7 +837,7 @@ ${personaIntro(langCode)} ${langCode === 'ar'
   ? 'يطلب منك شخص العفو. أُلقيت القرعة في الديوان الأعلى.'
   : 'Someone asks for forgiveness. You have rolled in the higher register.'}
 
-${langCode === 'ar' ? 'الرمية' : 'Roll'}: ${rollLine} — ${tierLabel}
+${langCode === 'ar' ? 'الرمية' : 'Roll'}: ${rollLine}...  ${tierLabel}
 ${langCode === 'ar' ? 'النتيجة' : 'Outcome'}: ${accepted ? (langCode === 'ar' ? 'مغفور (مُرغَماً)' : 'forgiven (reluctantly)') : (langCode === 'ar' ? 'مرفوض' : 'rejected')}
 ${langCode === 'ar' ? 'المزاج الحالي' : 'Current mood'}: ${currentMood}
 ${accepted ? `${langCode === 'ar' ? 'المزاج الجديد' : 'New mood'}: ${newMood}` : ''}
@@ -781,18 +845,18 @@ ${langCode === 'ar' ? 'الحكم بعد هذه اللحظة' : 'Verdict after t
 
 ${langCode === 'ar'
   ? (accepted
-    ? 'تقبَل العفو — لكن بدون دفء. كأنه التزام شعري لا رحمة. أشِر خفيةً إلى القرعة.'
-    : 'ترفض العفو. الرمية كانت قاصرة. أشِر إلى الفشل دون تسميته "نرداً" — يبدو كحكم شعري كوني.')
+    ? 'تقبَل العفو...  لكن بدون دفء. كأنه التزام شعري لا رحمة. أشِر خفيةً إلى القرعة.'
+    : 'ترفض العفو. الرمية كانت قاصرة. أشِر إلى الفشل دون تسميته "نرداً"...  يبدو كحكم شعري كوني.')
   : (accepted
-    ? 'He accepts — but not warmly. More like a cosmic obligation than grace. Subtly reference the roll.'
-    : 'He refuses. The roll was insufficient. He references the failure without calling it a "dice roll" explicitly — it sounds more like a cosmic verdict.')}
-${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2–3 sentences. Close with 2–4 dots followed by your sign-off name.
+    ? 'He accepts...  but not warmly. More like a cosmic obligation than grace. Subtly reference the roll.'
+    : 'He refuses. The roll was insufficient. He references the failure without calling it a "dice roll" explicitly...  it sounds more like a cosmic verdict.')}
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2 to 3 sentences. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });
   return applyChaoticFormatting(response.output[0].content[0].text);
 }
 
-// ─── Feature 5 — Post-message revision ────────────────────────────────────────
+// ─── Feature 5...  Post-message revision ────────────────────────────────────────
 
 export async function generatePostRevision(originalText, mood, langCode = 'nl') {
   const lang = getLang(langCode);
@@ -810,9 +874,9 @@ ${personaIntro(langCode)} ${langCode === 'ar'
 "${String(originalText).slice(0, 1400)}"
 
 ${langCode === 'ar'
-  ? 'اكتب فقط تعقيباً قصيراً — كأنك بعد الإرسال أدركتَ أن البيت لم يكن مكتملاً. ابدأ بـ"تعقيب:" ثم جملة أو اثنتان (عادةً جملة واحدة). لا تُعد كتابة الرد الأصلي كاملاً.'
-  : 'Write ONLY a short afterthought — as if after sending you realise it wasn\'t quite right. Begin with "Edit:" then 1 to 2 short sentences (usually 1). Do NOT repeat or rewrite the original. Just the edit line.'}
-Tone: ${mood} — ${moodDesc}
+  ? 'اكتب فقط تعقيباً قصيراً...  كأنك بعد الإرسال أدركتَ أن البيت لم يكن مكتملاً. ابدأ بـ"تعقيب:" ثم جملة أو اثنتان (عادةً جملة واحدة). لا تُعد كتابة الرد الأصلي كاملاً.'
+  : 'Write ONLY a short afterthought...  as if after sending you realise it wasn\'t quite right. Begin with "Edit:" then 1 to 2 short sentences (usually 1). Do NOT repeat or rewrite the original. Just the edit line.'}
+Tone: ${mood}...  ${moodDesc}
 ${outputInstruction} ${styleHint}. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });

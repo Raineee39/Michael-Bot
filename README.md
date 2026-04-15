@@ -1,6 +1,6 @@
 # Michael Bot
 
-Aartsengel Michaël — Dutch spiritual boomer Discord bot for a private server.
+Aartsengel Michaël: Dutch spiritual boomer Discord bot for a private server.
 
 ## Setup
 

@@ -13,7 +13,7 @@ const BOODSCHAPPEN = [
   'De hemel heeft gesproken     de boodschap is jouw naam     en een zeker gevoel van onvermijdelijkheid..Michael',
 ];
 
-// ─── GIF query pools — Dutch / English (Archangel Michael themed) ────────────
+// ─── GIF query pools...  Dutch / English (Archangel Michael themed) ────────────
 
 const GIF_QUERIES = [
   'archangel michael painting',
@@ -51,7 +51,7 @@ const MICHAEL_MISC_GIF_QUERIES = [
   'sword of light heaven',
 ];
 
-// ─── GIF query pools — Arabic (Imru' al-Qais / Jahili poet themed) ────────────
+// ─── GIF query pools...  Arabic (Imru' al-Qais / Jahili poet themed) ────────────
 
 const GIF_QUERIES_AR = [
   'arabic calligraphy art',

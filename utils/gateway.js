@@ -2,11 +2,11 @@
 //
 // Behaviour:
 // 1. When a non-bot message mentions "michael" (case-insensitive):
-//    a. Feature 3 — "Do not respond" trap: if the message contains baiting
+//    a. Feature 3...  "Do not respond" trap: if the message contains baiting
 //       language, there is a 70% chance Michael silently ignores it and queues
 //       an unfinished business item instead of replying.
 //    b. Otherwise a 60% chance Michael interjects with a short reply.
-//       Feature 5 — Post-message revision: 12% chance the sent reply gets a
+//       Feature 5...  Post-message revision: 12% chance the sent reply gets a
 //       quiet "Edit:" appended a few seconds later.
 // 2. All non-bot messages are stored as shadow reply candidates (Feature 4)
 //    so the cron can pick them up and reply to them retroactively.
@@ -60,7 +60,7 @@ function resetGauge(guildId) {
   nameGauge.delete(guildId ?? '_dm');
 }
 
-// ─── Feature 3 — Bait / forcing-Michael-to-respond detection ─────────────────
+// ─── Feature 3...  Bait / forcing-Michael-to-respond detection ─────────────────
 //
 // When users try to force Michael to respond with provocations or commands,
 // he often ignores it entirely and queues unfinished business instead.
@@ -71,11 +71,11 @@ const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s
 //
 // After Michael sends a gateway interjection, there is a small chance he
 // quietly edits it a few seconds later to append a second thought.
-// The original text is preserved — only a short "Edit: …" line is appended.
+// The original text is preserved...  only a short "Edit: …" line is appended.
 
 async function maybeScheduleRevision(channelId, messageId, originalContent, mood, langCode = 'nl') {
   if (Math.random() > 0.10) return; // 10% chance
-  const delay = 6000 + Math.floor(Math.random() * 14000); // 6–20 s
+  const delay = 6000 + Math.floor(Math.random() * 14000); // 6 to 20 s
   console.log(`[michael] revision scheduled | gateway | msg=${messageId} | ~${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
     try {
@@ -117,7 +117,7 @@ export function startGateway() {
 
       if (s !== null) lastSeq = s;
 
-      // HELLO — start heartbeat then identify
+      // HELLO...  start heartbeat then identify
       if (op === 10) {
         heartbeatInterval = setInterval(() => {
           ws.send(JSON.stringify({ op: 1, d: lastSeq }));
@@ -133,10 +133,10 @@ export function startGateway() {
         }));
       }
 
-      // Heartbeat ACK — nothing to do
+      // Heartbeat ACK...  nothing to do
       if (op === 11) return;
 
-      // ── DISPATCH — MESSAGE_CREATE ──────────────────────────────────────────
+      // ── DISPATCH...  MESSAGE_CREATE ──────────────────────────────────────────
       if (op === 0 && t === 'MESSAGE_CREATE') {
         const msg = d;
         if (msg.author?.bot) return;    // ignore bots
@@ -147,7 +147,7 @@ export function startGateway() {
         const content   = msg.content;
         const ts        = Date.now();
 
-        // Feature 4 — Store every non-bot message as a potential shadow-reply target
+        // Feature 4...  Store every non-bot message as a potential shadow-reply target
         const guildId = msg.guild_id ?? null;
         addShadowCandidate({ messageId: msg.id, channelId, authorId, content, timestamp: ts, guildId });
 
@@ -158,10 +158,10 @@ export function startGateway() {
         // Only continue for messages that mention Michael or (in Arabic mode) Imru' al-Qais
         if (!/michael/i.test(content) && !/امرؤ القيس|امرئ القيس|القيس/.test(content)) return;
 
-        // Feature 3 — Bait / forcing trap
+        // Feature 3...  Bait / forcing trap
         if (BAIT_RE.test(content)) {
           if (Math.random() < 0.70) {
-            // Michael silently ignores — queues unfinished business to resurface later
+            // Michael silently ignores...  queues unfinished business to resurface later
             addUnfinishedBusiness(authorId, {
               prompt:   content,
               reason:   'De gebruiker probeerde Michael te commanderen of te provoceren',
@@ -175,7 +175,7 @@ export function startGateway() {
           // 30% chance: still replies, but also queues business
           addUnfinishedBusiness(authorId, {
             prompt:   content,
-            reason:   'Provocationele vraag — Michael antwoordde maar vergeet het niet',
+            reason:   'Provocationele vraag...  Michael antwoordde maar vergeet het niet',
             severity: 1,
             messageId: msg.id,
             channelId,
@@ -207,7 +207,7 @@ export function startGateway() {
           });
           const sentMsg = await res.json();
 
-          // Feature 5 — Maybe edit the reply a few seconds later
+          // Feature 5...  Maybe edit the reply a few seconds later
           if (sentMsg?.id) {
             const userMood = loadUserMemory(authorId).currentMood ?? 'afwezig';
             maybeScheduleRevision(channelId, sentMsg.id, reply, userMood, gwLangCode);

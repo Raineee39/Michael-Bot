@@ -23,7 +23,7 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
@@ -63,7 +63,7 @@ function getDateRounds(lang) {
   };
 }
 
-// Pending /onderhandelen verzoek texts — keyed by userId, cleared after use or 10 min
+// Pending /onderhandelen verzoek texts...  keyed by userId, cleared after use or 10 min
 const pendingNegotiations = new Map();
 
 function readNegotiateModalValue(modalData) {
@@ -127,7 +127,7 @@ async function buildUitverkoreneMessage(guildId, lang) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Tiny helper — saves repeating Math.floor(Math.random()…) everywhere
+// Tiny helper...  saves repeating Math.floor(Math.random()…) everywhere
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
 /** Cosmic roles are per-guild and persisted in data/cosmic-state.json (see utils/cosmic-state.js). */
@@ -157,23 +157,23 @@ const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'uitverkorene', 'chat'
 // Mood spectrum: index 0 = calmest, index 6 = angriest
 // Michael drifts along this based on how each conversation goes
 const MICHAEL_MOODS = [
-  'kosmisch',        // 0 — peak benevolence
-  'afwezig',         // 1 — pleasantly checked out
-  'loom',            // 2 — slow and unbothered
-  'verward',         // 3 — neutral chaos
-  'passief-agressief', // 4 — starting to sour
-  'streng',          // 5 — openly displeased
-  'woedend',         // 6 — full archangel rage
+  'kosmisch',        // 0...  peak benevolence
+  'afwezig',         // 1...  pleasantly checked out
+  'loom',            // 2...  slow and unbothered
+  'verward',         // 3...  neutral chaos
+  'passief-agressief', // 4...  starting to sour
+  'streng',          // 5...  openly displeased
+  'woedend',         // 6...  full archangel rage
 ];
 
 // Shifts Michael's mood after each interaction based on how it went
 function nextMood(currentMood, scoreDelta) {
-  // An insult always jumps straight to woedend — no gradual path
+  // An insult always jumps straight to woedend...  no gradual path
   if (scoreDelta <= -2) return 'woedend';
 
   // Escaping woedend requires sustained good behaviour
   if (currentMood === 'woedend') {
-    if (scoreDelta >= 2) return MICHAEL_MOODS[5]; // streng — one step back
+    if (scoreDelta >= 2) return MICHAEL_MOODS[5]; // streng...  one step back
     if (scoreDelta === 1 && Math.random() < 0.35) return MICHAEL_MOODS[5]; // small chance
     return 'woedend'; // stays furious most of the time
   }
@@ -201,7 +201,7 @@ const CODE_REQUEST_RE = /\b(code|codeer|programm|react|javascript|html|css|node\
 
 const INSULT_RE = /\b(kut|fuck|shit|klootzak|lul|eikel|idioot|sukkel|kanker|godverdomme|hoer|bitch|asshole|bastard|stom|dom)\b/i;
 
-// Feature 3 — Detects baiting / attempts to force Michael to respond
+// Feature 3...  Detects baiting / attempts to force Michael to respond
 const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
 
 /** Returns the localised display name for a mood key, falling back to the raw key. */
@@ -209,14 +209,14 @@ function moodName(lang, key) {
   return lang.moodNames?.[key] ?? key;
 }
 
-// ─── Feature 5 — Post-message revision ────────────────────────────────────────
+// ─── Feature 5...  Post-message revision ────────────────────────────────────────
 //
 // After sending a message, Michael may quietly append a second thought.
-// The original content is always preserved — only an "Edit: …" line is added.
+// The original content is always preserved...  only an "Edit: …" line is added.
 
 async function schedulePostRevision(channelId, messageId, originalContent, mood, label = 'message', langCode = 'nl') {
   if (Math.random() > 0.10) return; // 10% chance
-  const delay = 7000 + Math.floor(Math.random() * 13000); // 7–20 s
+  const delay = 7000 + Math.floor(Math.random() * 13000); // 7 to 20 s
   console.log(`[michael] revision scheduled | ${label} | ${messageId} | ~${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
     try {
@@ -412,7 +412,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "cosmischestatus" — who holds antichrist / uitverkorene, + Michael's mood toward you
+    // "cosmischestatus"...  who holds antichrist / uitverkorene, + Michael's mood toward you
     if (name === 'cosmischestatus') {
       const invokerId    = req.body.member?.user?.id ?? req.body.user?.id;
       const antichristId = guildId ? getCurrentAntichristUserId(guildId) : null;
@@ -438,14 +438,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "vergeefmij" — roll-based forgiveness (user must click to roll)
+    // "vergeefmij"...  roll-based forgiveness (user must click to roll)
     if (name === 'vergeefmij') {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
       const memory   = loadUserMemory(userId);
       const currentMood = memory.currentMood ?? 'afwezig';
       const moodIdx  = MICHAEL_MOODS.indexOf(currentMood);
 
-      // Already calm — apology is unnecessary
+      // Already calm...  apology is unnecessary
       if (moodIdx <= 2) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -469,7 +469,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "mijnrol" — shows the user their Michael-assigned character sheet
+    // "mijnrol"...  shows the user their Michael-assigned character sheet
     if (name === 'mijnrol') {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
@@ -534,7 +534,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // "onderhandelen" — wizard: pick field → modal for wish text → roll buttons
+    // "onderhandelen"...  wizard: pick field → modal for wish text → roll buttons
     if (name === 'onderhandelen') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const w        = lang.ui.negotiateWizard;
@@ -561,7 +561,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "michaelhumeur" — shows Michael's current persistent mood toward this user
+    // "michaelhumeur"...  shows Michael's current persistent mood toward this user
     if (name === 'michaelhumeur') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const mood   = loadUserMemory(userId).currentMood ?? 'afwezig';
@@ -573,7 +573,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
 
-    // "vibecheck" command — full points dashboard + improvement tips
+    // "vibecheck" command...  full points dashboard + improvement tips
     if (name === 'vibecheck') {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
@@ -611,7 +611,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         ];
 
         if (character) {
-          lines.push(`${vc.kosmischeRolLabel}    ${resolveField(character.archetype, langCode)} • ${resolveField(character.lineage, langCode)} — *${resolveField(character.title, langCode).slice(0, 60)}*`);
+          lines.push(`${vc.kosmischeRolLabel}    ${resolveField(character.archetype, langCode)} • ${resolveField(character.lineage, langCode)}...  *${resolveField(character.title, langCode).slice(0, 60)}*`);
         }
 
         lines.push(``, comment);
@@ -638,21 +638,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
       const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'");
-      // Load persisted mood — first-time users get a random starting point
+      // Load persisted mood...  first-time users get a random starting point
       const preMemory = loadUserMemory(userId);
       const currentScore = preMemory.judgementScore ?? 0;
       const storedMood = preMemory.currentMood ?? MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
-      // Insults trigger immediate woedend — no waiting for next message
+      // Insults trigger immediate woedend...  no waiting for next message
       const mood = INSULT_RE.test(userInput) ? 'woedend' : storedMood;
       const channelId = req.body.channel_id ?? req.body.channel?.id;
 
-      // Respond immediately with a chaotic placeholder — avoids Discord's "X is thinking…" entirely
+      // Respond immediately with a chaotic placeholder...  avoids Discord's "X is thinking…" entirely
       res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
       });
 
-      // Feature 3 — Bait / forcing-Michael trap: respond coldly and queue unfinished business
+      // Feature 3...  Bait / forcing-Michael trap: respond coldly and queue unfinished business
       if (BAIT_RE.test(userInput)) {
         console.log(`[michael] chat | bait-dismissal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId, guildId ?? null);
@@ -669,13 +669,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         return;
       }
 
-      // Code / technical request — refuse in-character, queue unfinished business
+      // Code / technical request...  refuse in-character, queue unfinished business
       if (CODE_REQUEST_RE.test(userInput)) {
         console.log(`[michael] chat | code-refusal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId, guildId ?? null);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
-          reason:   'De gebruiker vroeg om technische hulp — buiten Michaels domein maar hij vergeet het niet',
+          reason:   'De gebruiker vroeg om technische hulp...  buiten Michaels domein maar hij vergeet het niet',
           severity: 1,
           channelId,
         });
@@ -686,7 +686,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         return;
       }
 
-      // ~15% chance Michael refuses outright — no OpenAI call
+      // ~15% chance Michael refuses outright...  no OpenAI call
       if (Math.random() < 0.15) {
         console.log(`[michael] chat | random-refusal (15%) | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
@@ -707,14 +707,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       }
 
       try {
-        // Reuse already-loaded memory — avoid a second file read
+        // Reuse already-loaded memory...  avoid a second file read
         const judgementLabel = getJudgementLabel(preMemory.judgementScore ?? 0);
         // Filter out internal system entries ([vergeefmij], [date:…], etc.) from the summary
         const realPrompts = preMemory.prompts.filter(p => !p.startsWith('['));
         const memorySummary = realPrompts.length ? realPrompts.slice(-3).join(' / ') : null;
         const cosmicRole = getCosmicRole(userId, guildId);
 
-        // Rollenspel — use existing character sheet if present; generate one in background after reply
+        // Rollenspel...  use existing character sheet if present; generate one in background after reply
         const existingCharacter = preMemory.michaelCharacter ?? null;
         const characterBlock = existingCharacter && shouldReferenceCharacterThisTurn()
           ? formatCharacterForPrompt(existingCharacter, langCode)
@@ -725,15 +725,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const asksAgain = unlocked && getRequestedLanguageCode(userInput) === unlocked.code;
         const speaksIt = unlocked && userSpeaksUnlockedLanguage(unlocked, userInput);
         const languagePermission = unlocked && (speaksIt || asksAgain) ? unlocked : null;
-          console.log(`[michael] chat | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '—'} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${existingCharacter ? resolveField(existingCharacter.archetype, langCode) : 'nieuw'} | ${username}`);
+          console.log(`[michael] chat | lang=${languagePermission?.code ?? 'nl+mix'} | unlocked=${unlocked?.code ?? '...  '} | speaks=${speaksIt} | asksAgain=${asksAgain} | char=${existingCharacter ? resolveField(existingCharacter.archetype, langCode) : 'nieuw'} | ${username}`);
 
-        // Feature 2 — Contradiction engine: detect if user is revisiting a theme
+        // Feature 2...  Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
 
-        // Passive dice roll — selective, returns true if buttons should be shown
+        // Passive dice roll...  selective, returns true if buttons should be shown
         const passiveTriggered = maybePassiveRollBlock(userId, userInput);
 
-        // Run message generation and AI scoring in parallel — no extra wait time
+        // Run message generation and AI scoring in parallel...  no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
           generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission, characterBlock, langCode),
           scoreMichaelMessage(userInput),
@@ -745,7 +745,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Save first so the user record exists before addUnfinishedBusiness / addTheme write to it
         saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId, guildId ?? null);
 
-        // Feature 1 — Create unfinished business for negative interactions
+        // Feature 1...  Create unfinished business for negative interactions
         if (scoreDelta <= -2 || INSULT_RE.test(userInput)) {
           addUnfinishedBusiness(userId, {
             prompt:   userInput,
@@ -762,7 +762,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           });
         }
 
-        // Feature 2 — Store theme snapshot for future contradiction detection
+        // Feature 2...  Store theme snapshot for future contradiction detection
         addTheme(userId, userInput);
 
         // Fire-and-forget summarisation once the message buffer fills up
@@ -801,7 +801,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           body: patchBody,
         });
 
-        // Feature 5 — Post-message revision: fetch the sent message ID then maybe append an edit
+        // Feature 5...  Post-message revision: fetch the sent message ID then maybe append an edit
         if (channelId) {
           try {
             const getMsgRes = await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, { method: 'GET' });
@@ -810,11 +810,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
               schedulePostRevision(channelId, sentMsg.id, messageBase, mood, 'chat', langCode);
             }
           } catch {
-            // non-critical — skip revision if we can't fetch the message ID
+            // non-critical...  skip revision if we can't fetch the message ID
           }
         }
 
-        // Rollenspel — generate character in background after reply so it never blocks the response
+        // Rollenspel...  generate character in background after reply so it never blocks the response
         if (!existingCharacter) {
           ensureMichaelCharacter(userId, username, langCode).catch(err =>
             console.error(`[michael] background character generation failed | ${username}:`, err.message)
@@ -822,7 +822,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         }
       } catch (err) {
         console.error('chat error:', err);
-        // If the token expired (10015) the fallback PATCH will also fail — swallow it silently
+        // If the token expired (10015) the fallback PATCH will also fail...  swallow it silently
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
@@ -835,9 +835,157 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // "michaeltaal" — set language (server or personal in DMs)
+    // "babychat": toddler Michael; 50% meltdown: -3 judgement, antichrist on servers.
+    // Toddler and meltdown replies use OpenAI (gpt-4.1-mini): generateBabyChatToddler / generateBabyChatMeltdown in utils/openai.js.
+    if (name === 'babychat') {
+      const userInput = data.options.find(o => o.name === 'bericht').value;
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'");
+      const preMemory = loadUserMemory(userId);
+      const storedMood = preMemory.currentMood ?? MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
+      const mood = INSULT_RE.test(userInput) ? 'woedend' : storedMood;
+      const channelId = req.body.channel_id ?? req.body.channel?.id;
+
+      res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
+      });
+
+      if (BAIT_RE.test(userInput)) {
+        console.log(`[michael] babychat | bait-dismissal | ${username} (${userId})`);
+        saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId, guildId ?? null);
+        addUnfinishedBusiness(userId, {
+          prompt: userInput,
+          reason: 'De gebruiker probeerde Michael te commanderen of te dwingen te reageren',
+          severity: 2,
+          channelId,
+        });
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `> ${safeInput}\n\n${pick(lang.ui.baitDismissals)}` },
+        });
+        return;
+      }
+
+      if (CODE_REQUEST_RE.test(userInput)) {
+        console.log(`[michael] babychat | code-refusal | ${username} (${userId})`);
+        saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId, guildId ?? null);
+        addUnfinishedBusiness(userId, {
+          prompt: userInput,
+          reason: 'De gebruiker vroeg om technische hulp...  buiten Michaels domein maar hij vergeet het niet',
+          severity: 1,
+          channelId,
+        });
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `> ${safeInput}\n\n${pick(lang.ui.codeRefusals)}` },
+        });
+        return;
+      }
+
+      const infuriated = Math.random() < 0.5;
+      let typingInterval = null;
+      if (channelId) {
+        DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+        typingInterval = setInterval(() => {
+          DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+        }, 8000);
+      }
+
+      try {
+        if (infuriated) {
+          console.log(`[michael] babychat | meltdown | ${username} (${userId}) | guild=${guildId ?? 'dm'}`);
+          const becameAntichrist = Boolean(guildId);
+          const meltdown = await generateBabyChatMeltdown(username, userInput, langCode, becameAntichrist);
+          if (becameAntichrist) {
+            setAntichristForGuild(guildId, userId, Date.now() + 24 * 60 * 60 * 1000);
+          }
+          saveUserMemory(userId, username, userInput, mood, -3, nextMood(mood, -3), channelId, guildId ?? null);
+          addUnfinishedBusiness(userId, {
+            prompt: userInput,
+            reason: 'Baby-Michaël brak...  kosmische woede na /babychat',
+            severity: 3,
+            channelId,
+          });
+          addTheme(userId, userInput);
+
+          let body = `> ${safeInput}\n\n${meltdown}`;
+          if (becameAntichrist) {
+            body += `\n\n${lang.antichrist.announcement(userId)}`;
+          }
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: body },
+          });
+        } else {
+          console.log(`[michael] babychat | toddler | ${username} (${userId})`);
+          const [toddlerReply, scoreDelta] = await Promise.all([
+            generateBabyChatToddler(username, userInput, langCode),
+            scoreMichaelMessage(userInput),
+          ]);
+          saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId, guildId ?? null);
+
+          if (scoreDelta <= -2 || INSULT_RE.test(userInput)) {
+            addUnfinishedBusiness(userId, {
+              prompt: userInput,
+              reason: scoreDelta <= -2 ? 'Belediging of agressief bericht' : 'Negatieve trilling in het veld',
+              severity: 3,
+              channelId,
+            });
+          } else if (scoreDelta === -1) {
+            addUnfinishedBusiness(userId, {
+              prompt: userInput,
+              reason: 'Respectloos of provocerend bericht',
+              severity: 2,
+              channelId,
+            });
+          }
+          addTheme(userId, userInput);
+
+          if (needsSummarisation(userId)) {
+            const fresh = loadUserMemory(userId);
+            summariseUserHistory(username, fresh.prompts, fresh.impression)
+              .then(imp => {
+                updateImpression(userId, imp);
+                console.log(`[michael] summarisation | done | ${username} (${userId})`);
+              })
+              .catch(err => console.error('[michael] summarisation failed:', err));
+          }
+
+          const messageBase = `> ${safeInput}\n\n${toddlerReply}`;
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: messageBase },
+          });
+
+          if (channelId) {
+            try {
+              const getMsgRes = await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, { method: 'GET' });
+              const sentMsg = await getMsgRes.json();
+              if (sentMsg?.id) {
+                schedulePostRevision(channelId, sentMsg.id, messageBase, mood, 'babychat', langCode);
+              }
+            } catch { /* non-critical */ }
+          }
+        }
+      } catch (err) {
+        console.error('babychat error:', err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: `> ${safeInput}\n\n${lang.ui.babychatError}` },
+          });
+        } catch { /* token expired */ }
+      } finally {
+        if (typingInterval) clearInterval(typingInterval);
+      }
+      return;
+    }
+
+    // "michaeltaal"...  set language (server or personal in DMs)
     if (name === 'michaeltaal') {
-      // DM context — no guild, so set per-user language instead
+      // DM context...  no guild, so set per-user language instead
       if (!guildId) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -856,7 +1004,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       }
 
-      // Guild context — requires Manage Guild permission
+      // Guild context...  requires Manage Guild permission
       const member = req.body.member;
       const permissions = BigInt(member?.permissions ?? '0');
       const MANAGE_GUILD = BigInt(0x20);
@@ -1008,7 +1156,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       }
 
-      // Roll path — immediately update message with loading state + disabled buttons, then patch result
+      // Roll path...  immediately update message with loading state + disabled buttons, then patch result
       res.send({
         type: 7, // UPDATE_MESSAGE
         data: {
@@ -1060,10 +1208,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           },
         });
 
-        // Divine pardon — scheduled AFTER successful send so it only fires if the user saw the result
+        // Divine pardon...  scheduled AFTER successful send so it only fires if the user saw the result
         if (!forgiven && roll.tier.key === 'poor' && Math.random() < 0.5) {
           const channelId = req.body.channel_id;
-          const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2–5 min
+          const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2 to 5 min
           setTimeout(async () => {
             if (isDutchQuietHoursForUnpromptedSends()) return;
             try {
@@ -1089,7 +1237,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             method: 'PATCH',
             body: { content: pick(lang.ui.apologyRejected), components: [] },
           });
-        } catch { /* token expired — nothing to patch */ }
+        } catch { /* token expired...  nothing to patch */ }
       }
       return;
     }
@@ -1172,7 +1320,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           : '';
         const changeValue = mechanicalSummary
           ? `${mechanicalSummary}${statPenaltySummary}`
-          : '—';
+          : '...  ';
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -1194,10 +1342,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           },
         });
 
-        // Divine pardon — scheduled AFTER successful send so it only fires if the user saw the result
+        // Divine pardon...  scheduled AFTER successful send so it only fires if the user saw the result
         if (!success && roll.tier.key === 'poor' && Math.random() < 0.5) {
           const channelId = req.body.channel_id;
-          const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2–5 min
+          const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2 to 5 min
           setTimeout(async () => {
             if (isDutchQuietHoursForUnpromptedSends()) return;
             try {
@@ -1220,7 +1368,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             method: 'PATCH',
             body: { content: lang.ui.onderhandelenError, components: [] },
           });
-        } catch { /* token expired — nothing to patch */ }
+        } catch { /* token expired...  nothing to patch */ }
       }
       return;
     }
@@ -1244,7 +1392,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       }
 
-      // Roll path — disable buttons immediately, then patch with result
+      // Roll path...  disable buttons immediately, then patch with result
       res.send({
         type: 7,
         data: {
@@ -1503,7 +1651,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   return res.status(400).json({ error: 'unknown interaction type' });
 });
 
-// ─── Feature 1 + 4 — Delayed consequences & shadow replies cron ───────────────
+// ─── Feature 1 + 4...  Delayed consequences & shadow replies cron ───────────────
 //
 // Runs every 15 minutes (Europe/Amsterdam clock for quiet hours below).
 // Cycle:
@@ -1528,7 +1676,7 @@ cron.schedule('*/15 * * * *', async () => {
 
   const dutchQuiet = isDutchQuietHoursForUnpromptedSends();
 
-  // 2. Shadow reply — Feature 4 (unprompted: no sends 22:00–10:00 Amsterdam)
+  // 2. Shadow reply...  Feature 4 (unprompted: no sends 22:00 to 10:00 Amsterdam)
   if (!dutchQuiet && Math.random() < 0.25) {
     const eligible = getShadowCandidates().filter(c => !inaccessibleChannels.has(c.channelId));
     if (eligible.length > 0) {
@@ -1554,7 +1702,7 @@ cron.schedule('*/15 * * * *', async () => {
         if (errObj.code === 50001) {
           inaccessibleChannels.add(pick.channelId);
           markShadowReplied(pick.messageId);
-          console.warn(`[michael] shadow-reply | 50001 | ch=${pick.channelId} blocked — candidate discarded`);
+          console.warn(`[michael] shadow-reply | 50001 | ch=${pick.channelId} blocked...  candidate discarded`);
         } else {
           console.error('[michael] shadow-reply failed:', err.message);
         }
@@ -1562,7 +1710,7 @@ cron.schedule('*/15 * * * *', async () => {
     }
   }
 
-  // 3. Delayed consequence — Feature 1
+  // 3. Delayed consequence...  Feature 1
   const now = Date.now();
 
   if (dutchQuiet) {
@@ -1593,7 +1741,7 @@ cron.schedule('*/15 * * * *', async () => {
 
   if (!candidateUsers.length) return;
 
-  // Weighted random pick — higher severity weighs more
+  // Weighted random pick...  higher severity weighs more
   const totalWeight = candidateUsers.reduce((s, c) => s + (c.outstanding[0]?.severity ?? 1), 0);
   let rnd = Math.random() * totalWeight;
   let chosen;
@@ -1642,13 +1790,12 @@ cron.schedule('*/15 * * * *', async () => {
       markBusinessMentioned(userId, item.id);
     }
 
-    // Darken mood for lingering resentment, but don't touch judgement score —
-    // score should only move from real interactions, not background timers
+    // Darken mood for lingering resentment, but don't touch judgement score...  // score should only move from real interactions, not background timers
     patchUserState(userId, 0, nextMood(mood, -1));
 
     console.log(`[michael] delayed-consequence | ${user.username || userId} | ch=${targetChannel} | "${item.prompt.slice(0, 50)}"`);
 
-    // Feature 5 — maybe append a post-revision edit to the consequence message
+    // Feature 5...  maybe append a post-revision edit to the consequence message
     if (sentMsg?.id) {
       schedulePostRevision(targetChannel, sentMsg.id, message, mood, 'consequence', consequenceLangCode);
     }
@@ -1657,10 +1804,10 @@ cron.schedule('*/15 * * * *', async () => {
     try { errObj = JSON.parse(err.message); } catch { /* not JSON */ }
 
     if (errObj.code === 50001) {
-      // Bot has no write access to this channel — blacklist it for the rest of this session
+      // Bot has no write access to this channel...  blacklist it for the rest of this session
       inaccessibleChannels.add(targetChannel);
       updateLastChannel(userId, null);
-      // Resolve ALL outstanding items for this user — no point retrying if the channel is bad
+      // Resolve ALL outstanding items for this user...  no point retrying if the channel is bad
       outstanding.forEach(b => markBusinessResolved(userId, b.id));
       // Discard all shadow candidates pointing to this channel
       shadowPool
@@ -1677,7 +1824,7 @@ cron.schedule('*/15 * * * *', async () => {
   Object.keys(allMemory).forEach(uid => maybeAgeBusiness(uid));
 });
 
-// Daily uitverkorene — runs at 10:00 AM Amsterdam time
+// Daily uitverkorene...  runs at 10:00 AM Amsterdam time
 // Change the cron expression to adjust the time: 'minute hour * * *'
 cron.schedule('0 10 * * *', async () => {
   const guildId = process.env.DAILY_GUILD_ID;
@@ -1685,7 +1832,7 @@ cron.schedule('0 10 * * *', async () => {
   if (!guildId || !channelId) return;
 
   if (isDutchQuietHoursForUnpromptedSends()) {
-    console.log('[michael] daily uitverkorene skipped — Dutch quiet hours 22:00–10:00');
+    console.log('[michael] daily uitverkorene skipped...  Dutch quiet hours 22:00 to 10:00');
     return;
   }
 
@@ -1708,7 +1855,7 @@ cron.schedule('0 10 * * *', async () => {
   }
 }, { timezone: 'Europe/Amsterdam' });
 
-// ─── GitHub webhook — automatic deployment ────────────────────────────────────
+// ─── GitHub webhook...  automatic deployment ────────────────────────────────────
 //
 // GitHub setup:
 //   Payload URL : https://michael-bot.duckdns.org/github-webhook
@@ -1727,7 +1874,7 @@ app.post(
   (req, res) => {
     const secret = process.env.GITHUB_WEBHOOK_SECRET;
     if (!secret) {
-      console.error('[webhook] GITHUB_WEBHOOK_SECRET is not set — rejecting request');
+      console.error('[webhook] GITHUB_WEBHOOK_SECRET is not set...  rejecting request');
       return res.status(500).send('Webhook secret not configured');
     }
 
@@ -1740,7 +1887,7 @@ app.post(
     const received = Buffer.from(sigHeader, 'utf8');
 
     if (trusted.length !== received.length || !crypto.timingSafeEqual(trusted, received)) {
-      console.warn('[webhook] Signature mismatch — ignoring request');
+      console.warn('[webhook] Signature mismatch...  ignoring request');
       return res.status(401).send('Invalid signature');
     }
 
@@ -1763,7 +1910,7 @@ app.post(
       'pm2 restart michael-bot --update-env',
     ].join(' && ');
 
-    console.log('[webhook] Push to main received — starting deploy');
+    console.log('[webhook] Push to main received...  starting deploy');
     exec(DEPLOY_CMD, (err, stdout, stderr) => {
       if (err) {
         console.error('[webhook] Deploy failed:', err.message);
@@ -1777,13 +1924,13 @@ app.post(
 );
 
 // ── Global crash guards ────────────────────────────────────────────────────────
-// Prevent PM2 restarts from uncaught async errors — log and stay up instead.
+// Prevent PM2 restarts from uncaught async errors...  log and stay up instead.
 process.on('uncaughtException', (err) => {
-  console.error('[michael] uncaughtException — staying alive:', err.message, err.stack);
+  console.error('[michael] uncaughtException...  staying alive:', err.message, err.stack);
 });
 process.on('unhandledRejection', (reason) => {
   const msg = reason instanceof Error ? reason.message : String(reason);
-  console.error('[michael] unhandledRejection — staying alive:', msg);
+  console.error('[michael] unhandledRejection...  staying alive:', msg);
 });
 
 app.listen(PORT, () => {

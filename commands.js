@@ -124,6 +124,30 @@ const PRAATMETMICHAEL_COMMAND = {
   contexts: [0, 1, 2],
 };
 
+const BABYCHAT_COMMAND = {
+  name: 'babychat',
+  description: 'Michael antwoordt als peuter; half van de tijd wordt hij woedend',
+  name_localizations: { 'en-US': 'babychat', 'en-GB': 'babychat', ar: 'دردشة-طفل' },
+  description_localizations: {
+    'en-US': 'Michael answers like a toddler; half the time he snaps and demotes you',
+    'en-GB': 'Michael answers like a toddler; half the time he snaps and demotes you',
+    ar: 'ميخائيل يردّ كطفل صغير؛ ونصف الوقت ينفجر ويخفضك',
+  },
+  options: [
+    {
+      type: 3,
+      name: 'bericht',
+      description: 'Wat zeg je tegen baby-Michael?',
+      name_localizations: { 'en-US': 'message', 'en-GB': 'message', ar: 'رسالة' },
+      description_localizations: { 'en-US': 'What do you say to baby Michael?', 'en-GB': 'What do you say to baby Michael?', ar: 'ماذا تقول لميخائيل الطفل؟' },
+      required: true,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
 const VIBECHECK_COMMAND = {
   name: 'vibecheck',
   description: 'Wat vindt Michaël eigenlijk van jou?',
@@ -197,21 +221,21 @@ const MIJNROL_COMMAND = {
 const ONDERHANDELEN_COMMAND = {
   name: 'onderhandelen',
   description:
-    'Smek en buig vóór het register — kies archetype, afstamming of titel, spreek uw wens, waag de worp.',
+    'Smek en buig vóór het register...  kies archetype, afstamming of titel, spreek uw wens, waag de worp.',
   name_localizations: { 'en-US': 'negotiate', 'en-GB': 'negotiate', ar: 'تفاوض' },
   description_localizations: {
     'en-US':
-      'Plead and grovel before the register — pick archetype, lineage, or title, then your wish, then roll.',
+      'Plead and grovel before the register...  pick archetype, lineage, or title, then your wish, then roll.',
     'en-GB':
-      'Plead and grovel before the register — pick archetype, lineage, or title, then your wish, then roll.',
-    ar: 'توسَّل واستذل قبل أن يُفتَح باب التفاوض — اختر النمط أو السلالة أو اللقب، ثم قول مرادك وارمِ.',
+      'Plead and grovel before the register...  pick archetype, lineage, or title, then your wish, then roll.',
+    ar: 'توسَّل واستذل قبل أن يُفتَح باب التفاوض...  اختر النمط أو السلالة أو اللقب، ثم قول مرادك وارمِ.',
   },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
 };
 
-// Language selector — sets the language Michael uses on this server
+// Language selector...  sets the language Michael uses on this server
 const MICHAELTAAL_COMMAND = {
   name: 'michaeltaal',
   description: 'Set the language Michael Bot uses on this server / Stel de taal in van Michael Bot',
@@ -219,14 +243,14 @@ const MICHAELTAAL_COMMAND = {
   description_localizations: {
     'en-US': 'Set the language Michael Bot uses on this server (or your personal language in DMs)',
     'en-GB': 'Set the language Michael Bot uses on this server (or your personal language in DMs)',
-    ar: 'اضبط لغة الخادم — أو لغتك الشخصية في الرسائل الخاصة',
+    ar: 'اضبط لغة الخادم...  أو لغتك الشخصية في الرسائل الخاصة',
   },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, MICHAELTAAL_COMMAND];
+const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, MICHAELTAAL_COMMAND];
 
 // Clear any leftover guild-specific commands so they don't show up as duplicates
 if (process.env.GUILD_IDS) {

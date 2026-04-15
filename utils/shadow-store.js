@@ -1,5 +1,5 @@
 /**
- * Shadow reply candidate store — in-memory only, resets on bot restart.
+ * Shadow reply candidate store...  in-memory only, resets on bot restart.
  *
  * Tracks recent non-bot Discord messages so Michael can circle back
  * and reply directly to one long after it was sent.  Because this is
@@ -12,7 +12,7 @@
 
 const MAX_CANDIDATES = 120;
 const MIN_AGE_MS = 5 * 60 * 1000;   // at least 5 min old before shadow reply
-const MAX_AGE_MS = 2 * 60 * 60 * 1000; // up to 2 hours — keeps more candidates eligible
+const MAX_AGE_MS = 2 * 60 * 60 * 1000; // up to 2 hours...  keeps more candidates eligible
 
 const candidates = [];
 
@@ -20,7 +20,7 @@ const candidates = [];
 export function addShadowCandidate({ messageId, channelId, authorId, content, timestamp, guildId = null }) {
   if (candidates.some(c => c.messageId === messageId)) return;
   candidates.push({ messageId, channelId, authorId, content, timestamp, shadowReplied: false, guildId });
-  // Keep array bounded — drop oldest entries first
+  // Keep array bounded...  drop oldest entries first
   if (candidates.length > MAX_CANDIDATES) {
     candidates.splice(0, candidates.length - MAX_CANDIDATES);
   }

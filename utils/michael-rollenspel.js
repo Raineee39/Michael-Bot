@@ -1,5 +1,5 @@
 /**
- * Michaëls kosmische rollenspel — orchestration (character creation, negotiation).
+ * Michaëls kosmische rollenspel...  orchestration (character creation, negotiation).
  * Core stats / rolls live in michael-memory.js.
  */
 
@@ -75,25 +75,25 @@ function extractCanonicalLineageKey(verzoek) {
 
 const WORSE_FRAGMENTS = {
   nl: [
-    ' — en de registers vernauwen zich',
-    ' — Michaël noteert verzet',
-    ' — titel ingekort door het veld',
-    ' — de aanvechter',
-    ' — der onwaardige inschrijving',
+    '...  en de registers vernauwen zich',
+    '...  Michaël noteert verzet',
+    '...  titel ingekort door het veld',
+    '...  de aanvechter',
+    '...  der onwaardige inschrijving',
   ],
   en: [
-    ' — and the registers narrow',
-    ' — Michael notes resistance',
-    ' — title amended by the field',
-    ' — the challenger',
-    ' — of the unworthy enrolment',
+    '...  and the registers narrow',
+    '...  Michael notes resistance',
+    '...  title amended by the field',
+    '...  the challenger',
+    '...  of the unworthy enrolment',
   ],
   ar: [
-    ' — والسجلات تضيق',
-    ' — امرؤ القيس يُدوِّن العصيان',
-    ' — اللقب مختصَر من الميدان',
-    ' — المُنازِع',
-    ' — التسجيل الناقص',
+    '...  والسجلات تضيق',
+    '...  امرؤ القيس يُدوِّن العصيان',
+    '...  اللقب مختصَر من الميدان',
+    '...  المُنازِع',
+    '...  التسجيل الناقص',
   ],
 };
 
@@ -159,7 +159,7 @@ export function negotiationDC(user, mood) {
 }
 
 /** Forgiveness check: total must meet or beat this.
- *  Targets roughly: woedend ~50%, streng ~60%, lower moods ~70–80%.
+ *  Targets roughly: woedend ~50%, streng ~60%, lower moods ~70 to 80%.
  */
 export function forgivenessThreshold(mood) {
   if (mood === 'woedend') return 13;
@@ -203,7 +203,7 @@ function stripWorseFragments(base) {
 async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzoek = '', forcedKind = null) {
   const { generateCharacterFieldChange } = await import('./openai.js');
 
-  // Wizard flow: user already picked archetype | lineage | title — no random branch
+  // Wizard flow: user already picked archetype | lineage | title...  no random branch
   if (forcedKind === 'lineage') {
     const lineageKey = extractCanonicalLineageKey(verzoek);
     if (lineageKey) {
@@ -244,7 +244,7 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
   else if (requestedKind === 'stat')      branch = Math.random() * 0.38;
 
   if (branch < 0.38) {
-    // Stat branch — prefer a stat the user mentioned, no LLM needed
+    // Stat branch...  prefer a stat the user mentioned, no LLM needed
     const mentionedStat = STAT_KEYS.find(k => verzoek.toLowerCase().includes(k));
     const k = mentionedStat ?? pick(STAT_KEYS);
     const v = character.stats[k] + 1;
@@ -253,7 +253,7 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
   }
 
   if (branch < 0.62) {
-    // Title branch — LLM generates a new title in all 3 languages
+    // Title branch...  LLM generates a new title in all 3 languages
     // Strip existing worse fragments from each lang's title before passing to LLM
     const raw = getTitleObj(character);
     const cleaned = {
@@ -270,13 +270,13 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
   }
 
   if (branch < 0.82) {
-    // Archetype branch — LLM generates new archetype in all 3 languages
+    // Archetype branch...  LLM generates new archetype in all 3 languages
     const newArchetype = await generateCharacterFieldChange('archetype', { verzoek, characterBefore: character, langCode });
     patchMichaelCharacter(userId, { archetype: newArchetype });
     return { kind: 'archetype', field: 'archetype', newValue: newArchetype };
   }
 
-  // Lineage branch — named standard races must match the request (LLM was substituting e.g. "shadow-touched mortal" for tiefling)
+  // Lineage branch...  named standard races must match the request (LLM was substituting e.g. "shadow-touched mortal" for tiefling)
   const lineageKey = extractCanonicalLineageKey(verzoek);
   if (lineageKey) {
     const newLineage = { ...LINEAGE_TRILINGUAL[lineageKey] };
@@ -450,7 +450,7 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx,
   return { forgiven, narrative, roll, need, newMood, oordeelDelta: judgementDelta };
 }
 
-// Mood order must match app.js MICHAEL_MOODS — avoid circular import
+// Mood order must match app.js MICHAEL_MOODS...  avoid circular import
 const MICHAEL_MOODS_SAFE = [
   'kosmisch',
   'afwezig',
@@ -463,7 +463,7 @@ const MICHAEL_MOODS_SAFE = [
 
 /**
  * Returns true if the cosmic register should be triggered for this message.
- * Does NOT roll — the actual roll happens when the user clicks the button.
+ * Does NOT roll...  the actual roll happens when the user clicks the button.
  */
 export function maybePassiveRollBlock(userId, userInput) {
   const user = loadUserMemory(userId);
@@ -488,7 +488,7 @@ export function executePassiveRoll(userId) {
   const roll = computeMichaelRoll(user, mood, { context: 'general' });
 
   let oordeelDelta = 0;
-  // Passive rolls can only benefit — poor carries no penalty
+  // Passive rolls can only benefit...  poor carries no penalty
   if (roll.tier.key === 'favoured') {
     patchUserState(userId, 1, mood);
     oordeelDelta = 1;

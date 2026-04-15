@@ -38,12 +38,12 @@ function defaultUser(username) {
     impression:        null,
     currentMood:       null,
     lastChannelId:     null,   // most recent channel this user was active in
-    lastGuildId:       null,   // guild of that channel — for delayed consequences when no shadow match
-    unfinishedBusiness: [],    // Feature 1 — items Michael hasn't let go of
-    recentThemes:      [],     // Feature 2 — topic snapshots for contradiction engine
+    lastGuildId:       null,   // guild of that channel...  for delayed consequences when no shadow match
+    unfinishedBusiness: [],    // Feature 1...  items Michael hasn't let go of
+    recentThemes:      [],     // Feature 2...  topic snapshots for contradiction engine
     languagePermission: null, // unlocked after repeated requests for a non-Dutch language
-    languageRequestCounts: {}, // { en: 2, fr: 1 } — per-language tallies toward unlock
-    michaelCharacter:  null,   // kosmische rollenspel — persistent sheet
+    languageRequestCounts: {}, // { en: 2, fr: 1 }...  per-language tallies toward unlock
+    michaelCharacter:  null,   // kosmische rollenspel...  persistent sheet
     michaelPoints:     0,      // campaign standing (separate from judgementScore)
   };
 }
@@ -283,7 +283,7 @@ export function getJudgementLabel(score) {
   return 'ongewoon helder';
 }
 
-// ─── Feature 1 — Unfinished business ─────────────────────────────────────────
+// ─── Feature 1...  Unfinished business ─────────────────────────────────────────
 //
 // A lightweight queue of unresolved interactions Michael hasn't let go of.
 // Items are created when something bothers him (insult, bait, bad vibe, code
@@ -294,8 +294,8 @@ export function getJudgementLabel(score) {
 //     messageId, channelId }
 //
 // severity 1 = mild lingering discomfort
-// severity 2 = notable — Michael will bring it up with more edge
-// severity 3 = full resentment — appears first and triggers mood shift
+// severity 2 = notable...  Michael will bring it up with more edge
+// severity 3 = full resentment...  appears first and triggers mood shift
 
 /**
  * Queue an unfinished business item for a user.
@@ -344,7 +344,7 @@ export function getOutstandingBusiness(userId) {
     .sort((a, b) => b.severity - a.severity);
 }
 
-/** Record that an item was resurfaced — starts the per-item cooldown. */
+/** Record that an item was resurfaced...  starts the per-item cooldown. */
 export function markBusinessMentioned(userId, id) {
   const all = loadAll();
   const user = all[userId];
@@ -379,7 +379,7 @@ export function maybeAgeBusiness(userId) {
   }
 }
 
-// ─── Feature 2 — Theme tracking (contradiction engine) ───────────────────────
+// ─── Feature 2...  Theme tracking (contradiction engine) ───────────────────────
 //
 // Stores the last MAX_THEMES prompts as keyword snapshots.
 // When a new prompt shares ≥2 keywords with a recent theme, Michael may
@@ -431,7 +431,7 @@ export function detectThemeOverlap(userId, prompt) {
   return false;
 }
 
-// ─── Michaëls kosmische rollenspel — stats, rolls, Michael Points ─────────────
+// ─── Michaëls kosmische rollenspel...  stats, rolls, Michael Points ─────────────
 
 const STAT_KEYS = ['aura', 'discipline', 'chaos', 'inzicht', 'volharding'];
 
@@ -464,7 +464,7 @@ export function resolveField(field, langCode = 'nl') {
 function normalizeTextField(raw, fallbacks, maxLen = 100) {
   if (!raw) return { ...fallbacks };
   if (typeof raw === 'string') {
-    // Old string format — store under nl; other langs will be filled by translation
+    // Old string format...  store under nl; other langs will be filled by translation
     return { nl: raw.slice(0, maxLen) };
   }
   if (typeof raw === 'object') {
@@ -500,11 +500,11 @@ export function normalizeMichaelCharacter(raw) {
 
 /**
  * d20 + modifiers from stats, judgement, mood, Michael Points, context.
- * @param {object} user — full user memory row
- * @param {string} mood — current mood key
+ * @param {object} user...  full user memory row
+ * @param {string} mood...  current mood key
  * @param {object} [opts]
- * @param {string} [opts.context] — 'forgiveness' | 'negotiation' | 'general'
- * @param {number} [opts.extraModifier] — manual adjustment
+ * @param {string} [opts.context]...  'forgiveness' | 'negotiation' | 'general'
+ * @param {number} [opts.extraModifier]...  manual adjustment
  */
 export function computeMichaelRoll(user, mood, opts = {}) {
   const raw = Math.floor(Math.random() * 20) + 1;
