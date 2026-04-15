@@ -29,6 +29,12 @@ import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePass
 import { startGateway } from './utils/gateway.js';
 import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
 import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
+import {
+  getCurrentAntichristUserId,
+  getUitverkoreneUserId,
+  setAntichristForGuild,
+  setUitverkoreneForGuild,
+} from './utils/cosmic-state.js';
 import { getUserLanguage, setUserLanguage } from './utils/user-settings.js';
 import { getLang } from './utils/lang/index.js';
 
@@ -89,12 +95,16 @@ async function fetchGiphyGif(query) {
   }
 }
 
-async function buildUitverkoreneMessage(guildId, lang) {
+async function fetchRandomHumanUserId(guildId) {
   const membersRes = await DiscordRequest(`guilds/${guildId}/members?limit=1000`, { method: 'GET' });
   const members = await membersRes.json();
   const humans = members.filter(m => !m.user.bot);
-  const chosen = humans[Math.floor(Math.random() * humans.length)];
-  const userId = chosen.user.id;
+  if (!humans.length) throw new Error('no human members in guild');
+  return humans[Math.floor(Math.random() * humans.length)].user.id;
+}
+
+async function buildUitverkoreneMessage(guildId, lang) {
+  const userId = await fetchRandomHumanUserId(guildId);
   const gif = await fetchGiphyGif(getRandomGifQuery(lang.code));
 
   const boodschap = pick(lang.uitverkorene.boodschappen);
@@ -120,39 +130,27 @@ const PORT = process.env.PORT || 3000;
 // Tiny helper — saves repeating Math.floor(Math.random()…) everywhere
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
-// Antichrist state — in memory, clears on restart (intentional)
-const antichristState = { userId: null, expiresAt: null };
-
-// Current uitverkorene — whoever was last picked by /uitverkorene or the daily cron
-const uitverkoreneState = { userId: null };
-
-/** Returns the active antichrist userId, or null (also clears the slot if expired). */
-function getCurrentAntichristId() {
-  if (!antichristState.userId) return null;
-  if (Date.now() > antichristState.expiresAt) {
-    antichristState.userId = null;
-    antichristState.expiresAt = null;
-    return null;
-  }
-  return antichristState.userId;
+/** Cosmic roles are per-guild and persisted in data/cosmic-state.json (see utils/cosmic-state.js). */
+function isAntichrist(userId, guildId) {
+  if (!guildId) return false;
+  return getCurrentAntichristUserId(guildId) === userId;
 }
 
-function isAntichrist(userId) {
-  return getCurrentAntichristId() === userId;
-}
-
-function isUitverkorene(userId) {
-  return uitverkoreneState.userId !== null && uitverkoreneState.userId === userId;
+function isUitverkorene(userId, guildId) {
+  if (!guildId) return false;
+  return getUitverkoreneUserId(guildId) === userId;
 }
 
 /** 'antichrist' wins over uitverkorene if someone holds both (shouldn't happen). */
-function getCosmicRole(userId) {
-  if (isAntichrist(userId)) return 'antichrist';
-  if (isUitverkorene(userId)) return 'uitverkorene';
+function getCosmicRole(userId, guildId) {
+  if (!guildId) return null;
+  if (isAntichrist(userId, guildId)) return 'antichrist';
+  if (isUitverkorene(userId, guildId)) return 'uitverkorene';
   return null;
 }
 
-const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'chat', 'vibecheck', 'cosmischestatus', 'mijnrol']);
+/** Antichrist gets "nee" on almost everything; only these stay open. */
+const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'uitverkorene', 'chat', 'cosmischestatus']);
 
 // NEE array is now per-lang: lang.ui.nee
 
@@ -259,7 +257,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   const lang = getLang(langCode);
   if (
     type === InteractionType.APPLICATION_COMMAND &&
-    isAntichrist(invokingUserId) &&
+    isAntichrist(invokingUserId, guildId) &&
     !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)
   ) {
     return res.send({
@@ -327,13 +325,34 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "uitverkorene" command
+    // "uitverkorene" / chosenone (EN localization)
     if (name === 'uitverkorene') {
-      // Acknowledge immediately — member fetch + Giphy can exceed Discord's 3s deadline
+      if (!guildId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.cosmicGuildOnly, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      const currentUit = getUitverkoreneUserId(guildId);
+      if (currentUit) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: lang.ui.cosmicOccupiedChosen(currentUit),
+            components: [{
+              type: MessageComponentTypes.ACTION_ROW,
+              components: [
+                { type: MessageComponentTypes.BUTTON, custom_id: `cosmic_uit_roll:${guildId}`, label: lang.ui.cosmicRollNewChosen, style: ButtonStyleTypes.PRIMARY },
+                { type: MessageComponentTypes.BUTTON, custom_id: `cosmic_uit_flee:${guildId}`, label: lang.ui.cosmicFleeCosmic, style: ButtonStyleTypes.SECONDARY },
+              ],
+            }],
+          },
+        });
+      }
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
       const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId, lang);
-      uitverkoreneState.userId = chosenUserId;
+      setUitverkoreneForGuild(guildId, chosenUserId);
       await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
         method: 'PATCH',
         body: { content, embeds },
@@ -343,19 +362,36 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
     // "antichrist" command
     if (name === 'antichrist') {
+      if (!guildId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.cosmicGuildOnly, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      const currentAnt = getCurrentAntichristUserId(guildId);
+      if (currentAnt) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: lang.ui.cosmicOccupiedAnt(currentAnt),
+            components: [{
+              type: MessageComponentTypes.ACTION_ROW,
+              components: [
+                { type: MessageComponentTypes.BUTTON, custom_id: `cosmic_ant_roll:${guildId}`, label: lang.ui.cosmicRollNewAnt, style: ButtonStyleTypes.PRIMARY },
+                { type: MessageComponentTypes.BUTTON, custom_id: `cosmic_ant_flee:${guildId}`, label: lang.ui.cosmicFleeCosmic, style: ButtonStyleTypes.SECONDARY },
+              ],
+            }],
+          },
+        });
+      }
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
-      const membersRes = await DiscordRequest(`guilds/${guildId}/members?limit=1000`, { method: 'GET' });
-      const members = await membersRes.json();
-      const humans = members.filter(m => !m.user.bot);
-      const chosen = humans[Math.floor(Math.random() * humans.length)];
-
-      antichristState.userId = chosen.user.id;
-      antichristState.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+      const chosenUserId = await fetchRandomHumanUserId(guildId);
+      setAntichristForGuild(guildId, chosenUserId, Date.now() + 24 * 60 * 60 * 1000);
 
       await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
         method: 'PATCH',
-        body: { content: lang.antichrist.announcement(chosen.user.id) },
+        body: { content: lang.antichrist.announcement(chosenUserId) },
       });
       return;
     }
@@ -379,8 +415,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     // "cosmischestatus" — who holds antichrist / uitverkorene, + Michael's mood toward you
     if (name === 'cosmischestatus') {
       const invokerId    = req.body.member?.user?.id ?? req.body.user?.id;
-      const antichristId = getCurrentAntichristId();
-      const uitId        = uitverkoreneState.userId;
+      const antichristId = guildId ? getCurrentAntichristUserId(guildId) : null;
+      const uitId        = guildId ? getUitverkoreneUserId(guildId) : null;
 
       const fireRow  = '👹🔥👹🔥👹🔥👹🔥👹🔥';
       const eyeRow   = '⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️';
@@ -562,7 +598,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           label,
           memory.impression ?? null,
           memory.prompts.filter(p => !p.startsWith('[')).slice(-3),
-          getCosmicRole(userId),
+          getCosmicRole(userId, guildId),
           character,
           langCode,
         );
@@ -676,7 +712,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Filter out internal system entries ([vergeefmij], [date:…], etc.) from the summary
         const realPrompts = preMemory.prompts.filter(p => !p.startsWith('['));
         const memorySummary = realPrompts.length ? realPrompts.slice(-3).join(' / ') : null;
-        const cosmicRole = getCosmicRole(userId);
+        const cosmicRole = getCosmicRole(userId, guildId);
 
         // Rollenspel — use existing character sheet if present; generate one in background after reply
         const existingCharacter = preMemory.michaelCharacter ?? null;
@@ -811,9 +847,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             components: [{
               type: MessageComponentTypes.ACTION_ROW,
               components: [
-                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_nl:${invokingUserId}`, label: '🇳🇱 Nederlands', style: ButtonStyleTypes.SECONDARY },
-                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_en:${invokingUserId}`, label: '🇬🇧 English', style: ButtonStyleTypes.SECONDARY },
-                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_ar:${invokingUserId}`, label: '🇸🇾 العربية', style: ButtonStyleTypes.SECONDARY },
+                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_nl:${invokingUserId}`, label: lang.ui.michaeltaalBtnNl, style: ButtonStyleTypes.SECONDARY },
+                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_en:${invokingUserId}`, label: lang.ui.michaeltaalBtnEn, style: ButtonStyleTypes.SECONDARY },
+                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_ar:${invokingUserId}`, label: lang.ui.michaeltaalBtnAr, style: ButtonStyleTypes.SECONDARY },
               ],
             }],
           },
@@ -839,9 +875,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           components: [{
             type: MessageComponentTypes.ACTION_ROW,
             components: [
-              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_nl:${guildId}`, label: '🇳🇱 Nederlands', style: ButtonStyleTypes.SECONDARY },
-              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_en:${guildId}`, label: '🇬🇧 English', style: ButtonStyleTypes.SECONDARY },
-              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_ar:${guildId}`, label: '🇸🇾 العربية', style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_nl:${guildId}`, label: lang.ui.michaeltaalBtnNl, style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_en:${guildId}`, label: lang.ui.michaeltaalBtnEn, style: ButtonStyleTypes.SECONDARY },
+              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_ar:${guildId}`, label: lang.ui.michaeltaalBtnAr, style: ButtonStyleTypes.SECONDARY },
             ],
           }],
         },
@@ -1259,6 +1295,62 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
+    // ── Cosmic: replace chosen one / antichrist (roll or flee) ───────────────
+    if (componentId.startsWith('cosmic_uit_flee:') || componentId.startsWith('cosmic_ant_flee:')) {
+      return res.send({
+        type: 7,
+        data: { content: lang.ui.cosmicFledReplace, components: [] },
+      });
+    }
+
+    if (componentId.startsWith('cosmic_uit_roll:')) {
+      const gid = componentId.split(':')[1];
+      res.send({ type: 6 });
+      try {
+        const rollLang = getLang(getGuildLanguage(gid));
+        const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(gid, rollLang);
+        setUitverkoreneForGuild(gid, chosenUserId);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content, embeds, components: [] },
+        });
+      } catch (err) {
+        console.error('[michael] cosmic_uit_roll:', err.message);
+        try {
+          const errLang = getLang(getGuildLanguage(gid));
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: errLang.ui.cosmicRollError, components: [] },
+          });
+        } catch { /* token expired */ }
+      }
+      return;
+    }
+
+    if (componentId.startsWith('cosmic_ant_roll:')) {
+      const gid = componentId.split(':')[1];
+      res.send({ type: 6 });
+      try {
+        const rollLang = getLang(getGuildLanguage(gid));
+        const chosenUserId = await fetchRandomHumanUserId(gid);
+        setAntichristForGuild(gid, chosenUserId, Date.now() + 24 * 60 * 60 * 1000);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: rollLang.antichrist.announcement(chosenUserId), components: [] },
+        });
+      } catch (err) {
+        console.error('[michael] cosmic_ant_roll:', err.message);
+        try {
+          const errLang = getLang(getGuildLanguage(gid));
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: errLang.ui.cosmicRollError, components: [] },
+          });
+        } catch { /* token expired */ }
+      }
+      return;
+    }
+
     // Extract invokerUserId and path from a date custom_id
     function parseDateId(prefix) {
       const rest = componentId.replace(prefix, '');
@@ -1520,7 +1612,14 @@ cron.schedule('*/15 * * * *', async () => {
 
   try {
     const consequenceLangCode = guildId ? getGuildLanguage(guildId) : 'nl';
-    const message = await generateDelayedConsequence(user.username || userId, item, mood, judgementLabel, consequenceLangCode);
+    const message = await generateDelayedConsequence(
+      user.username || userId,
+      item,
+      mood,
+      judgementLabel,
+      consequenceLangCode,
+      getCosmicRole(userId, guildId),
+    );
 
     const postBody = {
       content: message,
@@ -1594,7 +1693,7 @@ cron.schedule('0 10 * * *', async () => {
     const cronLangCode = getGuildLanguage(guildId);
     const cronLang = getLang(cronLangCode);
     const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId, cronLang);
-    uitverkoreneState.userId = chosenUserId;
+    setUitverkoreneForGuild(guildId, chosenUserId);
     await DiscordRequest(`channels/${channelId}/messages`, {
       method: 'POST',
       body: {

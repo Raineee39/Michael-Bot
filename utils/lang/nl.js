@@ -84,10 +84,10 @@ KOSMISCHE ROL: DEZE GEBRUIKER IS DE HUIDIGE ANTICHRIST (zoals in de server-aanko
 `,
   cosmicRoleUitverkorene: `
 KOSMISCHE ROL: DEZE GEBRUIKER IS DE HUIDIGE UITVERKORENE (zoals in de server-aankondiging met bliksem en het oog).
-- Michaël erkent de keuze van het lot...  licht gunstiger, maar nog steeds vreemd en vaag
-- Verwijs subtiel naar "gekozen zijn", het pad, de engelen, bliksem, het oog
-- Niet zalvend...  wel alsof er iets groters op U rust
-- De toon moet aansluiten bij de uitverkorene-aankondigingen in de server
+- Michaël spreekt hen merkbaar respectvoller aan dan anderen — hoffelijk, iets warmer, nooit neerbuigend
+- Verwijs subtiel naar "gekozen zijn", het pad, het oog, bliksem — maar blijf Michaël: vreemd, archaïsch, nooit slap
+- Werk in ELK antwoord 2 tot 4 sier-emoji's (harten en bloemen): bijv. 🌸 💐 ❤️ 🌷 ✨ 🌺 — verspreid, niet als opsomming; mag ook één korte regel afsluiten
+- Niet zalvend of onderdanig...  wel alsof het Hogere U met extra aandacht gadeslaat
 `,
 
   // ─── Main prompt sections ────────────────────────────────────────────────────
@@ -377,14 +377,26 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',
       ar: '✅ **ميخائيل يتحدث الآن بالعربية.**\nستكون جميع ردود ميخائيل باللغة العربية من الآن....ميخائيل',
     },
-    michaeltaalPrompt: 'Kies de taal voor Michael Bot op deze server:\n\n🇳🇱 **Nederlands** — de standaardtaal\n🇬🇧 **English** — Michael speaks English\n🇸🇾 **العربية** — ميخائيل يتحدث العربية',
-    michaeltaalPromptDM: 'Kies jouw persoonlijke taal voor Michael Bot in DMs:\n\n🇳🇱 **Nederlands** — de standaardtaal\n🇬🇧 **English** — Michael speaks English\n🇸🇾 **العربية** — ميخائيل يتحدث العربية',
+    michaeltaalPrompt: 'Kies de taal voor Michael Bot op deze server:\n\n**Dutch** — de standaardtaal\n**English** — Michael speaks English\n**Arabic** — ميخائيل يتحدث العربية',
+    michaeltaalPromptDM: 'Kies jouw persoonlijke taal voor Michael Bot in DMs:\n\n**Dutch** — de standaardtaal\n**English** — Michael speaks English\n**Arabic** — ميخائيل يتحدث العربية',
+    michaeltaalBtnNl: 'Dutch',
+    michaeltaalBtnEn: 'English',
+    michaeltaalBtnAr: 'Arabic',
     michaeltaalSetDM: {
       nl: '✅ **Michael spreekt nu Nederlands met jou in DMs.**...Michael',
       en: '✅ **Michael will now speak English with you in DMs.**...Michael',
       ar: '✅ **امرؤ القيس سيتحدث معك بالعربية في الرسائل الخاصة.**...امرؤ القيس',
     },
     michaeltaalNoPermission: 'U heeft geen toestemming om de servertaal te wijzigen....Michael',
+
+    cosmicGuildOnly: 'Deze kosmische worp werkt alleen op een server, niet in een privégesprek....Michael',
+    cosmicOccupiedChosen: (uid) => `Er is al een uitverkorene: <@${uid}>.\n\nWilt u het lot opnieuw laten rollen, of trekt u zich terug?`,
+    cosmicOccupiedAnt: (uid) => `Er is al een antichrist: <@${uid}>.\n\nWilt u het lot opnieuw laten rollen, of trekt u zich terug?`,
+    cosmicRollNewChosen: '🎲 Nieuwe uitverkorene',
+    cosmicRollNewAnt: '🎲 Nieuwe antichrist',
+    cosmicFleeCosmic: '🏃 Ik trek me terug',
+    cosmicFledReplace: 'Het register blijft zoals het was.  Een wijze terugtrekking....Michael',
+    cosmicRollError: 'Het hogere register weigerde de worp...  probeer het later opnieuw....Michael',
   },
 
   // ─── Humeur lines ────────────────────────────────────────────────────────────

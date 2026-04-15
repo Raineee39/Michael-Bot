@@ -366,9 +366,10 @@ Long-term impression: ${impressionText}
 
 // ─── Feature 1 — Delayed consequence / unfinished business callback ───────────
 
-export async function generateDelayedConsequence(username, item, mood, judgementLabel, langCode = 'nl') {
+export async function generateDelayedConsequence(username, item, mood, judgementLabel, langCode = 'nl', cosmicRole = null) {
   const lang = getLang(langCode);
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+  const cosmicBlock = cosmicRoleBlock(lang, cosmicRole);
 
   const moodDesc = lang.moodDescriptions[mood] ?? 'Detached and vague.';
   const judgementDesc = lang.judgementDescriptions[judgementLabel] ?? lang.judgementDescriptions['onbeslist'] ?? '';
@@ -380,7 +381,7 @@ export async function generateDelayedConsequence(username, item, mood, judgement
 ${personaIntro(langCode)} ${langCode === 'ar'
   ? `لم تنتهِ من محادثة سابقة مع ${username}. تعود الآن إلى تلك اللحظة المُعلَّقة — شعرياً، بلا تهديد صريح، لكن بوجود يُزعج.`
   : `You have not let go of something from an earlier conversation with ${username}. You circle back to that unresolved moment now — not threatening, but present and slightly uncomfortable.`}
-
+${cosmicBlock}
 This lingered: "${item.prompt}"
 Why it didn't sit right: ${item.reason}
 

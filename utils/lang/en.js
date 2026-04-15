@@ -84,10 +84,10 @@ COSMIC ROLE: THIS USER IS THE CURRENT ANTICHRIST (as in the server announcement 
 `,
   cosmicRoleUitverkorene: `
 COSMIC ROLE: THIS USER IS THE CURRENT CHOSEN ONE (as in the server announcement with lightning and the eye).
-- Michael acknowledges the choice of fate...  slightly more favourable, but still strange and vague
-- Subtly reference "being chosen", the path, the angels, lightning, the eye
-- Not unctuous...  but as if something greater rests upon you
-- The tone must align with the chosen one announcements in the server
+- Michael addresses them noticeably more respectfully than others — courteous, slightly warmer, never condescending
+- Subtly reference being chosen, the path, the eye, lightning — still Michael: odd, archaic, never soft or sycophantic
+- In EVERY reply, include 2 to 4 decorative emojis (hearts and flowers), e.g. 🌸 💐 ❤️ 🌷 ✨ 🌺 — woven in naturally, not as a bullet list; one line may end with a small cluster
+- Not grovelling...  but as if the Higher watches them with extra care
 `,
 
   // ─── Main prompt sections ────────────────────────────────────────────────────
@@ -377,14 +377,26 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',
       ar: '✅ **ميخائيل يتحدث الآن بالعربية.**\nستكون جميع ردود ميخائيل باللغة العربية من الآن....ميخائيل',
     },
-    michaeltaalPrompt: 'Choose the language for Michael Bot on this server:\n\n🇳🇱 **Nederlands** — Michael speaks Dutch\n🇬🇧 **English** — the current selection\n🇸🇾 **العربية** — ميخائيل يتحدث العربية',
-    michaeltaalPromptDM: 'Choose your personal language for Michael Bot in DMs:\n\n🇳🇱 **Nederlands** — Michael speaks Dutch\n🇬🇧 **English** — the current selection\n🇸🇾 **العربية** — ميخائيل يتحدث العربية',
+    michaeltaalPrompt: 'Choose the language for Michael Bot on this server:\n\n**Dutch** — Michael speaks Dutch\n**English** — the current selection\n**Arabic** — ميخائيل يتحدث العربية',
+    michaeltaalPromptDM: 'Choose your personal language for Michael Bot in DMs:\n\n**Dutch** — Michael speaks Dutch\n**English** — the current selection\n**Arabic** — ميخائيل يتحدث العربية',
+    michaeltaalBtnNl: 'Dutch',
+    michaeltaalBtnEn: 'English',
+    michaeltaalBtnAr: 'Arabic',
     michaeltaalSetDM: {
       nl: '✅ **Michael will now speak Dutch with you in DMs.**...Michael',
       en: '✅ **Michael will now speak English with you in DMs.**...Michael',
       ar: '✅ **Imru\' al-Qais will now speak Arabic with you in DMs.**...Imru\' al-Qais',
     },
     michaeltaalNoPermission: 'You do not have permission to change the server language....Michael',
+
+    cosmicGuildOnly: 'That cosmic roll only works on a server, not in a private message....Michael',
+    cosmicOccupiedChosen: (uid) => `There is already a chosen one: <@${uid}>.\n\nRoll the dice for a new one, or walk away?`,
+    cosmicOccupiedAnt: (uid) => `There is already an antichrist: <@${uid}>.\n\nRoll the dice for a new one, or walk away?`,
+    cosmicRollNewChosen: '🎲 Roll new chosen one',
+    cosmicRollNewAnt: '🎲 Roll new antichrist',
+    cosmicFleeCosmic: '🏃 Walk away',
+    cosmicFledReplace: 'The register stays as it was.  A prudent retreat....Michael',
+    cosmicRollError: 'The higher register refused the roll...  try again later....Michael',
   },
 
   // ─── Humeur lines ────────────────────────────────────────────────────────────
