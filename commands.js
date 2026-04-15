@@ -221,13 +221,13 @@ const MIJNROL_COMMAND = {
 const ONDERHANDELEN_COMMAND = {
   name: 'onderhandelen',
   description:
-    'Smek en buig vóór het register...  kies archetype, afstamming of titel, spreek uw wens, waag de worp.',
+    'Smek vóór het register: kies archetype, afstamming of titel, spreek je wens, waag de worp.',
   name_localizations: { 'en-US': 'negotiate', 'en-GB': 'negotiate', ar: 'تفاوض' },
   description_localizations: {
     'en-US':
-      'Plead and grovel before the register...  pick archetype, lineage, or title, then your wish, then roll.',
+      'Grovel before the register: pick archetype, lineage, or title, state your wish, roll.',
     'en-GB':
-      'Plead and grovel before the register...  pick archetype, lineage, or title, then your wish, then roll.',
+      'Grovel before the register: pick archetype, lineage, or title, state your wish, roll.',
     ar: 'توسَّل واستذل قبل أن يُفتَح باب التفاوض...  اختر النمط أو السلالة أو اللقب، ثم قول مرادك وارمِ.',
   },
   type: 1,
