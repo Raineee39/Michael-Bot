@@ -153,7 +153,7 @@ export function startGateway() {
 
         // Track the user's most-recently-active channel so delayed consequences
         // know where to post. Only updates if the user is already in memory.
-        updateLastChannel(authorId, channelId);
+        updateLastChannel(authorId, channelId, guildId);
 
         // Only continue for messages that mention Michael or (in Arabic mode) Imru' al-Qais
         if (!/michael/i.test(content) && !/امرؤ القيس|امرئ القيس|القيس/.test(content)) return;

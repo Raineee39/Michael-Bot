@@ -619,7 +619,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // Feature 3 — Bait / forcing-Michael trap: respond coldly and queue unfinished business
       if (BAIT_RE.test(userInput)) {
         console.log(`[michael] chat | bait-dismissal | ${username} (${userId})`);
-        saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId);
+        saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId, guildId ?? null);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
           reason:   'De gebruiker probeerde Michael te commanderen of te dwingen te reageren',
@@ -636,7 +636,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // Code / technical request — refuse in-character, queue unfinished business
       if (CODE_REQUEST_RE.test(userInput)) {
         console.log(`[michael] chat | code-refusal | ${username} (${userId})`);
-        saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId);
+        saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId, guildId ?? null);
         addUnfinishedBusiness(userId, {
           prompt:   userInput,
           reason:   'De gebruiker vroeg om technische hulp — buiten Michaels domein maar hij vergeet het niet',
@@ -653,7 +653,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       // ~15% chance Michael refuses outright — no OpenAI call
       if (Math.random() < 0.15) {
         console.log(`[michael] chat | random-refusal (15%) | ${username} (${userId})`);
-        saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId);
+        saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelRefusals)}` },
@@ -707,7 +707,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         console.log(`[michael] score | ${username} | mood=${mood} | Δ=${scoreDelta} | ${oldScore}→${oldScore + scoreDelta} | contradiction=${contradictionHint} | "${userInput.slice(0, 60)}"`);
 
         // Save first so the user record exists before addUnfinishedBusiness / addTheme write to it
-        saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId);
+        saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId, guildId ?? null);
 
         // Feature 1 — Create unfinished business for negative interactions
         if (scoreDelta <= -2 || INSULT_RE.test(userInput)) {
@@ -1489,7 +1489,8 @@ cron.schedule('*/15 * * * *', async () => {
       const outstanding = getOutstandingBusiness(userId);
       const userShadow  = shadowPool.find(c => c.authorId === userId && !inaccessibleChannels.has(c.channelId));
       const targetChannel = userShadow?.channelId ?? (inaccessibleChannels.has(u.lastChannelId) ? null : u.lastChannelId);
-      const guildId = userShadow?.guildId ?? null;
+      // Prefer shadow candidate's guild; else guild stored with lastChannelId (see saveUserMemory / gateway)
+      const guildId = userShadow?.guildId ?? u.lastGuildId ?? null;
       return { userId, user: u, outstanding, userShadow, targetChannel, guildId };
     })
     .filter(({ outstanding, targetChannel, guildId }) => {
@@ -1518,7 +1519,7 @@ cron.schedule('*/15 * * * *', async () => {
   lastConsequencePerGuild.set(guildId ?? '_dm', now);
 
   try {
-    const consequenceLangCode = userShadow?.guildId ? getGuildLanguage(userShadow.guildId) : 'nl';
+    const consequenceLangCode = guildId ? getGuildLanguage(guildId) : 'nl';
     const message = await generateDelayedConsequence(user.username || userId, item, mood, judgementLabel, consequenceLangCode);
 
     const postBody = {

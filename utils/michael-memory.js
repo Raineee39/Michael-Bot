@@ -38,6 +38,7 @@ function defaultUser(username) {
     impression:        null,
     currentMood:       null,
     lastChannelId:     null,   // most recent channel this user was active in
+    lastGuildId:       null,   // guild of that channel — for delayed consequences when no shadow match
     unfinishedBusiness: [],    // Feature 1 — items Michael hasn't let go of
     recentThemes:      [],     // Feature 2 — topic snapshots for contradiction engine
     languagePermission: null, // unlocked after repeated requests for a non-Dutch language
@@ -62,6 +63,7 @@ export function loadUserMemory(userId) {
   if (user.impression === undefined)       user.impression = null;
   if (user.currentMood === undefined)      user.currentMood = null;
   if (user.lastChannelId === undefined)    user.lastChannelId = null;
+  if (user.lastGuildId === undefined)      user.lastGuildId = null;
   if (user.unfinishedBusiness === undefined) user.unfinishedBusiness = [];
   if (user.recentThemes === undefined)     user.recentThemes = [];
   if (user.languagePermission === undefined) user.languagePermission = null;
@@ -76,8 +78,10 @@ export function loadUserMemory(userId) {
  * Persist the result of a conversation turn.
  * @param {string|null} channelId  Pass the channel where the user spoke so
  *                                 delayed consequences know where to resurface.
+ * @param {string|null|undefined} guildId  Guild for that channel (null in DMs). When set with channelId,
+ *                                         updates lastGuildId so background jobs can use server language.
  */
-export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0, nextMood = null, channelId = null) {
+export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0, nextMood = null, channelId = null, guildId = undefined) {
   const all = loadAll();
   const user = all[userId] ?? defaultUser(username);
   user.username   = username;
@@ -94,7 +98,10 @@ export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0, n
   migrateMichaelRollenspel(user);
   user.judgementScore += scoreDelta;
   if (nextMood  !== null) user.currentMood  = nextMood;
-  if (channelId !== null) user.lastChannelId = channelId;
+  if (channelId !== null) {
+    user.lastChannelId = channelId;
+    if (guildId !== undefined) user.lastGuildId = guildId;
+  }
   all[userId] = user;
   saveAll(all);
 }
@@ -107,11 +114,18 @@ export function loadAllMemory() {
 /**
  * Only update the last-known channel for a user.
  * Used by the gateway listener so it doesn't pollute the prompt history.
+ * @param {string|null|undefined} guildId  When channelId is set, pass guild_id (or null in DMs) so delayed
+ *                                         consequences can resolve server language without a shadow match.
  */
-export function updateLastChannel(userId, channelId) {
+export function updateLastChannel(userId, channelId, guildId = undefined) {
   const all = loadAll();
   if (!all[userId]) return; // don't create stub records for unknown users
   all[userId].lastChannelId = channelId;
+  if (channelId === null) {
+    all[userId].lastGuildId = null;
+  } else if (guildId !== undefined) {
+    all[userId].lastGuildId = guildId;
+  }
   saveAll(all);
 }
 
