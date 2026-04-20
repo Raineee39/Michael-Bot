@@ -5,9 +5,9 @@
 //    a. Feature 3...  "Do not respond" trap: if the message contains baiting
 //       language, there is a 70% chance Michael silently ignores it and queues
 //       an unfinished business item instead of replying.
-//    b. Otherwise a 60% chance Michael interjects with a short reply.
-//       Feature 5...  Post-message revision: 12% chance the sent reply gets a
-//       quiet "Edit:" appended a few seconds later.
+//    b. If ALLOW_UNPROMPTED_CHANNEL_POSTS: name-gauge chance Michael interjects
+//       with a short reply; optional post-message revision ("Edit:") on that reply.
+//       When unprompted posts are disabled (default), no reply is sent here.
 // 2. All non-bot messages are stored as shadow reply candidates (Feature 4)
 //    so the cron can pick them up and reply to them retroactively.
 // 3. lastChannelId is tracked per user so the delayed-consequence cron knows
@@ -18,7 +18,7 @@
 //   - Message Content Intent (required to read message bodies)
 
 import { WebSocket } from 'ws';
-import { appendEditWithinDiscordLimit, DiscordRequest } from '../utils.js';
+import { appendEditWithinDiscordLimit, ALLOW_UNPROMPTED_CHANNEL_POSTS, DiscordRequest } from '../utils.js';
 import { addShadowCandidate } from './shadow-store.js';
 import { addUnfinishedBusiness, loadUserMemory, updateLastChannel } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
@@ -181,6 +181,8 @@ export function startGateway() {
             channelId,
           });
         }
+
+        if (!ALLOW_UNPROMPTED_CHANNEL_POSTS) return;
 
         // Name-mention gauge: probability rises with each mention, resets after a response
         const gaugeCount = tickGauge(guildId);

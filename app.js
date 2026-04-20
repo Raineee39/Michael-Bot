@@ -13,6 +13,7 @@ import {
   verifyKeyMiddleware,
 } from 'discord-interactions';
 import {
+  ALLOW_UNPROMPTED_CHANNEL_POSTS,
   appendEditWithinDiscordLimit,
   DiscordRequest,
   DISCORD_MESSAGE_CONTENT_MAX,
@@ -1271,7 +1272,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
 
         // Divine pardon...  scheduled AFTER successful send so it only fires if the user saw the result
-        if (!forgiven && roll.tier.key === 'poor' && Math.random() < 0.5) {
+        if (
+          ALLOW_UNPROMPTED_CHANNEL_POSTS &&
+          !forgiven &&
+          roll.tier.key === 'poor' &&
+          Math.random() < 0.5
+        ) {
           const channelId = req.body.channel_id;
           const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2 to 5 min
           setTimeout(async () => {
@@ -1405,7 +1411,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
 
         // Divine pardon...  scheduled AFTER successful send so it only fires if the user saw the result
-        if (!success && roll.tier.key === 'poor' && Math.random() < 0.5) {
+        if (
+          ALLOW_UNPROMPTED_CHANNEL_POSTS &&
+          !success &&
+          roll.tier.key === 'poor' &&
+          Math.random() < 0.5
+        ) {
           const channelId = req.body.channel_id;
           const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2 to 5 min
           setTimeout(async () => {
@@ -1702,7 +1713,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 // ─── Feature 1 + 4...  Delayed consequences & shadow replies cron ───────────────
 //
 // Runs every 15 minutes (Europe/Amsterdam clock for quiet hours below).
-// Cycle:
+// Skipped entirely when ALLOW_UNPROMPTED_CHANNEL_POSTS is false (default).
+// Cycle when allowed:
 //   1. Prune stale shadow candidates from the in-memory store.
 //   2. Shadow reply (Feature 4): 25% chance per cycle, pick one eligible
 //      candidate and reply to it directly as if Michael just noticed.
@@ -1723,6 +1735,12 @@ const inaccessibleChannels = new Set();
 cron.schedule('*/15 * * * *', async () => {
   // 1. Prune stale shadow candidates
   pruneOldCandidates();
+
+  if (!ALLOW_UNPROMPTED_CHANNEL_POSTS) {
+    const allMem = loadAllMemory();
+    Object.keys(allMem).forEach((uid) => maybeAgeBusiness(uid));
+    return;
+  }
 
   const dutchQuiet = isDutchQuietHoursForUnpromptedSends();
 
@@ -1879,7 +1897,7 @@ cron.schedule('*/15 * * * *', async () => {
   Object.keys(allMemory).forEach(uid => maybeAgeBusiness(uid));
 });
 
-// Daily uitverkorene...  runs at 10:00 AM Amsterdam time
+// Daily uitverkorene...  runs at 10:00 AM Amsterdam time (independent of ALLOW_UNPROMPTED_CHANNEL_POSTS)
 // Change the cron expression to adjust the time: 'minute hour * * *'
 cron.schedule('0 10 * * *', async () => {
   const guildId = process.env.DAILY_GUILD_ID;

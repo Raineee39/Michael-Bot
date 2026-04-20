@@ -18,6 +18,15 @@ export function isDutchQuietHoursForUnpromptedSends() {
   return hour >= 22 || hour < 10;
 }
 
+/**
+ * When false (default): no gateway name-call replies, shadow/delayed crons, or delayed
+ * divine-pardon follow-ups. Daily uitverkorene (DAILY_GUILD_ID / DAILY_CHANNEL_ID) still runs.
+ * Slash commands, buttons, and edits to bot replies still run.
+ * Set MICHAEL_ALLOW_UNPROMPTED_CHANNEL_POSTS=true to restore those proactive posts.
+ */
+export const ALLOW_UNPROMPTED_CHANNEL_POSTS =
+  process.env.MICHAEL_ALLOW_UNPROMPTED_CHANNEL_POSTS === 'true';
+
 export async function DiscordRequest(endpoint, options) {
   // append endpoint to root API URL
   const url = 'https://discord.com/api/v10/' + endpoint;
