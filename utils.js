@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './utils/load-env.js';
 
 /** Discord message flag: suppress push/badge for this message (@silent). */
 export const MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS = 1 << 12; // 4096

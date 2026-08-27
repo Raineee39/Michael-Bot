@@ -1,10 +1,16 @@
-import 'dotenv/config';
+import './load-env.js';
 import { GoogleGenAI } from '@google/genai';
 import { getLang } from './lang/index.js';
 import { resolveField } from './michael-memory.js';
 
+const geminiKey = process.env.GEMINI_API_KEY;
+if (geminiKey && process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY !== geminiKey) {
+  console.warn('[gemini] GOOGLE_API_KEY is also set (another process on this host). Using GEMINI_API_KEY only.');
+  delete process.env.GOOGLE_API_KEY;
+}
+
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: geminiKey,
   httpOptions: { timeout: 60000 },
 });
 
@@ -58,18 +64,42 @@ function ttsLanguageCode(langCode) {
   return 'nl-NL';
 }
 
+function extractGeminiText(response) {
+  const direct = (response?.text ?? '').trim();
+  if (direct) return direct;
+  const parts = response?.candidates?.[0]?.content?.parts ?? [];
+  return parts.map((p) => p?.text).filter(Boolean).join('\n').trim();
+}
+
 async function geminiText(input, { maxOutputTokens = 300, temperature } = {}) {
-  const response = await ai.models.generateContent({
-    model: TEXT_MODEL,
-    contents: input,
-    config: {
-      maxOutputTokens,
-      ...(temperature !== undefined ? { temperature } : {}),
-      thinkingConfig: { thinkingBudget: 0 },
-    },
-  });
-  const text = (response.text ?? '').trim();
-  if (!text) throw new Error('Gemini returned empty text');
+  const baseConfig = {
+    maxOutputTokens,
+    ...(temperature !== undefined ? { temperature } : {}),
+  };
+  let response;
+  try {
+    response = await ai.models.generateContent({
+      model: TEXT_MODEL,
+      contents: input,
+      config: { ...baseConfig, thinkingConfig: { thinkingBudget: 0 } },
+    });
+  } catch (err) {
+    const msg = String(err?.message ?? err);
+    if (!/thinking/i.test(msg)) throw err;
+    console.warn('[gemini] thinkingConfig rejected, retrying without it');
+    response = await ai.models.generateContent({
+      model: TEXT_MODEL,
+      contents: input,
+      config: baseConfig,
+    });
+  }
+  const text = extractGeminiText(response);
+  if (!text) {
+    const cand = response?.candidates?.[0];
+    const reason = cand?.finishReason || response?.promptFeedback?.blockReason || 'unknown';
+    console.error('[gemini] empty text', { finishReason: cand?.finishReason, blockReason: response?.promptFeedback?.blockReason });
+    throw new Error(`Gemini returned empty text (${reason})`);
+  }
   return text;
 }
 
@@ -512,11 +542,9 @@ export async function generateHoroscope({
       : 'On-demand reading of THIS server\'s field. Mix a general forecast with specific things named people might do, skip, meet, or suffer today.';
 
   const maxChars = mode === 'daily' ? 1500 : 1200;
+  const maxTokens = mode === 'daily' ? 1024 : 768;
 
-  const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
-    max_output_tokens: mode === 'daily' ? 560 : 420,
-    input: `
+  const buildInput = (dossiers) => `
 ${personaIntro(langCode)}
 Write a celestial horoscope for ${dateLabel}. ${modeHint}
 Formal address (${formalAddress}). ${styleHint}.
@@ -538,16 +566,33 @@ Rules:
 - If no dossiers, keep it general but still atmospheric and specific to the date.
 
 Dossiers (background only — weave in, do not list):
-${subjectBlock}
+${dossiers}
 
 Keep total under ${maxChars} characters.
 ${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
-    `.trim(),
-  });
+    `.trim();
 
-  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
-  if (!raw) throw new Error('Gemini returned empty horoscope');
-  return applyChaoticFormatting(raw);
+  const slimDossiers = subjects.length
+    ? subjects.map((s) => `<@${s.userId}> (${s.username})`).join(', ')
+    : '(no dossiers — write a general field forecast only)';
+
+  const run = async (dossiers) => {
+    const response = await client.responses.create({
+      model: 'gpt-4.1-mini',
+      max_output_tokens: maxTokens,
+      input: buildInput(dossiers),
+    });
+    const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+    if (!raw) throw new Error('Gemini returned empty horoscope');
+    return applyChaoticFormatting(raw);
+  };
+
+  try {
+    return await run(subjectBlock);
+  } catch (err) {
+    console.error('[gemini] horoscope first pass failed:', err?.message ?? err);
+    return run(slimDossiers);
+  }
 }
 
 export async function generateCosmicAppointment({

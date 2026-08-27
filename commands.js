@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './utils/load-env.js';
 import { InstallGlobalCommands, InstallGuildCommands } from './utils.js';
 
 const TEST_COMMAND = {

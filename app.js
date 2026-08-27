@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './utils/load-env.js';
 import express from 'express';
 import crypto from 'crypto';
 import { exec } from 'child_process';
@@ -161,7 +161,14 @@ async function fetchGiphyGif(query) {
   }
 }
 
+function memoryMemberIdsForGuild(guildId) {
+  return Object.entries(loadAllMemory())
+    .filter(([, mem]) => mem?.lastGuildId === guildId)
+    .map(([id]) => id);
+}
+
 async function fetchGuildHumanMemberIds(guildId, { fallbackIds = [] } = {}) {
+  const extras = [...fallbackIds, ...memoryMemberIdsForGuild(guildId)].filter(Boolean);
   try {
     const membersRes = await DiscordRequest(`guilds/${guildId}/members?limit=1000`, { method: 'GET' });
     const members = await membersRes.json();
@@ -169,10 +176,10 @@ async function fetchGuildHumanMemberIds(guildId, { fallbackIds = [] } = {}) {
       throw new Error(`unexpected members payload: ${JSON.stringify(members).slice(0, 120)}`);
     }
     const ids = members.filter((m) => m.user && !m.user.bot).map((m) => m.user.id);
-    return ids.length ? ids : fallbackIds.filter(Boolean);
+    return ids.length ? ids : [...new Set(extras)];
   } catch (err) {
     console.error(`[michael] guild members fetch failed | guild=${guildId}:`, err?.message ?? err);
-    return fallbackIds.filter(Boolean);
+    return [...new Set(extras)];
   }
 }
 
@@ -1553,10 +1560,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const gif = await fetchGiphyGif(getHoroscopeGifQuery());
         if (gif) embeds = [{ image: { url: gif } }];
 
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: content.slice(0, DISCORD_MESSAGE_CONTENT_MAX), ...(embeds.length ? { embeds } : {}) },
-        });
+        const payload = { content: content.slice(0, DISCORD_MESSAGE_CONTENT_MAX) };
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { ...payload, ...(embeds.length ? { embeds } : {}) },
+          });
+        } catch (sendErr) {
+          console.error('horoscope embed send failed:', sendErr?.message ?? sendErr);
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: payload,
+          });
+        }
         console.log(`[michael] horoscope | guild=${guildId ?? 'dm'} | user=${invokerId}`);
       } catch (err) {
         console.error('horoscope error:', err?.message ?? err);
@@ -2403,7 +2419,21 @@ process.on('unhandledRejection', (reason) => {
   console.error('[michael] unhandledRejection...  staying alive:', msg);
 });
 
+async function logDiscordIdentity() {
+  try {
+    const meRes = await DiscordRequest('users/@me', { method: 'GET' });
+    const me = await meRes.json();
+    const appRes = await DiscordRequest('oauth2/applications/@me', { method: 'GET' });
+    const app = await appRes.json();
+    const envApp = process.env.APP_ID;
+    console.log(`[michael] discord identity | bot=${me.username} (${me.id}) | tokenApp=${app.id} (${app.name}) | env APP_ID=${envApp} | match=${app.id === envApp}`);
+  } catch (err) {
+    console.error('[michael] discord identity check failed:', err?.message ?? err);
+  }
+}
+
 app.listen(PORT, () => {
   console.log('Listening on port', PORT);
+  logDiscordIdentity();
   startGateway();
 });

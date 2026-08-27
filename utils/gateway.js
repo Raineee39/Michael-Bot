@@ -18,6 +18,7 @@
 // IMPORTANT: Requires the following Privileged Gateway Intents enabled in the
 // Discord Developer Portal:
 //   - Message Content Intent (required to read message bodies)
+//   - Server Members Intent (required for GET /guilds/.../members — horoscope / daily)
 
 import { WebSocket } from 'ws';
 import { appendEditWithinDiscordLimit, DiscordRequest } from '../utils.js';
@@ -30,8 +31,8 @@ import { isMichaelLifeActive } from './life-switch.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 
-// Intents: GUILDS(1) | GUILD_MESSAGES(512) | MESSAGE_CONTENT(32768)
-const INTENTS = 1 | 512 | 32768;
+// Intents: GUILDS(1) | GUILD_MEMBERS(2) | GUILD_MESSAGES(512) | MESSAGE_CONTENT(32768)
+const INTENTS = 1 | 2 | 512 | 32768;
 
 const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
 
