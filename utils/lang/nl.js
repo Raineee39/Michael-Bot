@@ -620,6 +620,7 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     personalTitle: '# JOUW PERSOONLIJKE HOROSCOOP',
     dateLine: (date) => `*${date}*`,
     divider: '───────────────',
+    moodLabel: 'Michaëls stemming',
     chosenTitle: '**⚡ UITVERKORENE VAN DE DAG ⚡**',
     antichristTitle: '**👹 ANTICHRIST VAN DE DAG 👹**',
     currentChosen: (userId) => `**Huidige uitverkorene:** <@${userId}>`,

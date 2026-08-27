@@ -115,22 +115,15 @@ export function formatDailyBulletin(lang, { dateLabel, horoscopeBody }) {
   ].join('\n'));
 }
 
-export function formatCommandHoroscope(lang, { dateLabel, horoscopeBody, chosenUserId, antichristUserId }) {
+export function formatCommandHoroscope(lang, { dateLabel, horoscopeBody }) {
   const h = lang.horoscope;
-  const parts = [
+  return clampContent([
     h.header,
     h.commandTitle,
     h.dateLine(dateLabel),
     '',
     horoscopeBody,
-  ];
-  if (chosenUserId) {
-    parts.push('', h.divider, h.currentChosen(chosenUserId));
-  }
-  if (antichristUserId) {
-    parts.push(h.currentAntichrist(antichristUserId));
-  }
-  return clampContent(parts.join('\n'));
+  ].join('\n'));
 }
 
 export function formatPersonalHoroscope(lang, { dateLabel, horoscopeBody }) {
@@ -162,7 +155,7 @@ export async function buildHoroscopeText({
     offices.antichristUserId,
   ].filter(Boolean);
   const subjectIds = pickHoroscopeSubjects(memberIds, {
-    count: mode === 'daily' ? 5 : 4,
+    count: mode === 'daily' ? 4 : 3,
     ensureUserIds: mustInclude,
   });
   const subjects = subjectIds.map((userId) => ({

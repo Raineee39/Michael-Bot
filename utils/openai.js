@@ -535,41 +535,43 @@ export async function generateHoroscope({
     antId ? `ANTICHRIST of this server today: <@${antId}> — you MUST mention them by that exact tag and give them one specific petty prophecy.` : '',
   ].filter(Boolean).join('\n');
 
+  const moodLabel = lang.horoscope?.moodLabel ?? "Michael's mood";
   const modeHint = mode === 'daily'
-    ? 'Official morning bulletin for THIS server. Write the whole reading yourself: general day-forecast PLUS gossip-prophecies about people in the dossiers. Do not use headings. The offices above must appear inside the same flowing text — do not leave them for a later block.'
+    ? 'Official morning bulletin for THIS server. Short. Punchy. Gossip plus forecast.'
     : mode === 'personal'
-      ? 'Private horoscope for one soul. Weave one prophecy about them into flowing prose.'
-      : 'On-demand reading of THIS server\'s field. Mix a general forecast with specific things named people might do, skip, meet, or suffer today.';
+      ? 'Private horoscope for one soul. One or two punches about them, then fake stats.'
+      : 'On-demand reading of THIS server. Short. Punchy. Gossip plus forecast.';
 
-  const maxChars = mode === 'daily' ? 1500 : 1200;
-  const maxTokens = mode === 'daily' ? 1024 : 768;
+  const maxChars = mode === 'daily' ? 850 : 700;
+  const maxTokens = mode === 'daily' ? 480 : 400;
 
   const buildInput = (dossiers) => `
 ${personaIntro(langCode)}
-Write a celestial horoscope for ${dateLabel}. ${modeHint}
-Formal address (${formalAddress}). ${styleHint}.
+Write today's horoscope card for ${dateLabel}. ${modeHint}
+${outputInstruction}
+This is a Discord message. Use markdown. Do NOT write a paragraph wall. Do NOT use strange extra spaces. Short lines. Petty clerk energy.
 
-The register shows ${aggregateMood?.knownUsers ?? 0} souls with mood on file. Dominant mood in the field: ${dominantLabel}.
+The register shows ${aggregateMood?.knownUsers ?? 0} souls with mood on file. Field mood hint: ${dominantLabel}.
 ${officeBlock ? `\n${officeBlock}\n` : ''}
-Write 2 short paragraphs (or 1 longer one). No bullet lists, no numbered sections, no markdown headers.
+EXACT layout (no extra sections):
 
-Mix:
-- general omens (weather, cosmic mood, bureaucratic vibes, "today will be…")
-- specific things people might do or encounter today, grounded in their dossier (games they skip, people they meet, chores, shame, rain, a message they should not send). Sound like gossip folded into a sermon.
-
-Example tone (do not copy): "Today will be a hot day in hell. <@123> probably will not game. <@456> will meet Jesus tonight. Also there will be rain."
+1) First line exactly: **${moodLabel}:** YOUR-INVENTED-MOOD
+   Invent the mood. Loud. Caps and extra ! allowed. Examples of energy (do not copy): WRATHFUL!!!!!!! / administratively disappointed / DAMP
+2) Blank line, then 2 to 4 SHORT sentences, each on its own line. Mix one general omen (weather, bureaucracy, cosmic vibes) with specific things named people might do, skip, meet, or suffer. Gossip-sermon. Example energy (do not copy): "Hot in hell." / "<@123> will not game." / "<@456> meets something with wings."
+3) Blank line, then 2 to 4 invented register stats, each on its own line as **Label:** value
+   YOU invent the labels and values. Petty, bureaucratic, stupid, cruel. They do not have to be true.
+   Example energy (do not copy): **Least favourite:** <@123> (lazy) / **Forbidden word:** DUST / **Chance of salvation:** 3%
+   If a stat names a person, use a real <@userId> from the dossiers only.
 
 Rules:
-- Open by declaring YOUR cosmic mood today in one clause inside the prose.
-- Use dossier details (impression, recent messages, grudges, confessions) as flavour — cryptic, slightly invasive, never a recap list.
-- Mention 2 to ${Math.max(subjects.length, 1)} souls from the dossiers using Discord <@userId> only. Never invent IDs.
-- If no dossiers, keep it general but still atmospheric and specific to the date.
+- Mention 1 to ${Math.min(Math.max(subjects.length, 1), 3)} souls with Discord <@userId> only. Never invent IDs.
+- Chosen one / antichrist (if listed above) must appear in a sentence or a stat.
+- No # headers, no numbered lists, no recap of the dossier.
+- Keep total under ${maxChars} characters including the sign-off.
+Close with 2 to 5 dots followed by your sign-off name.
 
-Dossiers (background only — weave in, do not list):
+Dossiers (flavour only):
 ${dossiers}
-
-Keep total under ${maxChars} characters.
-${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
     `.trim();
 
   const slimDossiers = subjects.length
@@ -584,7 +586,7 @@ ${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
     });
     const raw = response.output?.[0]?.content?.[0]?.text?.trim();
     if (!raw) throw new Error('Gemini returned empty horoscope');
-    return applyChaoticFormatting(raw);
+    return raw;
   };
 
   try {

@@ -1544,8 +1544,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           content = formatCommandHoroscope(lang, {
             dateLabel: amsterdamDateLabel(langCode),
             horoscopeBody,
-            chosenUserId: currentChosen,
-            antichristUserId: currentAntichrist,
           });
         } else {
           const horoscopeBody = await buildPersonalHoroscopeText(invokerId, langCode, lang);

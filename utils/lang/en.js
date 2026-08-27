@@ -621,6 +621,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     personalTitle: '# YOUR PERSONAL HOROSCOPE',
     dateLine: (date) => `*${date}*`,
     divider: '───────────────',
+    moodLabel: "Michael's mood",
     chosenTitle: '**⚡ CHOSEN ONE OF THE DAY ⚡**',
     antichristTitle: '**👹 ANTICHRIST OF THE DAY 👹**',
     currentChosen: (userId) => `**Current chosen one:** <@${userId}>`,

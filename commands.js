@@ -364,15 +364,21 @@ const ALL_COMMANDS = [
   SWITCHOFLIFE_COMMAND,
 ];
 
-// Guild IDs = instant updates in those servers. Avoid guild + global together (Discord shows duplicates).
+// Guild registration = instant in those servers. Global with DM-only contexts =
+// chats / group DMs, without duplicating the same names inside servers.
+const DM_CONTEXTS = [1, 2];
+const DM_COMMANDS = ALL_COMMANDS
+  .filter((cmd) => (cmd.contexts ?? []).some((c) => DM_CONTEXTS.includes(c)))
+  .map((cmd) => ({ ...cmd, contexts: DM_CONTEXTS, integration_types: [0, 1] }));
+
 const guildIds = process.env.GUILD_IDS?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
 
 if (guildIds.length) {
   for (const guildId of guildIds) {
     await InstallGuildCommands(process.env.APP_ID, guildId, ALL_COMMANDS);
   }
-  await InstallGlobalCommands(process.env.APP_ID, []);
-  console.log('Global commands cleared (guild-only registration).');
-} else {
-  await InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
+}
+await InstallGlobalCommands(process.env.APP_ID, guildIds.length ? DM_COMMANDS : ALL_COMMANDS);
+if (guildIds.length) {
+  console.log('Global DM commands registered:', DM_COMMANDS.map((c) => c.name).join(', '));
 }

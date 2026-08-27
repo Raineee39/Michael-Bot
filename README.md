@@ -32,7 +32,7 @@ npm run register   # register slash commands with Discord (run from a machine wh
 npm start
 ```
 
-Register from your Mac if the VPS token cannot update the application (Discord 403 / code 20012). Do not put `npm run register` in the VPS deploy chain.
+Register from your Mac if the VPS token cannot update the application (Discord 403 / code 20012). Do not put `npm run register` in the VPS deploy chain. After register, commands that are not server-only (`/horoscope`, `/chat`, …) also appear in DMs with the bot. Server-only ones (`/chosenone`, `/antichrist`, `/switchoflife`, `/cosmicstatus`) stay in servers.
 
 In the [Discord Developer Portal](https://discord.com/developers/applications/1492114301840916560/bot) → **Bot** → Privileged Gateway Intents, leave **Message Content** on and turn **Server Members Intent** on. Without that last toggle, Discord returns 403 `Missing Access` on the member list and `/horoscope` cannot see the server.
 
