@@ -18,7 +18,7 @@ const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 const TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
 
 /** Single Michael voice — elderly male. Override with GEMINI_TTS_VOICE (see README). */
-const MICHAEL_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Gacrux';
+const MICHAEL_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Algenib';
 
 function ttsLanguageCode(langCode) {
   if (langCode === 'ar') return 'ar';

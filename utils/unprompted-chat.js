@@ -7,7 +7,7 @@
  *     (only one slot; later rolls are ignored until it is sent)
  *   - The queued reply fires after 10 minutes of silence in that channel
  *
- * Name-mention replies stay in gateway.js.
+ * Name-mention replies stay in gateway.js (always, when life-switch is on).
  */
 
 import {
@@ -127,7 +127,7 @@ async function sendSnark({ messageId, channelId, guildId }) {
 
 /**
  * Called for every non-bot guild message from the gateway.
- * Name-mentions are skipped here so the existing name-gauge owns those.
+ * Name-mentions are handled in gateway.js instead.
  */
 export function handleUnpromptedChat({
   messageId,

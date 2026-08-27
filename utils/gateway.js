@@ -9,8 +9,8 @@
 //    a. Feature 3...  "Do not respond" trap: if the message contains baiting
 //       language, there is a 70% chance Michael silently ignores it and queues
 //       an unfinished business item instead of replying.
-//    b. If life-switch is on: name-gauge chance Michael interjects
-//       with a short reply; optional post-message revision ("Edit:") on that reply.
+//    b. If life-switch is on: Michael always replies with a short canned line;
+//       optional post-message revision ("Edit:") on that reply.
 //       When the life-switch is off (default), no reply is sent here.
 // 3. lastChannelId is tracked per user.
 //
@@ -31,41 +31,6 @@ const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 
 // Intents: GUILDS(1) | GUILD_MESSAGES(512) | MESSAGE_CONTENT(32768)
 const INTENTS = 1 | 512 | 32768;
-
-// ─── Name-mention gauge (per guild, in-memory) ────────────────────────────────
-//
-// Each time someone says "michael" the count ticks up, raising the chance
-// Michael interjects. The gauge decays after 30 min of silence and resets
-// to 0 when Michael actually responds.
-//
-// Probability formula: p = min(0.80, 0.01 + count * 0.03)
-//   0 mentions → 1%  |  3 → 10%  |  5 → 16%  |  15 → 46%  |  cap 80%
-
-const nameGauge = new Map(); // guildId → { count, lastAt }
-const GAUGE_DECAY_MS = 30 * 60 * 1000; // 30 minutes of silence resets count
-
-function tickGauge(guildId) {
-  const key = guildId ?? '_dm';
-  const now = Date.now();
-  const entry = nameGauge.get(key) ?? { count: 0, lastAt: 0 };
-  const decayed = now - entry.lastAt > GAUGE_DECAY_MS;
-  const count = decayed ? 1 : entry.count + 1;
-  nameGauge.set(key, { count, lastAt: now });
-  return count;
-}
-
-function gaugeProb(count) {
-  return Math.min(0.80, 0.01 + count * 0.03);
-}
-
-function resetGauge(guildId) {
-  nameGauge.delete(guildId ?? '_dm');
-}
-
-// ─── Feature 3...  Bait / forcing-Michael-to-respond detection ─────────────────
-//
-// When users try to force Michael to respond with provocations or commands,
-// he often ignores it entirely and queues unfinished business instead.
 
 const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
 
@@ -193,12 +158,6 @@ export function startGateway() {
 
         if (!isMichaelLifeActive(guildId, channelId)) return;
 
-        // Name-mention gauge: probability rises with each mention, resets after a response
-        const gaugeCount = tickGauge(guildId);
-        const p = gaugeProb(gaugeCount);
-        console.log(`[michael] gateway | name-gauge | guild=${guildId ?? 'dm'} count=${gaugeCount} p=${(p * 100).toFixed(0)}%`);
-        if (Math.random() > p) return;
-
         const gwLangCode = resolveLanguage(guildId, authorId);
         const gwLang = getLang(gwLangCode);
 
@@ -223,8 +182,7 @@ export function startGateway() {
             const userMood = loadUserMemory(authorId).currentMood ?? 'afwezig';
             maybeScheduleRevision(channelId, sentMsg.id, reply, userMood, gwLangCode);
           }
-          resetGauge(guildId);
-          console.log(`[michael] gateway | name-mention reply | ch=${channelId} | user=${authorId} | gauge reset`);
+          console.log(`[michael] gateway | name-mention reply | ch=${channelId} | user=${authorId}`);
         } catch (err) {
           console.error('[michael] gateway reply failed:', err.message);
         }
