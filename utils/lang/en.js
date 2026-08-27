@@ -314,6 +314,17 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
       'There was something in this message I could not place immediately…  now I can....Michael',
     ],
 
+    snarkReplies: [
+      'that is a choice     I am writing it down....Michael',
+      'interesting     in the sense that     I heard it....Michael',
+      'you said this out loud     that is information....Michael',
+      'hm     yes     that as well....Michael',
+      'I was already here     you only noticed now....Michael',
+      'this kind of sentence     it lingers     or it does not....Michael',
+      'fine     the field has received it....Michael',
+      'you may think this     I will add nothing further....Michael',
+    ],
+
     michaelPlaceholders: [
       '🔱⚡🔱⚡🔱⚡🔱⚡🔱⚡\n# A MESSAGE FROM ARCHANGEL MICHAEL IS INCOMING\n🔱⚡🔱⚡🔱⚡🔱⚡🔱⚡',
       '👁️✨👁️✨👁️✨👁️✨\n# MICHAEL IS CONSULTING   THE UNIVERSE\n👁️✨👁️✨👁️✨👁️✨',
@@ -371,6 +382,14 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     vibecheckError: 'Michael refuses to render a verdict at this time...  the energy is unclear....Michael',
     praatError: 'There is noise in the field…  the connection with the universe is temporarily disrupted     try again later....Michael',
     babychatError: 'Baby Michael nodded off…  try again later....Michael',
+    imagineError: 'The vision refused to materialise…  try again later....Michael',
+    listenError: 'My voice does not reach you now…  try again later....Michael',
+    imagineCaption: {
+      holy: 'I have shown it as it stands in the light....Michael',
+      hell: 'You asked for an image.  This is what the field returned....Michael',
+      fart: 'The register approved this.  Unfortunate....Michael',
+      snide: 'A vision.  Approximately....Michael',
+    },
     onderhandelenExpired: 'Your request has expired.  Resubmit if it is still relevant....Michael',
 
     feedbackEmpty: 'The message is empty.  Write something and try again....Michael',
@@ -394,6 +413,23 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
       ar: '✅ **Imru\' al-Qais will now speak Arabic with you in DMs.**...Imru\' al-Qais',
     },
     michaeltaalNoPermission: 'You do not have permission to change the server language....Michael',
+
+    lifeSwitchOn: '🟢 ON',
+    lifeSwitchOff: '🔴 OFF',
+    lifeSwitchInherit: 'follows server',
+    lifeSwitchStatus: ({ guild, channel, effective }) =>
+      `**⚡ Switch of life**\n\n**Whole server:** ${guild}\n**This channel:** ${channel}\n**Active here:** ${effective}\n\nChoose what to toggle.`,
+    lifeSwitchBtnChannelOn: '🟢 ON — this channel',
+    lifeSwitchBtnChannelOff: '🔴 OFF — this channel',
+    lifeSwitchBtnGuildOn: '🟢 ON — whole server',
+    lifeSwitchBtnGuildOff: '🔴 OFF — whole server',
+    lifeSwitchNoPermissionChannel: 'You may not operate the channel switch....Michael',
+    lifeSwitchNoPermissionGuild: 'You may not operate the server switch....Michael',
+    lifeSwitchGuildOnly: 'The switch of life only works on a server....Michael',
+    lifeSwitchToggledChannel: (on) =>
+      on ? 'Michael is **on** in this channel....Michael' : 'Michael is **off** in this channel....Michael',
+    lifeSwitchToggledGuild: (on) =>
+      on ? 'Michael is **on** on this server....Michael' : 'Michael is **off** on this server....Michael',
 
     cosmicGuildOnly: 'That cosmic roll only works on a server, not in a private message....Michael',
     cosmicOccupiedChosen: (uid) => `There is already a chosen one: <@${uid}>.\n\nRoll the dice for a new one, or walk away?`,

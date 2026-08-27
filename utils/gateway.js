@@ -1,29 +1,31 @@
 // Discord Gateway (WebSocket) listener.
 //
 // Behaviour:
-// 1. When a non-bot message mentions "michael" (case-insensitive):
+// 1. Unprompted chat (when /switchoflife is on for this server or channel):
+//    a. 0.5% chance of an immediate snarky reply to a random message.
+//    b. 5% chance to queue that message as the one delayed reply;
+//       it sends after 10 minutes of silence in that channel.
+// 2. When a non-bot message mentions "michael" (case-insensitive):
 //    a. Feature 3...  "Do not respond" trap: if the message contains baiting
 //       language, there is a 70% chance Michael silently ignores it and queues
 //       an unfinished business item instead of replying.
-//    b. If ALLOW_UNPROMPTED_CHANNEL_POSTS: name-gauge chance Michael interjects
+//    b. If life-switch is on: name-gauge chance Michael interjects
 //       with a short reply; optional post-message revision ("Edit:") on that reply.
-//       When unprompted posts are disabled (default), no reply is sent here.
-// 2. All non-bot messages are stored as shadow reply candidates (Feature 4)
-//    so the cron can pick them up and reply to them retroactively.
-// 3. lastChannelId is tracked per user so the delayed-consequence cron knows
-//    where to post.
+//       When the life-switch is off (default), no reply is sent here.
+// 3. lastChannelId is tracked per user.
 //
 // IMPORTANT: Requires the following Privileged Gateway Intents enabled in the
 // Discord Developer Portal:
 //   - Message Content Intent (required to read message bodies)
 
 import { WebSocket } from 'ws';
-import { appendEditWithinDiscordLimit, ALLOW_UNPROMPTED_CHANNEL_POSTS, DiscordRequest } from '../utils.js';
-import { addShadowCandidate } from './shadow-store.js';
+import { appendEditWithinDiscordLimit, DiscordRequest } from '../utils.js';
 import { addUnfinishedBusiness, loadUserMemory, updateLastChannel } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
 import { resolveLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
+import { handleUnpromptedChat } from './unprompted-chat.js';
+import { isMichaelLifeActive } from './life-switch.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 
@@ -145,18 +147,25 @@ export function startGateway() {
         const channelId = msg.channel_id;
         const authorId  = msg.author.id;
         const content   = msg.content;
-        const ts        = Date.now();
 
-        // Feature 4...  Store every non-bot message as a potential shadow-reply target
         const guildId = msg.guild_id ?? null;
-        addShadowCandidate({ messageId: msg.id, channelId, authorId, content, timestamp: ts, guildId });
+        const mentionsMichael = /michael/i.test(content) || /امرؤ القيس|امرئ القيس|القيس/.test(content);
 
-        // Track the user's most-recently-active channel so delayed consequences
-        // know where to post. Only updates if the user is already in memory.
+        // Track the user's most-recently-active channel.
         updateLastChannel(authorId, channelId, guildId);
 
+        handleUnpromptedChat({
+          messageId: msg.id,
+          channelId,
+          authorId,
+          username: msg.author?.global_name || msg.author?.username,
+          content,
+          guildId,
+          mentionsMichael,
+        });
+
         // Only continue for messages that mention Michael or (in Arabic mode) Imru' al-Qais
-        if (!/michael/i.test(content) && !/امرؤ القيس|امرئ القيس|القيس/.test(content)) return;
+        if (!mentionsMichael) return;
 
         // Feature 3...  Bait / forcing trap
         if (BAIT_RE.test(content)) {
@@ -182,7 +191,7 @@ export function startGateway() {
           });
         }
 
-        if (!ALLOW_UNPROMPTED_CHANNEL_POSTS) return;
+        if (!isMichaelLifeActive(guildId, channelId)) return;
 
         // Name-mention gauge: probability rises with each mention, resets after a response
         const gaugeCount = tickGauge(guildId);

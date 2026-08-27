@@ -1,13 +1,70 @@
 import 'dotenv/config';
-import OpenAI from "openai";
+import { GoogleGenAI } from '@google/genai';
 import { getLang } from './lang/index.js';
 import { resolveField } from './michael-memory.js';
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 20000,  // 20 s per attempt...  rejects hung requests so the catch block can fire
-  maxRetries: 1,   // 1 auto-retry on timeout/network error → 40 s worst case (fine, Discord gives 15 min after defer)
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: { timeout: 60000 },
 });
+
+if (!process.env.GEMINI_API_KEY) {
+  console.warn('[gemini] GEMINI_API_KEY is not set — /chat, /imagine, and /listentomichael will fail.');
+}
+
+/** Cheap Flash for text. Override with GEMINI_TEXT_MODEL if needed. */
+const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+const TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
+
+/** Single Michael voice — elderly male. Override with GEMINI_TTS_VOICE (see README). */
+const MICHAEL_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Gacrux';
+
+function ttsLanguageCode(langCode) {
+  if (langCode === 'ar') return 'ar';
+  if (langCode === 'en') return 'en-US';
+  return 'nl-NL';
+}
+
+async function geminiText(input, { maxOutputTokens = 300, temperature } = {}) {
+  const response = await ai.models.generateContent({
+    model: TEXT_MODEL,
+    contents: input,
+    config: {
+      maxOutputTokens,
+      ...(temperature !== undefined ? { temperature } : {}),
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
+  const text = (response.text ?? '').trim();
+  if (!text) throw new Error('Gemini returned empty text');
+  return text;
+}
+
+/** Adapter so existing call sites keep working. */
+const client = {
+  responses: {
+    async create({ max_output_tokens, input }) {
+      const text = await geminiText(input, { maxOutputTokens: max_output_tokens });
+      return { output: [{ content: [{ text }] }] };
+    },
+  },
+  chat: {
+    completions: {
+      async create({ max_tokens, temperature, messages }) {
+        const prompt = (messages ?? [])
+          .map((m) => `${m.role === 'system' ? 'Instructions' : 'User'}: ${m.content}`)
+          .join('\n\n');
+        const text = await geminiText(prompt, {
+          maxOutputTokens: max_tokens ?? 16,
+          temperature,
+        });
+        return { choices: [{ message: { content: text } }] };
+      },
+    },
+  },
+};
+
 
 // Applies chaotic spacing/punctuation and strips forbidden characters.
 // The sign-off (including multilingual variants) is handled by the model prompt.
@@ -390,6 +447,33 @@ Verdict on ${username}: ${judgementLabel}...  ${judgementDesc}
 
 Write 1 to 3 short sentences (usually 2). Refer fluidly to what was said earlier...  paraphrase, never quote literally.
 ${langCode === 'ar' ? 'اجعله يشبه الهجاء المتأخر أو القلق المُعلَّق...  غامض لكن محدَّد بما يكفي ليُزعج.' : 'Make it feel like delayed resentment or a lingering concern...  vague but specific enough to feel uncomfortable.'}
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+
+  return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+/**
+ * Short afterthought once a channel has gone quiet...  Michael circles back
+ * to one leftover message as if he only just decided it needed a remark.
+ */
+export async function generateQuietAfterthought(username, leftover, mood, langCode = 'nl') {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+  const moodDesc = lang.moodDescriptions[mood] ?? 'Detached and vague.';
+  const safe = String(leftover ?? '').replace(/"/g, "'").slice(0, 400);
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 180,
+    input: `
+${personaIntro(langCode)}
+The room went quiet. You waited. Now you reply to something ${username} said earlier, as if it only just landed.
+What they said: "${safe}"
+Current tone: ${mood}...  ${moodDesc}
+
+1 or 2 short sentences. Snarky, cryptic, slightly late. Do not quote them verbatim. Do not greet. Do not ask a question unless it is rhetorical.
 ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 5 dots followed by your sign-off name.
     `.trim(),
   });
@@ -897,4 +981,160 @@ ${outputInstruction} ${styleHint}. Close with 2 to 4 dots followed by your sign-
   });
 
   return applyChaoticFormatting(response.output[0].content[0].text);
+}
+
+function extractInlinePart(response) {
+  const parts = response.candidates?.[0]?.content?.parts ?? [];
+  for (const part of parts) {
+    const inline = part.inlineData || part.inline_data;
+    if (inline?.data) {
+      return {
+        buffer: Buffer.from(inline.data, 'base64'),
+        mimeType: inline.mimeType || inline.mime_type || 'application/octet-stream',
+      };
+    }
+  }
+  if (response.data) {
+    const buf = Buffer.isBuffer(response.data) ? response.data : Buffer.from(response.data, 'base64');
+    return { buffer: buf, mimeType: 'image/png' };
+  }
+  return null;
+}
+
+function pcmToWav(pcmBuffer, { channels = 1, sampleRate = 24000, bitDepth = 16 } = {}) {
+  const header = Buffer.alloc(44);
+  const dataSize = pcmBuffer.length;
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * channels * (bitDepth / 8), 28);
+  header.writeUInt16LE(channels * (bitDepth / 8), 32);
+  header.writeUInt16LE(bitDepth, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcmBuffer]);
+}
+
+/**
+ * holy | hell | fart | snide — from mood + judgement toward this user.
+ */
+export function resolveImagineFlavor(mood, judgementLabel, score = 0) {
+  const angry = score <= -2 || mood === 'woedend' || mood === 'passief-agressief' || judgementLabel === 'vermoeiend';
+  const holy = score >= 3 || mood === 'kosmisch' || judgementLabel === 'ongewoon helder' || judgementLabel === 'draaglijk';
+  if (angry && !holy) return Math.random() < 0.55 ? 'hell' : 'fart';
+  if (holy && !angry) return 'holy';
+  if (mood === 'streng') return 'snide';
+  return 'snide';
+}
+
+const IMAGINE_FLAVOR_INSTRUCTIONS = {
+  holy: `POSITIVE standing. Recast the request as sacred, biblical, high renaissance: halos, gold leaf, marble, seraphim wings, shafts of light, icons, Old Testament gravity. Keep the user's subject recognisable. Tasteful, not gore.`,
+  hell: `ANGRY standing. Recast as infernal / satanic baroque: brimstone, cracked halos, sulphurous sky, grotesque cathedral, fallen angels, too many teeth. Keep the user's subject recognisable. Darkly funny, not pornographic.`,
+  fart: `ANGRY / petty standing. Recast as undignified snide comedy: faint fart haze, stained robes, a cherub holding its nose, a trumpet of judgment that is clearly digestive. Keep the user's subject recognisable. Silly, not pornographic.`,
+  snide: `LUKEWARM standing. Recast with petty celestial contempt: slightly wrong proportions, a disappointed saint, cheap plastic halo, the subject looking faintly foolish. Keep the user's subject recognisable.`,
+};
+
+/**
+ * Builds a flavored image prompt, then generates a PNG via Gemini Flash Image.
+ * Returns { buffer, mimeType, flavor, imagePrompt }.
+ */
+export async function generateMichaelImage(userPrompt, { username, mood, judgementLabel, score = 0 } = {}) {
+  const flavor = resolveImagineFlavor(mood, judgementLabel, score);
+  const flavorHint = IMAGINE_FLAVOR_INSTRUCTIONS[flavor] ?? IMAGINE_FLAVOR_INSTRUCTIONS.snide;
+  const safe = String(userPrompt ?? '').replace(/"/g, "'").slice(0, 500);
+
+  const imagePrompt = await geminiText(
+    `
+You rewrite image prompts for Archangel Michael. Output ONLY the image prompt in English. No quotes, no preamble, no sign-off.
+User ${username || 'someone'} asked for: "${safe}"
+Michael's current mood: ${mood ?? 'afwezig'}
+Michael's verdict on them: ${judgementLabel ?? 'onbeslist'}
+Flavor: ${flavor}
+${flavorHint}
+One dense paragraph, visual and specific, 40 to 90 words.
+    `.trim(),
+    { maxOutputTokens: 220, temperature: 0.9 },
+  );
+
+  const response = await ai.models.generateContent({
+    model: IMAGE_MODEL,
+    contents: imagePrompt,
+    config: {
+      responseModalities: ['TEXT', 'IMAGE'],
+    },
+  });
+
+  const media = extractInlinePart(response);
+  if (!media?.buffer?.length) throw new Error('Gemini image generation returned no image');
+  return { ...media, flavor, imagePrompt };
+}
+
+/**
+ * Spoken advice as WAV (24 kHz PCM wrapped). Returns { wavBuffer, script, flavor }.
+ * One fixed elderly voice; mood and relationship show in words and delivery only.
+ */
+export async function generateMichaelVoiceAdvice(userInput, { username, mood, judgementLabel, score = 0, langCode = 'nl' } = {}) {
+  const lang = getLang(langCode);
+  const { formalAddress, outputInstruction } = lang.helpers;
+  const flavor = resolveImagineFlavor(mood, judgementLabel, score);
+  const safe = String(userInput ?? '').replace(/"/g, "'").slice(0, 400);
+  const moodDesc = lang.moodDescriptions[mood] ?? '';
+  const judgementDesc = lang.judgementDescriptions?.[judgementLabel] ?? '';
+  const spokenLang =
+    langCode === 'ar' ? 'Arabic' : langCode === 'en' ? 'English' : 'Dutch';
+
+  const relationshipHint = {
+    holy: 'You are unusually warm toward this person right now. Sound pleased, almost tender, still old and grave.',
+    hell: 'You are furious with this person. Sound angry, cold, cutting — advice through contempt.',
+    fart: 'You are petty and disgusted. Sound snide and undignified, still giving advice.',
+    snide: 'You are bored and disappointed. Sound flat, tired, doing them a favour.',
+  }[flavor];
+
+  const script = await geminiText(
+    `
+${personaIntro(langCode)}
+${username || 'Someone'} asked you for advice, to be spoken aloud as a voice message. Write ONLY the words you will speak. No stage directions, no asterisks, no "Edit:", no ellipsis spam.
+Language: ${spokenLang}. Formal address (${formalAddress}).
+User asked: "${safe}"
+Your mood toward them now: ${mood ?? 'afwezig'}...  ${moodDesc}
+Your standing verdict: ${judgementLabel ?? 'onbeslist'}...  ${judgementDesc}
+${relationshipHint}
+The words must match how you feel about them — warm if you like them, icy or petty if you do not.
+2 to 4 short spoken sentences. End by saying your name once (${lang.signOff}).
+${outputInstruction}
+    `.trim(),
+    { maxOutputTokens: 220, temperature: 0.8 },
+  );
+
+  const spoken = script.replace(/\s+/g, ' ').trim().slice(0, 700);
+  const deliveryLead = {
+    holy: 'Same elderly male archangel voice: slow, warm, quietly pleased, biblical gravity:',
+    hell: 'Same elderly male archangel voice: slow, angry, cold, contempt dripping through every word:',
+    fart: 'Same elderly male archangel voice: dry, petty, disgusted, nasal irritation at a mortal:',
+    snide: 'Same elderly male archangel voice: flat, tired, disappointed old man doing his duty:',
+  }[flavor] ?? 'Same elderly male archangel voice: slow, grave, weary:';
+
+  const ttsResponse = await ai.models.generateContent({
+    model: TTS_MODEL,
+    contents: `${deliveryLead} ${spoken}`,
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        languageCode: ttsLanguageCode(langCode),
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: MICHAEL_TTS_VOICE },
+        },
+      },
+    },
+  });
+
+  const audio = extractInlinePart(ttsResponse);
+  if (!audio?.buffer?.length) throw new Error('Gemini TTS returned no audio');
+  const wavBuffer = pcmToWav(audio.buffer);
+  return { wavBuffer, script: spoken, flavor };
 }

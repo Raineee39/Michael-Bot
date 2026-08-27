@@ -314,6 +314,17 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
       'Er is iets in dit bericht dat ik niet direct kon plaatsen…  nu wel....Michael',
     ],
 
+    snarkReplies: [
+      'dat is een keuze     ik noteer hem....Michael',
+      'interessant     in de zin van     ik heb het gehoord....Michael',
+      'U zegt dit hardop     dat is informatie....Michael',
+      'hm     ja     dat ook....Michael',
+      'ik was er al     U merkte het alleen nu....Michael',
+      'dit soort zinnen     die blijven hangen     of niet....Michael',
+      'prima     het veld heeft het ontvangen....Michael',
+      'U mag dit denken     ik zeg er verder niets over....Michael',
+    ],
+
     michaelPlaceholders: [
       '🔱⚡🔱⚡🔱⚡🔱⚡🔱⚡\n# ER KOMT EEN BERICHT BINNEN VAN AARDSENGEL MICHAËL\n🔱⚡🔱⚡🔱⚡🔱⚡🔱⚡',
       '👁️✨👁️✨👁️✨👁️✨\n# MICHAËL RAADPLEEGT   HET UNIVERSUM\n👁️✨👁️✨👁️✨👁️✨',
@@ -371,6 +382,14 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     vibecheckError: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael',
     praatError: 'Er is ruis in het veld…  de verbinding met het universum is tijdelijk verstoord     probeer het later....Michael',
     babychatError: 'Baby-Michaël is in slaap gevallen…  probeer het later....Michael',
+    imagineError: 'Het visioen weigerde te materialiseren…  probeer het later....Michael',
+    listenError: 'Mijn stem bereikt U nu niet…  probeer het later....Michael',
+    imagineCaption: {
+      holy: 'Ik heb het laten zien zoals het in het licht staat....Michael',
+      hell: 'U vroeg om een beeld.  Dit is wat het veld teruggaf....Michael',
+      fart: 'Het register heeft dit goedgekeurd.  Jammer....Michael',
+      snide: 'Een visioen.  Ongeveer....Michael',
+    },
     onderhandelenExpired: 'Uw verzoek is verlopen.  Dien het opnieuw in als het nog relevant is....Michael',
 
     feedbackEmpty: 'Het bericht is leeg.  Schrijf iets en probeer opnieuw....Michael',
@@ -394,6 +413,23 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
       ar: '✅ **امرؤ القيس سيتحدث معك بالعربية في الرسائل الخاصة.**...امرؤ القيس',
     },
     michaeltaalNoPermission: 'U heeft geen toestemming om de servertaal te wijzigen....Michael',
+
+    lifeSwitchOn: '🟢 AAN',
+    lifeSwitchOff: '🔴 UIT',
+    lifeSwitchInherit: 'volgt server',
+    lifeSwitchStatus: ({ guild, channel, effective }) =>
+      `**⚡ Schakelaar des levens**\n\n**Hele server:** ${guild}\n**Dit kanaal:** ${channel}\n**Hier actief:** ${effective}\n\nKies wat u wilt omschakelen.`,
+    lifeSwitchBtnChannelOn: '🟢 AAN — dit kanaal',
+    lifeSwitchBtnChannelOff: '🔴 UIT — dit kanaal',
+    lifeSwitchBtnGuildOn: '🟢 AAN — hele server',
+    lifeSwitchBtnGuildOff: '🔴 UIT — hele server',
+    lifeSwitchNoPermissionChannel: 'U mag de schakelaar voor dit kanaal niet bedienen....Michael',
+    lifeSwitchNoPermissionGuild: 'U mag de serverschakelaar niet bedienen....Michael',
+    lifeSwitchGuildOnly: 'De schakelaar des levens werkt alleen op een server....Michael',
+    lifeSwitchToggledChannel: (on) =>
+      on ? 'Michael is **aan** in dit kanaal....Michael' : 'Michael is **uit** in dit kanaal....Michael',
+    lifeSwitchToggledGuild: (on) =>
+      on ? 'Michael is **aan** op deze server....Michael' : 'Michael is **uit** op deze server....Michael',
 
     cosmicGuildOnly: 'Deze kosmische worp werkt alleen op een server, niet in een privégesprek....Michael',
     cosmicOccupiedChosen: (uid) => `Er is al een uitverkorene: <@${uid}>.\n\nWilt u het lot opnieuw laten rollen, of trekt u zich terug?`,

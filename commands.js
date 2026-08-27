@@ -299,7 +299,77 @@ const MICHAELTAAL_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, FEEDBACK_COMMAND, MICHAELTAAL_COMMAND];
+const LISTENTOMICHAEL_COMMAND = {
+  name: 'listentomichael',
+  description: 'Vraag Michael om advies; hij antwoordt in een spraakbericht',
+  name_localizations: { 'en-US': 'listentomichael', 'en-GB': 'listentomichael', ar: 'استمع-لقيس' },
+  description_localizations: {
+    'en-US': 'Ask Michael for advice; he answers in a voice message',
+    'en-GB': 'Ask Michael for advice; he answers in a voice message',
+    ar: 'اطلب نصيحة امرئ القيس؛ يجيبك بصوت',
+  },
+  options: [
+    {
+      type: 3,
+      name: 'advies',
+      description: 'Waar wil je advies over?',
+      name_localizations: { 'en-US': 'advice', 'en-GB': 'advice', ar: 'نصيحة' },
+      description_localizations: {
+        'en-US': 'What do you want advice about?',
+        'en-GB': 'What do you want advice about?',
+        ar: 'عن أي شيء تريد النصيحة؟',
+      },
+      required: true,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const IMAGINE_COMMAND = {
+  name: 'imagine',
+  description: 'Laat Michael een beeld maken van jouw prompt (hij voegt zijn eigen oordeel toe)',
+  name_localizations: { 'en-US': 'imagine', 'en-GB': 'imagine', ar: 'تخيّل' },
+  description_localizations: {
+    'en-US': 'Have Michael generate an image from your prompt (he adds his own judgement)',
+    'en-GB': 'Have Michael generate an image from your prompt (he adds his own judgement)',
+    ar: 'دع امرأ القيس يولّد صورة من طلبك (ويضيف حكمه)',
+  },
+  options: [
+    {
+      type: 3,
+      name: 'beeld',
+      description: 'Wat moet Michael visualiseren?',
+      name_localizations: { 'en-US': 'image', 'en-GB': 'image', ar: 'صورة' },
+      description_localizations: {
+        'en-US': 'What should Michael visualise?',
+        'en-GB': 'What should Michael visualise?',
+        ar: 'ماذا يجب أن يتصوّر؟',
+      },
+      required: true,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const SWITCHOFLIFE_COMMAND = {
+  name: 'switchoflife',
+  description: 'Zet Michaël aan of uit in dit kanaal of op deze server',
+  name_localizations: { 'en-US': 'switchoflife', 'en-GB': 'switchoflife', ar: 'مفتاح-الحياة' },
+  description_localizations: {
+    'en-US': 'Turn Michael on or off in this channel or for the whole server',
+    'en-GB': 'Turn Michael on or off in this channel or for the whole server',
+    ar: 'شغّل أو أوقف ميخائيل في هذه القناة أو على الخادم كاملاً',
+  },
+  type: 1,
+  integration_types: [0],
+  contexts: [0],
+};
+
+const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, FEEDBACK_COMMAND, MICHAELTAAL_COMMAND, IMAGINE_COMMAND, LISTENTOMICHAEL_COMMAND, SWITCHOFLIFE_COMMAND];
 
 // Clear any leftover guild-specific commands so they don't show up as duplicates
 if (process.env.GUILD_IDS) {

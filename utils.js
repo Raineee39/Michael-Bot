@@ -4,8 +4,10 @@ import 'dotenv/config';
 export const MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS = 1 << 12; // 4096
 
 /**
- * True between 22:00 and 09:59 (Europe/Amsterdam). Use to block proactive /
- * unprompted Michael sends at night (user-initiated slash commands stay allowed).
+ * True between 22:00 and 09:59 (Europe/Amsterdam).
+ * Only used for fully automated posts (daily uitverkorene cron, unprompted snark/quiet-queue).
+ * Slash commands and divine-pardon follow-ups are never gated by time.
+ * Unprompted behaviour also requires /switchoflife to be on for that server or channel.
  */
 export function isDutchQuietHoursForUnpromptedSends() {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -17,15 +19,6 @@ export function isDutchQuietHoursForUnpromptedSends() {
   const hour = hourRaw !== undefined ? parseInt(hourRaw, 10) : 12;
   return hour >= 22 || hour < 10;
 }
-
-/**
- * When false (default): no gateway name-call replies, shadow/delayed crons, or delayed
- * divine-pardon follow-ups. Daily uitverkorene (DAILY_GUILD_ID / DAILY_CHANNEL_ID) still runs.
- * Slash commands, buttons, and edits to bot replies still run.
- * Set MICHAEL_ALLOW_UNPROMPTED_CHANNEL_POSTS=true to restore those proactive posts.
- */
-export const ALLOW_UNPROMPTED_CHANNEL_POSTS =
-  process.env.MICHAEL_ALLOW_UNPROMPTED_CHANNEL_POSTS === 'true';
 
 export async function DiscordRequest(endpoint, options) {
   // append endpoint to root API URL
@@ -47,6 +40,34 @@ export async function DiscordRequest(endpoint, options) {
     throw new Error(JSON.stringify({ status: res.status, endpoint, ...data }));
   }
   // return original response
+  return res;
+}
+
+/**
+ * Multipart Discord request (file uploads). Do not set Content-Type; fetch adds the boundary.
+ * files: [{ buffer, filename, contentType }]
+ */
+export async function DiscordMultipart(endpoint, { method = 'PATCH', payload = {}, files = [] }) {
+  const url = 'https://discord.com/api/v10/' + endpoint;
+  const form = new FormData();
+  const attachments = files.map((f, i) => ({ id: i, filename: f.filename }));
+  form.append('payload_json', JSON.stringify({ ...payload, attachments }));
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    form.append(`files[${i}]`, new Blob([f.buffer], { type: f.contentType || 'application/octet-stream' }), f.filename);
+  }
+  const res = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+      'User-Agent': 'DiscordBot (https://github.com/discord/discord-example-app, 1.0.0)',
+    },
+    body: form,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(JSON.stringify({ status: res.status, endpoint, ...data }));
+  }
   return res;
 }
 

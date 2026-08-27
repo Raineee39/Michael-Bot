@@ -13,9 +13,9 @@ import {
   verifyKeyMiddleware,
 } from 'discord-interactions';
 import {
-  ALLOW_UNPROMPTED_CHANNEL_POSTS,
   appendEditWithinDiscordLimit,
   DiscordRequest,
+  DiscordMultipart,
   DISCORD_MESSAGE_CONTENT_MAX,
   getRandomEmoji,
   isDutchQuietHoursForUnpromptedSends,
@@ -26,11 +26,10 @@ import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generateDelayedConsequence, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, getOutstandingBusiness, markBusinessMentioned, markBusinessResolved, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField } from './utils/michael-memory.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice } from './utils/openai.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
-import { getShadowCandidates, markShadowReplied, pruneOldCandidates } from './utils/shadow-store.js';
 import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
 import {
   getCurrentAntichristUserId,
@@ -40,6 +39,61 @@ import {
 } from './utils/cosmic-state.js';
 import { getUserLanguage, setUserLanguage } from './utils/user-settings.js';
 import { getLang } from './utils/lang/index.js';
+import {
+  getLifeSwitchStatus,
+  isMichaelLifeActive,
+  toggleChannelLife,
+  toggleGuildLife,
+} from './utils/life-switch.js';
+
+const MANAGE_GUILD = BigInt(0x20);
+const MANAGE_CHANNELS = BigInt(0x10);
+
+function memberCanToggleGuild(member) {
+  const permissions = BigInt(member?.permissions ?? '0');
+  return (permissions & MANAGE_GUILD) !== 0n;
+}
+
+function memberCanToggleChannel(member) {
+  const permissions = BigInt(member?.permissions ?? '0');
+  return (permissions & MANAGE_GUILD) !== 0n || (permissions & MANAGE_CHANNELS) !== 0n;
+}
+
+function buildLifeSwitchPayload(lang, guildId, channelId, { forUpdate = false } = {}) {
+  const status = getLifeSwitchStatus(guildId, channelId);
+  const onOff = (v) => (v ? lang.ui.lifeSwitchOn : lang.ui.lifeSwitchOff);
+  const channelLine = status.channelExplicit
+    ? onOff(status.channelOn)
+    : `${onOff(status.guildOn)} (${lang.ui.lifeSwitchInherit})`;
+
+  const payload = {
+    content: lang.ui.lifeSwitchStatus({
+      guild: onOff(status.guildOn),
+      channel: channelLine,
+      effective: onOff(status.effective),
+    }),
+    components: [{
+      type: MessageComponentTypes.ACTION_ROW,
+      components: [
+        {
+          type: MessageComponentTypes.BUTTON,
+          custom_id: `life_channel:${guildId}:${channelId}`,
+          label: status.effective ? lang.ui.lifeSwitchBtnChannelOff : lang.ui.lifeSwitchBtnChannelOn,
+          style: status.effective ? ButtonStyleTypes.DANGER : ButtonStyleTypes.SUCCESS,
+        },
+        {
+          type: MessageComponentTypes.BUTTON,
+          custom_id: `life_guild:${guildId}:${channelId}`,
+          label: status.guildOn ? lang.ui.lifeSwitchBtnGuildOff : lang.ui.lifeSwitchBtnGuildOn,
+          style: status.guildOn ? ButtonStyleTypes.DANGER : ButtonStyleTypes.SUCCESS,
+        },
+      ],
+    }],
+  };
+  // Ephemeral only on the initial slash response — not on UPDATE_MESSAGE (type 7).
+  if (!forUpdate) payload.flags = InteractionResponseFlags.EPHEMERAL;
+  return payload;
+}
 
 function buildDateButtons(choices) {
   return {
@@ -899,7 +953,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "babychat": toddler Michael; 20% meltdown: -3 judgement, antichrist on servers.
-    // Toddler and meltdown replies use OpenAI (gpt-4.1-mini): generateBabyChatToddler / generateBabyChatMeltdown in utils/openai.js.
+    // Toddler and meltdown replies use Gemini Flash: generateBabyChatToddler / generateBabyChatMeltdown in utils/openai.js.
     if (name === 'babychat') {
       const userInput = data.options.find(o => o.name === 'bericht').value;
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
@@ -1044,6 +1098,126 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         if (typingInterval) clearInterval(typingInterval);
       }
       return;
+    }
+
+    if (name === 'imagine') {
+      const userInput = data.options.find(o => o.name === 'beeld').value;
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'").slice(0, 400);
+      const preMemory = loadUserMemory(userId);
+      const mood = INSULT_RE.test(userInput) ? 'woedend' : (preMemory.currentMood ?? MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)]);
+      const judgementLabel = getJudgementLabel(preMemory.judgementScore ?? 0);
+      const channelId = req.body.channel_id ?? req.body.channel?.id;
+
+      res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
+      });
+
+      let typingInterval = null;
+      if (channelId) {
+        DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+        typingInterval = setInterval(() => {
+          DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+        }, 8000);
+      }
+
+      try {
+        const { buffer, mimeType, flavor } = await generateMichaelImage(userInput, {
+          username,
+          mood,
+          judgementLabel,
+          score: preMemory.judgementScore ?? 0,
+        });
+        const ext = (mimeType || '').includes('jpeg') ? 'jpg' : 'png';
+        const caption = lang.ui.imagineCaption?.[flavor] ?? lang.ui.imagineCaption?.snide ?? '';
+        saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
+        await DiscordMultipart(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          payload: { content: `> ${safeInput}\n\n${caption}` },
+          files: [{ buffer, filename: `michael-imagine.${ext}`, contentType: mimeType || 'image/png' }],
+        });
+        console.log(`[michael] imagine | ${username} | flavor=${flavor}`);
+      } catch (err) {
+        console.error('imagine error:', err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: `> ${safeInput}\n\n${lang.ui.imagineError}` },
+          });
+        } catch { /* token expired */ }
+      } finally {
+        if (typingInterval) clearInterval(typingInterval);
+      }
+      return;
+    }
+
+    if (name === 'listentomichael') {
+      const userInput = data.options.find(o => o.name === 'advies').value;
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'").slice(0, 400);
+      const preMemory = loadUserMemory(userId);
+      const mood = INSULT_RE.test(userInput) ? 'woedend' : (preMemory.currentMood ?? MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)]);
+      const judgementLabel = getJudgementLabel(preMemory.judgementScore ?? 0);
+      const channelId = req.body.channel_id ?? req.body.channel?.id;
+
+      res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
+      });
+
+      let typingInterval = null;
+      if (channelId) {
+        DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+        typingInterval = setInterval(() => {
+          DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+        }, 8000);
+      }
+
+      try {
+        const { wavBuffer, script, flavor } = await generateMichaelVoiceAdvice(userInput, {
+          username,
+          mood,
+          judgementLabel,
+          score: preMemory.judgementScore ?? 0,
+          langCode,
+        });
+        saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
+        await DiscordMultipart(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          payload: { content: `> ${safeInput}\n\n*${script}*` },
+          files: [{ buffer: wavBuffer, filename: 'michael.wav', contentType: 'audio/wav' }],
+        });
+        console.log(`[michael] listentomichael | ${username} | flavor=${flavor}`);
+      } catch (err) {
+        console.error('listentomichael error:', err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: `> ${safeInput}\n\n${lang.ui.listenError}` },
+          });
+        } catch { /* token expired */ }
+      } finally {
+        if (typingInterval) clearInterval(typingInterval);
+      }
+      return;
+    }
+
+    // "switchoflife"...  toggle Michael's proactive presence per channel or server
+    if (name === 'switchoflife') {
+      if (!guildId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.lifeSwitchGuildOnly, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      const channelId = req.body.channel_id ?? req.body.channel?.id;
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: buildLifeSwitchPayload(lang, guildId, channelId),
+      });
     }
 
     // "michaeltaal"...  set language (server or personal in DMs)
@@ -1273,7 +1447,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         // Divine pardon...  scheduled AFTER successful send so it only fires if the user saw the result
         if (
-          ALLOW_UNPROMPTED_CHANNEL_POSTS &&
+          isMichaelLifeActive(req.body.guild_id, req.body.channel_id) &&
           !forgiven &&
           roll.tier.key === 'poor' &&
           Math.random() < 0.5
@@ -1281,7 +1455,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           const channelId = req.body.channel_id;
           const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2 to 5 min
           setTimeout(async () => {
-            if (isDutchQuietHoursForUnpromptedSends()) return;
             try {
               const mem = loadUserMemory(ownerId);
               const moodNow = mem.currentMood ?? 'afwezig';
@@ -1412,7 +1585,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         // Divine pardon...  scheduled AFTER successful send so it only fires if the user saw the result
         if (
-          ALLOW_UNPROMPTED_CHANNEL_POSTS &&
+          isMichaelLifeActive(req.body.guild_id, req.body.channel_id) &&
           !success &&
           roll.tier.key === 'poor' &&
           Math.random() < 0.5
@@ -1420,7 +1593,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           const channelId = req.body.channel_id;
           const delayMs = (2 + Math.floor(Math.random() * 4)) * 60 * 1000; // 2 to 5 min
           setTimeout(async () => {
-            if (isDutchQuietHoursForUnpromptedSends()) return;
             try {
               const uPardon = loadUserMemory(ownerId);
               patchUserState(ownerId, 1, uPardon.currentMood ?? 'afwezig');
@@ -1661,6 +1833,51 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
+    // ── Life switch buttons (/switchoflife) ─────────────────────────────────
+    if (componentId.startsWith('life_channel:') || componentId.startsWith('life_guild:')) {
+      const parts = componentId.split(':');
+      const scope = parts[0];
+      const targetGuildId = parts[1];
+      const targetChannelId = parts[2];
+      const member = req.body.member;
+      const isChannel = scope === 'life_channel';
+
+      if (!targetGuildId || !targetChannelId) {
+        return res.status(400).json({ error: 'invalid life switch id' });
+      }
+      if (targetGuildId !== guildId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.lifeSwitchGuildOnly, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+
+      if (isChannel && !memberCanToggleChannel(member)) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.lifeSwitchNoPermissionChannel, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      if (!isChannel && !memberCanToggleGuild(member)) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.lifeSwitchNoPermissionGuild, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+
+      const toggleLang = getLang(resolveLanguage(targetGuildId, req.body.member?.user?.id ?? req.body.user?.id));
+      const turnedOn = isChannel
+        ? toggleChannelLife(targetGuildId, targetChannelId)
+        : toggleGuildLife(targetGuildId);
+      const note = isChannel
+        ? toggleLang.ui.lifeSwitchToggledChannel(turnedOn)
+        : toggleLang.ui.lifeSwitchToggledGuild(turnedOn);
+      const payload = buildLifeSwitchPayload(toggleLang, targetGuildId, targetChannelId, { forUpdate: true });
+      payload.content = `${note}\n\n${payload.content}`;
+
+      return res.send({ type: 7, data: payload });
+    }
+
     // ── Language selector buttons (guild) ──────────────────────────────────
     if (componentId.startsWith('michaeltaal_')) {
       const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
@@ -1710,194 +1927,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   return res.status(400).json({ error: 'unknown interaction type' });
 });
 
-// ─── Feature 1 + 4...  Delayed consequences & shadow replies cron ───────────────
-//
-// Runs every 15 minutes (Europe/Amsterdam clock for quiet hours below).
-// Skipped entirely when ALLOW_UNPROMPTED_CHANNEL_POSTS is false (default).
-// Cycle when allowed:
-//   1. Prune stale shadow candidates from the in-memory store.
-//   2. Shadow reply (Feature 4): 25% chance per cycle, pick one eligible
-//      candidate and reply to it directly as if Michael just noticed.
-//   3. Delayed consequence (Feature 1): 10% chance per cycle; if it fires, pick one user with
-//      outstanding unfinished business, generate an AI callback and post it.
-//      A per-guild cooldown prevents back-to-back firings in the same server.
-
-const lastConsequencePerGuild = new Map(); // guildId → timestamp
-const CONSEQUENCE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours per guild between consequence firings
-/** Probability each cron tick (15 min) that delayed consequence runs when candidates exist. */
-const DELAYED_CONSEQUENCE_ROLL_CHANCE = 0.1;
-
-// Channels where we received 50001 (Missing Access) this session.
-// Cleared on process restart. Prevents the Gateway from repopulating lastChannelId
-// with a bad channel and causing the same 50001 to loop every cron tick.
-const inaccessibleChannels = new Set();
-
-cron.schedule('*/15 * * * *', async () => {
-  // 1. Prune stale shadow candidates
-  pruneOldCandidates();
-
-  if (!ALLOW_UNPROMPTED_CHANNEL_POSTS) {
-    const allMem = loadAllMemory();
-    Object.keys(allMem).forEach((uid) => maybeAgeBusiness(uid));
-    return;
-  }
-
-  const dutchQuiet = isDutchQuietHoursForUnpromptedSends();
-
-  // 2. Shadow reply...  Feature 4 (unprompted: no sends 22:00 to 10:00 Amsterdam)
-  if (!dutchQuiet && Math.random() < 0.25) {
-    const eligible = getShadowCandidates().filter(c => !inaccessibleChannels.has(c.channelId));
-    if (eligible.length > 0) {
-      const pick = eligible[Math.floor(Math.random() * eligible.length)];
-      // Shadow replies use guild language where available, fallback to Dutch
-      const shadowLangCode = pick.guildId ? getGuildLanguage(pick.guildId) : 'nl';
-      const shadowLang = getLang(shadowLangCode);
-      const shadowLine = shadowLang.ui.shadowReplyLines[Math.floor(Math.random() * shadowLang.ui.shadowReplyLines.length)];
-      try {
-        await DiscordRequest(`channels/${pick.channelId}/messages`, {
-          method: 'POST',
-          body: {
-            content: shadowLine,
-            message_reference: { message_id: pick.messageId, fail_if_not_exists: false },
-            flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
-          },
-        });
-        markShadowReplied(pick.messageId);
-        console.log(`[michael] shadow-reply | msg=${pick.messageId} | ch=${pick.channelId}`);
-      } catch (err) {
-        let errObj = {};
-        try { errObj = JSON.parse(err.message); } catch { /* not JSON */ }
-        if (errObj.code === 50001) {
-          inaccessibleChannels.add(pick.channelId);
-          markShadowReplied(pick.messageId);
-          console.warn(`[michael] shadow-reply | 50001 | ch=${pick.channelId} blocked...  candidate discarded`);
-        } else {
-          console.error('[michael] shadow-reply failed:', err.message);
-        }
-      }
-    }
-  }
-
-  // 3. Delayed consequence...  Feature 1
-  const now = Date.now();
-
-  if (dutchQuiet) {
-    const allMemQuiet = loadAllMemory();
-    Object.keys(allMemQuiet).forEach((uid) => maybeAgeBusiness(uid));
-    return;
-  }
-
-  const allMemory = loadAllMemory();
-  const shadowPool = getShadowCandidates();
-
-  // Build candidate list: users with outstanding business AND a known, accessible channel
-  // whose guild is not still in the per-guild cooldown window
-  const candidateUsers = Object.entries(allMemory)
-    .map(([userId, u]) => {
-      const outstanding = getOutstandingBusiness(userId);
-      const userShadow  = shadowPool.find(c => c.authorId === userId && !inaccessibleChannels.has(c.channelId));
-      const targetChannel = userShadow?.channelId ?? (inaccessibleChannels.has(u.lastChannelId) ? null : u.lastChannelId);
-      // Prefer shadow candidate's guild; else guild stored with lastChannelId (see saveUserMemory / gateway)
-      const guildId = userShadow?.guildId ?? u.lastGuildId ?? null;
-      return { userId, user: u, outstanding, userShadow, targetChannel, guildId };
-    })
-    .filter(({ outstanding, targetChannel, guildId }) => {
-      if (!outstanding.length || !targetChannel) return false;
-      const lastFired = lastConsequencePerGuild.get(guildId ?? '_dm') ?? 0;
-      return now - lastFired >= CONSEQUENCE_COOLDOWN_MS;
-    });
-
-  if (!candidateUsers.length) return;
-
-  if (Math.random() >= DELAYED_CONSEQUENCE_ROLL_CHANCE) {
-    Object.keys(allMemory).forEach(uid => maybeAgeBusiness(uid));
-    return;
-  }
-
-  // Weighted random pick...  higher severity weighs more
-  const totalWeight = candidateUsers.reduce((s, c) => s + (c.outstanding[0]?.severity ?? 1), 0);
-  let rnd = Math.random() * totalWeight;
-  let chosen;
-  for (const c of candidateUsers) {
-    rnd -= c.outstanding[0]?.severity ?? 1;
-    if (rnd <= 0) { chosen = c; break; }
-  }
-  chosen = chosen ?? candidateUsers[0];
-
-  const { userId, user, outstanding, userShadow, targetChannel, guildId } = chosen;
-  const item           = outstanding[0];
-  const mood           = user.currentMood ?? 'afwezig';
-  const judgementLabel = getJudgementLabel(user.judgementScore ?? 0);
-
-  lastConsequencePerGuild.set(guildId ?? '_dm', now);
-
-  try {
-    const consequenceLangCode = guildId ? getGuildLanguage(guildId) : 'nl';
-    const message = await generateDelayedConsequence(
-      user.username || userId,
-      item,
-      mood,
-      judgementLabel,
-      consequenceLangCode,
-      getCosmicRole(userId, guildId),
-    );
-
-    const postBody = {
-      content: message,
-      flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
-      ...(userShadow ? { message_reference: { message_id: userShadow.messageId, fail_if_not_exists: false } } : {}),
-    };
-
-    const postRes = await DiscordRequest(`channels/${targetChannel}/messages`, {
-      method: 'POST',
-      body: postBody,
-    });
-    const sentMsg = await postRes.json();
-
-    if (userShadow) markShadowReplied(userShadow.messageId);
-
-    // Low-severity items are resolved after one mention; higher ones just get a cooldown
-    if (item.severity <= 1) {
-      markBusinessResolved(userId, item.id);
-    } else {
-      markBusinessMentioned(userId, item.id);
-    }
-
-    // Darken mood for lingering resentment, but don't touch judgement score...  // score should only move from real interactions, not background timers
-    patchUserState(userId, 0, nextMood(mood, -1));
-
-    console.log(`[michael] delayed-consequence | ${user.username || userId} | ch=${targetChannel} | "${item.prompt.slice(0, 50)}"`);
-
-    // Feature 5...  maybe append a post-revision edit to the consequence message
-    if (sentMsg?.id) {
-      schedulePostRevision(targetChannel, sentMsg.id, message, mood, 'consequence', consequenceLangCode);
-    }
-  } catch (err) {
-    let errObj = {};
-    try { errObj = JSON.parse(err.message); } catch { /* not JSON */ }
-
-    if (errObj.code === 50001) {
-      // Bot has no write access to this channel...  blacklist it for the rest of this session
-      inaccessibleChannels.add(targetChannel);
-      updateLastChannel(userId, null);
-      // Resolve ALL outstanding items for this user...  no point retrying if the channel is bad
-      outstanding.forEach(b => markBusinessResolved(userId, b.id));
-      // Discard all shadow candidates pointing to this channel
-      shadowPool
-        .filter(c => c.channelId === targetChannel)
-        .forEach(c => markShadowReplied(c.messageId));
-      console.warn(`[michael] delayed-consequence | 50001 | ch=${targetChannel} blocked | ${outstanding.length} items dropped | ${user.username || userId}`);
-    } else {
-      console.error(`[michael] delayed-consequence failed | ch=${targetChannel} | ${err.message}`);
-      lastConsequencePerGuild.delete(guildId ?? '_dm'); // reset so we can retry sooner on transient errors
-    }
-  }
-
-  // Housekeeping: expire old business for all known users
-  Object.keys(allMemory).forEach(uid => maybeAgeBusiness(uid));
+// ─── Unfinished-business housekeeping ─────────────────────────────────────────
+// Unprompted chat (snark + quiet delayed reply) lives in utils/unprompted-chat.js.
+cron.schedule('*/15 * * * *', () => {
+  const allMem = loadAllMemory();
+  Object.keys(allMem).forEach((uid) => maybeAgeBusiness(uid));
 });
 
-// Daily uitverkorene...  runs at 10:00 AM Amsterdam time (independent of ALLOW_UNPROMPTED_CHANNEL_POSTS)
+// Daily uitverkorene...  runs at 10:00 AM Amsterdam time (independent of /switchoflife)
 // Change the cron expression to adjust the time: 'minute hour * * *'
 cron.schedule('0 10 * * *', async () => {
   const guildId = process.env.DAILY_GUILD_ID;
@@ -1979,7 +2016,7 @@ app.post(
       'git fetch origin main',
       'git reset --hard origin/main',
       'npm install',
-      'node commands.js',
+      'npm run register',
       'pm2 restart michael-bot --update-env',
     ].join(' && ');
 
