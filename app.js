@@ -23,10 +23,9 @@ import {
   sendDmToUser,
 } from './utils.js';
 import { getRandomWisdom } from './wisdom.js';
-import { getRandomAuraLezing } from './aura.js';
 import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery, getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
@@ -50,6 +49,7 @@ import {
   amsterdamDateLabel,
   buildHoroscopeText,
   buildPersonalHoroscopeText,
+  buildSubjectDossier,
   formatCommandHoroscope,
   formatDailyBulletin,
   formatPersonalHoroscope,
@@ -161,64 +161,91 @@ async function fetchGiphyGif(query) {
   }
 }
 
-async function fetchGuildHumanMemberIds(guildId) {
-  const membersRes = await DiscordRequest(`guilds/${guildId}/members?limit=1000`, { method: 'GET' });
-  const members = await membersRes.json();
-  return members.filter(m => !m.user.bot).map(m => m.user.id);
+async function fetchGuildHumanMemberIds(guildId, { fallbackIds = [] } = {}) {
+  try {
+    const membersRes = await DiscordRequest(`guilds/${guildId}/members?limit=1000`, { method: 'GET' });
+    const members = await membersRes.json();
+    if (!Array.isArray(members)) {
+      throw new Error(`unexpected members payload: ${JSON.stringify(members).slice(0, 120)}`);
+    }
+    const ids = members.filter((m) => m.user && !m.user.bot).map((m) => m.user.id);
+    return ids.length ? ids : fallbackIds.filter(Boolean);
+  } catch (err) {
+    console.error(`[michael] guild members fetch failed | guild=${guildId}:`, err?.message ?? err);
+    return fallbackIds.filter(Boolean);
+  }
 }
 
-async function fetchRandomHumanUserId(guildId) {
-  const ids = await fetchGuildHumanMemberIds(guildId);
+async function fetchRandomHumanUserId(guildId, fallbackIds = []) {
+  const ids = await fetchGuildHumanMemberIds(guildId, { fallbackIds });
   if (!ids.length) throw new Error('no human members in guild');
   return ids[Math.floor(Math.random() * ids.length)];
 }
 
-async function buildUitverkoreneMessage(guildId, lang) {
+/** Two different humans when possible (chosen one + antichrist). */
+function pickTwoDistinctIds(ids) {
+  const unique = [...new Set((ids ?? []).filter(Boolean))];
+  if (!unique.length) return { first: null, second: null };
+  const shuffled = unique.sort(() => Math.random() - 0.5);
+  return { first: shuffled[0], second: shuffled[1] ?? shuffled[0] };
+}
+
+async function buildCosmicAppointmentMessage(guildId, lang, role) {
   const userId = await fetchRandomHumanUserId(guildId);
-  const gif = await fetchGiphyGif(getRandomGifQuery(lang.code));
+  const mem = loadUserMemory(userId);
+  const username = mem.username || userId;
+  const sermon = await generateCosmicAppointment({
+    role,
+    userId,
+    username,
+    dossier: buildSubjectDossier(userId, mem, () => role),
+    langCode: lang.code ?? 'nl',
+  });
+  const header = role === 'antichrist' ? lang.antichrist.header : lang.uitverkorene.header;
+  const title = role === 'antichrist' ? lang.antichrist.title : lang.uitverkorene.title;
+  const gifQuery = role === 'antichrist'
+    ? getMichaelOptionalGifQuery('antichrist')
+    : getRandomGifQuery(lang.code);
+  const gif = await fetchGiphyGif(gifQuery);
+  const content = [header, title, header, '', `<@${userId}>`, '', sermon].join('\n');
+  return { content, embeds: gif ? [{ image: { url: gif } }] : [], userId };
+}
 
-  const boodschap = pick(lang.uitverkorene.boodschappen);
-
-  const content = [
-    lang.uitverkorene.header,
-    lang.uitverkorene.title,
-    lang.uitverkorene.header,
-    ``,
-    `<@${userId}>`,
-    ``,
-    `*${boodschap}*`,
-  ].join('\n');
-
-  const embeds = gif ? [{ image: { url: gif } }] : [];
-
+async function buildUitverkoreneMessage(guildId, lang) {
+  const { content, embeds, userId } = await buildCosmicAppointmentMessage(guildId, lang, 'uitverkorene');
   return { content, embeds, chosenUserId: userId };
+}
+
+async function buildAntichristMessage(guildId, lang) {
+  const { content, embeds, userId } = await buildCosmicAppointmentMessage(guildId, lang, 'antichrist');
+  return { content, embeds, antichristUserId: userId };
 }
 
 async function buildDailyBulletin(guildId, lang) {
   const langCode = getGuildLanguage(guildId);
-  const chosenUserId = await fetchRandomHumanUserId(guildId);
   const memberIds = await fetchGuildHumanMemberIds(guildId);
-  const getCosmicRoleFn = (uid) => getCosmicRole(uid, guildId);
+  const { first: chosenUserId, second: antichristUserId } = pickTwoDistinctIds(memberIds);
+  if (!chosenUserId) throw new Error('no human members in guild');
+
+  setUitverkoreneForGuild(guildId, chosenUserId);
+  setAntichristForGuild(guildId, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
 
   const horoscopeBody = await buildHoroscopeText({
     memberIds,
     langCode,
     lang,
     mode: 'daily',
-    ensureUserIds: [chosenUserId],
-    getCosmicRole: getCosmicRoleFn,
+    offices: { chosenUserId, antichristUserId },
+    getCosmicRole: (uid) => getCosmicRole(uid, guildId),
   });
 
-  const boodschap = pick(lang.uitverkorene.boodschappen);
   const content = formatDailyBulletin(lang, {
     dateLabel: amsterdamDateLabel(langCode),
     horoscopeBody,
-    chosenUserId,
-    boodschap,
   });
   const gif = await fetchGiphyGif(getHoroscopeGifQuery());
   const embeds = gif ? [{ image: { url: gif } }] : [];
-  return { content, embeds, chosenUserId };
+  return { content, embeds, chosenUserId, antichristUserId };
 }
 
 const app = express();
@@ -440,9 +467,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     isAntichrist(invokingUserId, guildId) &&
     !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)
   ) {
+    const refusalPool = lang.ui.antichristRefusals ?? lang.ui.nee;
+    const refusal = pick(refusalPool).replace(/\{command\}/g, data?.name || 'that');
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: { content: pick(lang.ui.nee) },
+      data: { content: refusal },
     });
   }
 
@@ -551,6 +580,40 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
+    if (name === 'auracheck') {
+      const scannerId = req.body.member?.user?.id ?? req.body.user?.id;
+      const scannerName = req.body.member?.user?.username ?? req.body.user?.username;
+      const { targetId, username: targetUsername } = resolveSlashUser(req, scannerId, scannerName);
+      ensureUserRecord(targetId, targetUsername);
+      const memory = loadUserMemory(targetId);
+      const dossier = buildWitnessDossier(targetId, targetUsername, memory, guildId, lang, langCode);
+      const header = (lang.auracheck ?? lang.aurascan).header?.(targetUsername)
+        ?? `🔮 **AURA: ${targetUsername}**`;
+
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+
+      try {
+        const reading = await generateAuraCheck(targetUsername, dossier, {
+          scannerName,
+          langCode,
+        });
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `${header}\n\n${reading}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) },
+        });
+        console.log(`[michael] auracheck | subject=${targetUsername} (${targetId}) | by=${scannerName}`);
+      } catch (err) {
+        console.error('auracheck error:', err?.message ?? err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.auracheckError ?? lang.ui.vibecheckError },
+          });
+        } catch { /* token expired */ }
+      }
+      return;
+    }
+
     // "uitverkorene" / chosenone (EN localization)
     if (name === 'chosenone') {
       if (!guildId) {
@@ -577,12 +640,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       }
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
-      const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId, lang);
-      setUitverkoreneForGuild(guildId, chosenUserId);
-      await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-        method: 'PATCH',
-        body: { content, embeds },
-      });
+      try {
+        const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId, lang);
+        setUitverkoreneForGuild(guildId, chosenUserId);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content, embeds },
+        });
+      } catch (err) {
+        console.error('chosenone error:', err?.message ?? err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.cosmicRollError },
+          });
+        } catch { /* token expired */ }
+      }
       return;
     }
 
@@ -612,13 +685,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       }
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
-      const chosenUserId = await fetchRandomHumanUserId(guildId);
-      setAntichristForGuild(guildId, chosenUserId, Date.now() + 24 * 60 * 60 * 1000);
-
-      await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-        method: 'PATCH',
-        body: { content: lang.antichrist.announcement(chosenUserId) },
-      });
+      try {
+        const { content, embeds, antichristUserId } = await buildAntichristMessage(guildId, lang);
+        setAntichristForGuild(guildId, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content, embeds },
+        });
+      } catch (err) {
+        console.error('antichrist error:', err?.message ?? err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.cosmicRollError },
+          });
+        } catch { /* token expired */ }
+      }
       return;
     }
 
@@ -1136,10 +1218,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           }, guildId ?? null);
           addTheme(userId, userInput);
 
-          let body = `> ${safeInput}\n\n${meltdown}`;
-          if (becameAntichrist) {
-            body += `\n\n${lang.antichrist.announcement(userId)}`;
-          }
+          const body = `> ${safeInput}\n\n${meltdown}`;
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
             body: { content: body },
@@ -1444,20 +1523,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         let embeds = [];
 
         if (guildId) {
-          const memberIds = await fetchGuildHumanMemberIds(guildId);
+          const memberIds = await fetchGuildHumanMemberIds(guildId, { fallbackIds: [invokerId] });
           const currentChosen = getUitverkoreneUserId(guildId);
+          const currentAntichrist = getCurrentAntichristUserId(guildId);
           const horoscopeBody = await buildHoroscopeText({
             memberIds,
             langCode,
             lang,
             mode: 'command',
-            ensureUserIds: currentChosen ? [currentChosen] : [],
+            offices: { chosenUserId: currentChosen, antichristUserId: currentAntichrist },
             getCosmicRole: (uid) => getCosmicRole(uid, guildId),
           });
           content = formatCommandHoroscope(lang, {
             dateLabel: amsterdamDateLabel(langCode),
             horoscopeBody,
             chosenUserId: currentChosen,
+            antichristUserId: currentAntichrist,
           });
         } else {
           const horoscopeBody = await buildPersonalHoroscopeText(invokerId, langCode, lang);
@@ -1467,16 +1548,18 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           });
         }
 
+        if (!content?.trim()) throw new Error('horoscope content empty after formatting');
+
         const gif = await fetchGiphyGif(getHoroscopeGifQuery());
         if (gif) embeds = [{ image: { url: gif } }];
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content, embeds },
+          body: { content: content.slice(0, DISCORD_MESSAGE_CONTENT_MAX), ...(embeds.length ? { embeds } : {}) },
         });
         console.log(`[michael] horoscope | guild=${guildId ?? 'dm'} | user=${invokerId}`);
       } catch (err) {
-        console.error('horoscope error:', err);
+        console.error('horoscope error:', err?.message ?? err);
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
@@ -1989,11 +2072,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             body: { content, embeds, components: [] },
           });
         } else {
-          const chosenUserId = await fetchRandomHumanUserId(gid);
-          setAntichristForGuild(gid, chosenUserId, Date.now() + 24 * 60 * 60 * 1000);
+          const { content, embeds, antichristUserId } = await buildAntichristMessage(gid, rollLang);
+          setAntichristForGuild(gid, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
-            body: { content: rollLang.antichrist.announcement(chosenUserId), components: [] },
+            body: { content, embeds, components: [] },
           });
         }
       } catch (err) {
@@ -2228,8 +2311,7 @@ cron.schedule('0 10 * * *', async () => {
   try {
     const cronLangCode = getGuildLanguage(guildId);
     const cronLang = getLang(cronLangCode);
-    const { content, embeds, chosenUserId } = await buildDailyBulletin(guildId, cronLang);
-    setUitverkoreneForGuild(guildId, chosenUserId);
+    const { content, embeds, chosenUserId, antichristUserId } = await buildDailyBulletin(guildId, cronLang);
     await DiscordRequest(`channels/${channelId}/messages`, {
       method: 'POST',
       body: {
@@ -2238,7 +2320,7 @@ cron.schedule('0 10 * * *', async () => {
         flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
       },
     });
-    console.log('Daily bulletin posted (horoscope + uitverkorene).');
+    console.log(`Daily bulletin posted (horoscope + chosen=${chosenUserId} + antichrist=${antichristUserId}).`);
   } catch (err) {
     console.error('Daily bulletin failed:', err);
   }
@@ -2295,7 +2377,6 @@ app.post(
       'git fetch origin main',
       'git reset --hard origin/main',
       'npm install',
-      'npm run register',
       'pm2 restart michael-bot --update-env',
     ].join(' && ');
 

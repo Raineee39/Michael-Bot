@@ -216,6 +216,19 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
   ui: {
     nee: ['nee.', 'nee.', 'nee.', 'NEE.', 'nee.     ...Michael'],
 
+    antichristRefusals: [
+      'Nee.  De stempel op `/{command}` is ANTICHRIST.  Geweigerd.  Het formulier brandt al....Michael',
+      '`/{command}`?  Schattig.  Het beest krijgt geen ticket.  Ga zitten....Michael',
+      'Ik heb Uw verzoek gelezen.  Ik heb ook Uw titel gelezen.  De tweede wint.  Nee....Michael',
+      'De hemel heeft het loket gesloten.  U bent de reden.  `/{command}` gaat niet door....Michael',
+      'Het register lachte.  Toen weigerde het.  Toen vroeg het mij U nee te zeggen....Michael',
+      'U uitgerekend.  Die `/{command}` vraagt.  De brutaliteit is genoteerd.  Het antwoord blijft nee....Michael',
+      'Een seraf leunde over mijn schouder.  Hij zei nee.  Ik was het eens.  Dit was makkelijk....Michael',
+      'Verzoek opgeborgen onder: onheilig, overbodig, en een beetje gênant.  Afgewezen....Michael',
+      'De antichrist krijgt geen `/{command}`.  Dit is geen debat.  Dit is een stempel....Michael',
+      'Nee.  Ook nee.  Ook de lange versie van nee, die nog steeds nee is....Michael',
+    ],
+
     fleeVergeefmij: [
       'U heeft het niet aangedurfd.  Begrijpelijk...  maar onfortuinlijk.  Uw situatie blijft ongewijzigd....Michael',
       'Een strategische terugtrekking.  Ik noteer dit ook....Michael',
@@ -381,6 +394,7 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     mijnrolError: 'De inschrijvingsregisters zijn op dit moment troebel...  probeer het later....Michael',
     vibecheckError: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael',
     horoscopeError: 'Het register weigert de sterren te lezen...  probeer later opnieuw....Michael',
+    auracheckError: 'Het veld weigerde geïnspecteerd te worden...  probeer het later....Michael',
     getuigenisError: 'Het register weigert getuigenis af te leggen...  probeer het later....Michael',
     biechtError: 'De biechtstoel is gesloten...  probeer het later....Michael',
     biechtEmpty: 'Een lege biecht telt niet....Michael',
@@ -607,7 +621,9 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     dateLine: (date) => `*${date}*`,
     divider: '───────────────',
     chosenTitle: '**⚡ UITVERKORENE VAN DE DAG ⚡**',
+    antichristTitle: '**👹 ANTICHRIST VAN DE DAG 👹**',
     currentChosen: (userId) => `**Huidige uitverkorene:** <@${userId}>`,
+    currentAntichrist: (userId) => `**Huidige antichrist:** <@${userId}>`,
   },
 
   // ─── Content: antichrist ─────────────────────────────────────────────────────
@@ -615,6 +631,16 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     header: '👹🔥👹🔥👹🔥👹🔥👹🔥',
     title: '# DE ANTICHRIST IS ONDER ONS',
     announcement: (userId) => `👹🔥👹🔥👹🔥👹🔥👹🔥\n# DE ANTICHRIST IS ONDER ONS\n👹🔥👹🔥👹🔥👹🔥👹🔥\n\n<@${userId}>\n\n*Voor de komende 24 uur zal Michaël jouw verzoeken niet inwilligen     dit is verdiend     of niet     dat maakt niet uit...Michael*`,
+    dailyBoodschappen: [
+      'Gefeliciteerd is het verkeerde woord.  De titel is een vlek.  24 uur of tot ik me verveel....Michael',
+      'Het veld heeft vandaag een schurk aangewezen.  Ze mogen in beroep.  Ik lees het niet....Michael',
+      'Deze is nu officieel het probleem.  Stempel nat.  Loket dicht....Michael',
+      'De hemel had een zondebok nodig.  Het register wees.  Hier zijn we....Michael',
+    ],
+  },
+
+  auracheck: {
+    header: (username) => `🔮 **AURA-INSPECTIE: ${username}**`,
   },
 
   // ─── Content: date feature ───────────────────────────────────────────────────

@@ -20,23 +20,22 @@ function memoryRichness(mem) {
 /** Pick souls with dossier material to weave into the horoscope (no random filler). */
 export function pickHoroscopeSubjects(memberIds, { count = 3, ensureUserIds = [] } = {}) {
   const all = loadAllMemory();
-  const pool = new Set(memberIds);
+  const ensured = [...new Set((ensureUserIds ?? []).filter(Boolean))];
+  const pool = new Set([...(memberIds ?? []), ...ensured]);
   const ranked = [...pool]
     .map((id) => ({ id, score: memoryRichness(all[id]) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  const picked = new Set();
-  for (const id of ensureUserIds) {
-    if (pool.has(id)) picked.add(id);
-  }
+  const picked = new Set(ensured);
+  const target = Math.max(count, ensured.length);
 
   for (const { id } of ranked) {
-    if (picked.size >= count) break;
+    if (picked.size >= target) break;
     picked.add(id);
   }
 
-  return [...picked].slice(0, count);
+  return [...picked].slice(0, target);
 }
 
 export function buildSubjectDossier(userId, memory, getCosmicRole) {
@@ -45,10 +44,11 @@ export function buildSubjectDossier(userId, memory, getCosmicRole) {
   const judgement = getJudgementLabel(mem.judgementScore ?? 0);
   const mood = mem.currentMood ?? 'afwezig';
   const cosmic = getCosmicRole?.(userId) ?? null;
-  const prompts = (mem.prompts ?? []).filter(p => !p.startsWith('[')).slice(-2);
+  const prompts = (mem.prompts ?? []).filter(p => !p.startsWith('[')).slice(-4);
   const character = mem.michaelCharacter;
   const lines = [
     `username: ${username}`,
+    `discord id: ${userId}`,
     `judgement: ${judgement} (${mem.judgementScore ?? 0})`,
     `mood toward them: ${mood}`,
     `impression: ${mem.impression ?? '(none)'}`,
@@ -58,8 +58,14 @@ export function buildSubjectDossier(userId, memory, getCosmicRole) {
   if (character) {
     lines.push(`character: ${resolveField(character.archetype, 'en')} / ${resolveField(character.lineage, 'en')} / ${resolveField(character.title, 'en')}`);
   }
-  const grudges = mem.unfinishedBusiness?.length ?? 0;
-  if (grudges) lines.push(`open grudges: ${grudges}`);
+  const business = (mem.unfinishedBusiness ?? []).slice(-2);
+  if (business.length) {
+    lines.push(`open grudges: ${business.map((b) => b.reason || b.prompt).join(' ; ')}`);
+  }
+  const confessions = (mem.confessions ?? []).slice(-2);
+  if (confessions.length) {
+    lines.push(`confessions on file: ${confessions.map((c) => String(c.text).slice(0, 80)).join(' | ')}`);
+  }
   return lines.join('\n');
 }
 
@@ -98,7 +104,7 @@ function clampContent(text, max = 1990) {
   return `${s.slice(0, max - 24)}\n...(register full)..Michael`;
 }
 
-export function formatDailyBulletin(lang, { dateLabel, horoscopeBody, chosenUserId, boodschap }) {
+export function formatDailyBulletin(lang, { dateLabel, horoscopeBody }) {
   const h = lang.horoscope;
   return clampContent([
     h.header,
@@ -106,18 +112,10 @@ export function formatDailyBulletin(lang, { dateLabel, horoscopeBody, chosenUser
     h.dateLine(dateLabel),
     '',
     horoscopeBody,
-    '',
-    h.divider,
-    lang.uitverkorene.header,
-    h.chosenTitle,
-    '',
-    `<@${chosenUserId}>`,
-    '',
-    `*${boodschap}*`,
   ].join('\n'));
 }
 
-export function formatCommandHoroscope(lang, { dateLabel, horoscopeBody, chosenUserId }) {
+export function formatCommandHoroscope(lang, { dateLabel, horoscopeBody, chosenUserId, antichristUserId }) {
   const h = lang.horoscope;
   const parts = [
     h.header,
@@ -128,6 +126,9 @@ export function formatCommandHoroscope(lang, { dateLabel, horoscopeBody, chosenU
   ];
   if (chosenUserId) {
     parts.push('', h.divider, h.currentChosen(chosenUserId));
+  }
+  if (antichristUserId) {
+    parts.push(h.currentAntichrist(antichristUserId));
   }
   return clampContent(parts.join('\n'));
 }
@@ -152,11 +153,17 @@ export async function buildHoroscopeText({
   lang,
   mode = 'command',
   ensureUserIds = [],
+  offices = {},
   getCosmicRole,
 }) {
+  const mustInclude = [
+    ...ensureUserIds,
+    offices.chosenUserId,
+    offices.antichristUserId,
+  ].filter(Boolean);
   const subjectIds = pickHoroscopeSubjects(memberIds, {
-    count: mode === 'daily' ? 3 : 2,
-    ensureUserIds,
+    count: mode === 'daily' ? 5 : 4,
+    ensureUserIds: mustInclude,
   });
   const subjects = subjectIds.map((userId) => ({
     userId,
@@ -171,6 +178,7 @@ export async function buildHoroscopeText({
     mode,
     aggregateMood,
     subjects,
+    offices,
   });
 }
 

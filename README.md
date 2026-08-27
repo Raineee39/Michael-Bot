@@ -1,6 +1,6 @@
 # Michael Bot
 
-Aartsengel Michaël: Dutch spiritual boomer Discord bot for a private server.
+Archangel Michael: petty celestial clerk Discord bot. Replies in Dutch or English depending on `/setlanguage`.
 
 ## Setup
 
@@ -14,79 +14,84 @@ GIPHY_API_KEY=
 DAILY_GUILD_ID=
 DAILY_CHANNEL_ID=
 GITHUB_WEBHOOK_SECRET=
+FEEDBACK_DM_USER_ID=
 ```
 
-Optional Gemini model overrides (defaults are cheap Flash tiers):
+Optional Gemini overrides:
 
 ```env
 GEMINI_TEXT_MODEL=gemini-2.5-flash
 GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
 GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts
-GEMINI_TTS_VOICE=Gacrux
+GEMINI_TTS_VOICE=Algenib
 ```
 
 ```bash
 npm install
-npm run register   # register slash commands with Discord
+npm run register   # register slash commands with Discord (run from a machine whose .env token matches APP_ID)
 npm start
 ```
+
+Register from your Mac if the VPS token cannot update the application (Discord 403 / code 20012). Do not put `npm run register` in the VPS deploy chain.
 
 ## Commands (highlights)
 
 | Command | What it does |
 |---|---|
 | `/chat` | Talk to Michael |
-| `/imagine` | Image from your prompt — Michael rewrites it holy, hellish, or petty based on mood |
-| `/listentomichael` | Ask for advice — Michael answers with a voice message (WAV) |
-| `/switchoflife` | Turn Michael's proactive chat on/off for this channel or whole server |
+| `/auracheck` | Michael inspects another user's aura from the register |
+| `/horoscope` | Today's field reading; names the current chosen one and antichrist |
+| `/chosenone` / `/antichrist` | Appoint (or reroll) the day's offices |
+| `/witness` / `/confess` | Sermon from the dossier / private filing |
+| `/imagine` | Image from your prompt — holy, hellish, or petty by mood |
+| `/listentomichael` | Advice as a voice message |
+| `/switchoflife` | Turn name-replies and snark on/off for a channel or the whole server |
 
 ## Michael "active" (`/switchoflife`)
 
-By default Michael is **off** in every server until someone flips the switch.
+Default is **off**. Nothing in `.env` turns him on. Someone with Manage Server (or Manage Channels, for the channel button) must flip `/switchoflife`.
 
-**When on** for a channel/server:
+**When on:**
 
-- Name-mention replies in chat
-- Rare snark + quiet delayed replies
+- Name-mention / @bot replies
+- Rare snark on random messages
 
-**Always works** (switch does not matter): slash commands, buttons, `/imagine`, `/listentomichael`.
+**Always works** (switch does not matter): slash commands, buttons, daily bulletin, unfinished-business follow-ups after 10 minutes of silence.
 
-Use `/switchoflife` → buttons:
+Stored in `data/life-switch.json` on the VPS. Channel override beats server setting.
 
-- **This channel** — needs Manage Channels or Manage Server
-- **Whole server** — needs Manage Server
+## Daily bulletin (10:00 Amsterdam)
 
-Channel setting overrides server when set explicitly. Stored in `data/life-switch.json` on the VPS.
+If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, Gemini writes a server-specific bulletin from member memory: general forecast plus gossip-prophecies (`<@mentions>`), and names that day's **chosen one** and **antichrist** (24 hours). `/horoscope` is the same style of call. The antichrist is refused on most commands, in public, with prejudice.
 
 ## Deploy (push to `main`)
 
-A push to `main` triggers the GitHub webhook on the VPS, which runs:
+The GitHub webhook on the VPS runs:
 
 ```bash
-cd /root/michael-bot && git fetch origin main && git reset --hard origin/main && npm install && npm run register && pm2 restart michael-bot --update-env
+cd /root/michael-bot && git fetch origin main && git reset --hard origin/main && npm install && pm2 restart michael-bot --update-env
 ```
 
-That is the same as `npm run deploy` — new slash commands register automatically on every deploy.
+Same as `npm run deploy`. After adding or renaming slash commands, run `npm run register` from the Mac, then restart Discord if the list looks stale.
 
-Webhook URL (must include port if Caddy uses 8443):
+Webhook URL (include the port if Caddy uses 8443):
 
 `https://michael-bot.duckdns.org:8443/github-webhook`
 
 ## Night window (22:00–10:00 Amsterdam)
 
-Only applies to **fully automated** posts:
+Only automated posts:
 
-- Daily 10:00 uitverkorene cron
-- Unprompted snark + quiet delayed reply (only when `/switchoflife` is on)
+- Daily bulletin cron (scheduled at 10:00, so it should fire)
+- Unprompted snark (only when `/switchoflife` is on)
+- Unfinished-business resurfacing waits until morning
 
 ## Gemini TTS (`/listentomichael`)
 
-Uses [Gemini speech generation](https://ai.google.dev/gemini-api/docs/speech-generation) (`gemini-2.5-flash-preview-tts` by default).
-
-Michael always uses **one voice** — default `Gacrux` (mature elderly male). Mood shows in what he says and how delivery is prompted, not by swapping voices.
+Uses [Gemini speech generation](https://ai.google.dev/gemini-api/docs/speech-generation). Default voice is **Algenib**. Caps / `woedend` uses a louder delivery prompt.
 
 ```env
-GEMINI_TTS_VOICE=Gacrux
+GEMINI_TTS_VOICE=Algenib
 ```
 
-Other male voices that can read as older: `Algenib`, `Charon`, `Schedar`, `Alnilam`. Preview in [Google AI Studio](https://aistudio.google.com/).
+Other older-male options: `Gacrux`, `Charon`, `Schedar`, `Alnilam`. Preview in [Google AI Studio](https://aistudio.google.com/).

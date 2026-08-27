@@ -101,20 +101,14 @@ const client = {
 // Applies chaotic spacing/punctuation and strips forbidden characters.
 // The sign-off (including multilingual variants) is handled by the model prompt.
 function applyChaoticFormatting(text) {
-  return text
-    // Strip any [...] placeholders the model might generate when it runs out of space
+  return String(text ?? '')
     .replace(/\s*\[\.\.\.[\s.]*\]/g, '')
-    // Remove em-dashes and en-dashes...  replace with spaced ellipsis
-    .replace(/\s*[...  -]\s*/g, '...  ')
-    // After any ellipsis NOT inside brackets: 2 to 5 extra spaces
-    .replace(/(?<!\[)\.\.\.+(?!\s*\])/g, (m) => m + ' '.repeat(Math.floor(Math.random() * 4) + 2))
-    // After comma: randomly pad
-    .replace(/, /g, () => Math.random() < 0.55 ? ',   ' : ',  ')
-    // After semicolon: always pad
-    .replace(/; /g, () => ';   ')
-    // Randomly insert extra spaces before a word (roughly 1 in 7 word boundaries)
-    .replace(/ ([A-Za-zÀ-ÿ\u0600-\u06FF]{3,})/g, (match, word) =>
-      Math.random() < 0.14 ? '   ' + word : match
+    .replace(/\s*[—–―]\s*/g, '... ')
+    .replace(/,{2,}/g, ',')
+    .replace(/, /g, () => (Math.random() < 0.3 ? ',  ' : ', '))
+    .replace(/; /g, () => '; ')
+    .replace(/ ([A-Za-zÀ-ÿ]{5,})/g, (match, word) =>
+      Math.random() < 0.06 ? '  ' + word : match
     );
 }
 
@@ -279,35 +273,6 @@ ${lang.userAttribution(username, userInput)}
     : clampToMaxSentences(generated, 2, lang.signOff);
 }
 
-// ─── Aura check ───────────────────────────────────────────────────────────────
-
-export async function generateAuraCheck(targetUsername, judgementLabel, impression, currentMood, cosmicRole, langCode = 'nl') {
-  const lang = getLang(langCode);
-  const { outputInstruction, signOff, formalAddress, styleHint } = lang.helpers;
-
-  const impressionBlock = impression
-    ? `\nLong-term impression of Michael about this person: "${impression}"\n`
-    : '\nMichael has little experience with this person.\n';
-
-  const cosmicBlock = cosmicRoleBlock(lang, cosmicRole);
-
-  const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
-    max_output_tokens: 240,
-    input: `
-${personaIntro(langCode)} Someone asks you to read the aura of another person: ${targetUsername}. Write a short, vague, slightly uncomfortable aura reading in your characteristic style. Use spiritual language: energy field, chakras, vibration, aura, colour, light, gaps, misalignment. Be subtly judgemental about what you "see"...  as if you notice something but prefer not to say too much. The tone is typically Michael: formal address (${formalAddress}), strangely specific, mildly unsettling but not alarming, dry.
-Usually 2 to 3 sentences; may be slightly longer to close neatly. No therapy-speak. No advice.${impressionBlock}${cosmicBlock}
-Current judgement of ${targetUsername}: ${judgementLabel ?? 'onbeslist'}
-Current mood: ${currentMood ?? 'afwezig'}
-${outputInstruction}
-${signOff} Close with 2 to 5 dots followed by your sign-off name.
-${styleHint}
-    `.trim(),
-  });
-
-  return applyChaoticFormatting(response.output[0].content[0].text);
-}
-
 // ─── Background summarisation ──────────────────────────────────────────────────
 
 export async function summariseUserHistory(username, prompts, existingImpression, langCode = 'nl') {
@@ -455,6 +420,33 @@ ${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
   return applyChaoticFormatting(response.output[0].content[0].text);
 }
 
+// ─── /auracheck (read another soul's field) ────────────────────────────────────
+
+export async function generateAuraCheck(targetName, dossier, { scannerName, langCode = 'nl' } = {}) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 240,
+    input: `
+${personaIntro(langCode)}
+${scannerName || 'Someone'} asked you to inspect the aura of ${targetName}. You do this like a tired celestial clerk with x-ray contempt: colour, temperature, smell, one bureaucratic defect in the field.
+Formal address (${formalAddress}). ${styleHint}.
+
+Dossier (use if useful, do not recite as a list):
+${dossier}
+
+Write 3 to 5 short sentences. Sensory and specific. Slightly invasive. No bullet lists, no chakra lecture, no helpful advice.
+${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty aura reading');
+  return applyChaoticFormatting(raw);
+}
+
 // ─── /biecht (confession) ──────────────────────────────────────────────────────
 
 export async function generateConfessionAck({
@@ -495,55 +487,101 @@ export async function generateHoroscope({
   mode = 'command',
   aggregateMood,
   subjects = [],
+  offices = {},
 }) {
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
   const moodNames = lang.moodNames ?? {};
   const dominant = aggregateMood?.dominantMood ?? 'afwezig';
   const dominantLabel = moodNames[dominant] ?? dominant;
+  const chosenId = offices.chosenUserId ?? null;
+  const antId = offices.antichristUserId ?? null;
 
   const subjectBlock = subjects.length
     ? subjects.map((s) => `<@${s.userId}> (${s.username}):\n${s.dossier}`).join('\n\n')
     : '(no dossiers — write a general field forecast only)';
 
-  const modeHint = mode === 'daily'
-    ? 'This is the official morning bulletin for the whole server.'
-    : mode === 'personal'
-      ? 'This is a private horoscope for one soul in DMs. Weave one prophecy about them into flowing prose.'
-      : 'This is an on-demand server horoscope; do not announce a new chosen one.';
+  const officeBlock = [
+    chosenId ? `CHOSEN ONE of this server today: <@${chosenId}> — you MUST mention them by that exact tag and give them one specific petty prophecy.` : '',
+    antId ? `ANTICHRIST of this server today: <@${antId}> — you MUST mention them by that exact tag and give them one specific petty prophecy.` : '',
+  ].filter(Boolean).join('\n');
 
-  const maxChars = mode === 'daily' ? 1100 : 900;
+  const modeHint = mode === 'daily'
+    ? 'Official morning bulletin for THIS server. Write the whole reading yourself: general day-forecast PLUS gossip-prophecies about people in the dossiers. Do not use headings. The offices above must appear inside the same flowing text — do not leave them for a later block.'
+    : mode === 'personal'
+      ? 'Private horoscope for one soul. Weave one prophecy about them into flowing prose.'
+      : 'On-demand reading of THIS server\'s field. Mix a general forecast with specific things named people might do, skip, meet, or suffer today.';
+
+  const maxChars = mode === 'daily' ? 1500 : 1200;
 
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
-    max_output_tokens: 420,
+    max_output_tokens: mode === 'daily' ? 560 : 420,
     input: `
 ${personaIntro(langCode)}
 Write a celestial horoscope for ${dateLabel}. ${modeHint}
 Formal address (${formalAddress}). ${styleHint}.
 
 The register shows ${aggregateMood?.knownUsers ?? 0} souls with mood on file. Dominant mood in the field: ${dominantLabel}.
+${officeBlock ? `\n${officeBlock}\n` : ''}
+Write 2 short paragraphs (or 1 longer one). No bullet lists, no numbered sections, no markdown headers.
 
-Write ONE flowing horoscope — 1 short paragraph, or 2 very short ones. No bullet lists, no numbered sections, no markdown headers, no "Souls:" block.
+Mix:
+- general omens (weather, cosmic mood, bureaucratic vibes, "today will be…")
+- specific things people might do or encounter today, grounded in their dossier (games they skip, people they meet, chores, shame, rain, a message they should not send). Sound like gossip folded into a sermon.
 
-Mix general omens for the day (weather, cosmic mood, bureaucratic vibes) with specific prophecies about individual people when dossiers exist. Weave @mentions naturally into sentences using Discord format <@userId> — like gossip folded into a sermon.
-
-Example tone (do not copy literally): "Today will be a hot day in hell. <@123456789> probably won't game. <@987654321> will meet Jesus tonight. Also there will be rain."
+Example tone (do not copy): "Today will be a hot day in hell. <@123> probably will not game. <@456> will meet Jesus tonight. Also there will be rain."
 
 Rules:
-- Open by declaring YOUR cosmic mood today in one clause inside the prose (not a separate label).
-- Use dossier details for flavour (judgement, impression, recent messages, cosmic role) but stay cryptic and slightly invasive.
-- Mention 0 to ${subjects.length} souls from the dossiers below; you do not have to mention everyone. Never invent Discord IDs.
-- If no dossiers, keep it general but still atmospheric.
+- Open by declaring YOUR cosmic mood today in one clause inside the prose.
+- Use dossier details (impression, recent messages, grudges, confessions) as flavour — cryptic, slightly invasive, never a recap list.
+- Mention 2 to ${Math.max(subjects.length, 1)} souls from the dossiers using Discord <@userId> only. Never invent IDs.
+- If no dossiers, keep it general but still atmospheric and specific to the date.
 
 Dossiers (background only — weave in, do not list):
 ${subjectBlock}
 
-Keep total under ${maxChars} characters. No chosen-one announcement (that is added separately).
+Keep total under ${maxChars} characters.
 ${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
     `.trim(),
   });
 
-  return applyChaoticFormatting(response.output[0].content[0].text);
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty horoscope');
+  return applyChaoticFormatting(raw);
+}
+
+export async function generateCosmicAppointment({
+  role,
+  userId,
+  username,
+  dossier,
+  langCode = 'nl',
+}) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+  const office = role === 'antichrist' ? 'ANTICHRIST for 24 hours' : 'CHOSEN ONE';
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 220,
+    input: `
+${personaIntro(langCode)}
+You have just appointed ${username} (<@${userId}>) as ${office} of this server. Announce it as yourself: petty, specific, slightly unhinged clerk of heaven.
+Formal address (${formalAddress}). ${styleHint}.
+Use their dossier if it helps you be uncomfortably specific. Do not recite it.
+${role === 'antichrist' ? 'They are refused most commands for 24 hours. Mock that fact once.' : 'They carry a vague responsibility. Do not explain it helpfully.'}
+
+Dossier:
+${dossier}
+
+3 to 5 short sentences. Mention <@${userId}> once. No bullet lists.
+${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty cosmic appointment');
+  return applyChaoticFormatting(raw);
 }
 
 // ─── Feature 1...  Delayed consequence / unfinished business callback ───────────

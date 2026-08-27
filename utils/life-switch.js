@@ -33,16 +33,13 @@ export function isMichaelLifeActive(guildId, channelId) {
   const { guilds, channels } = loadAll();
   if (channelHasOverride(channels, channelId)) return Boolean(channels[channelId]);
   if (Object.prototype.hasOwnProperty.call(guilds, guildId)) return Boolean(guilds[guildId]);
-  // Legacy global env (pre-/switchoflife) — honoured until a guild is toggled explicitly.
-  return process.env.MICHAEL_ALLOW_UNPROMPTED_CHANNEL_POSTS === 'true';
+  return false;
 }
 
 export function getLifeSwitchStatus(guildId, channelId) {
   const { guilds, channels } = loadAll();
   const guildExplicit = Object.prototype.hasOwnProperty.call(guilds, guildId);
-  const guildOn = guildExplicit
-    ? Boolean(guilds[guildId])
-    : process.env.MICHAEL_ALLOW_UNPROMPTED_CHANNEL_POSTS === 'true';
+  const guildOn = guildExplicit ? Boolean(guilds[guildId]) : false;
   const channelExplicit = channelHasOverride(channels, channelId);
   const channelOn = channelExplicit ? Boolean(channels[channelId]) : guildOn;
   return {

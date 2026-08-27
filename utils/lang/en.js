@@ -216,6 +216,19 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
   ui: {
     nee: ['no.', 'no.', 'no.', 'NO.', 'no.     ...Michael'],
 
+    antichristRefusals: [
+      'No.  The stamp on `/{command}` is ANTICHRIST.  Denied.  The form is already on fire....Michael',
+      '`/{command}`?  Cute.  The beast does not get a ticket.  Sit down....Michael',
+      'I have read your request.  I have also read your title.  The second one wins.  No....Michael',
+      'Heaven closed the counter.  You are the reason.  `/{command}` is not happening....Michael',
+      'The register laughed.  Then it refused.  Then it asked me to tell you no....Michael',
+      'You of all people.  Asking for `/{command}`.  The audacity is noted.  The answer is still no....Michael',
+      'A seraph leaned over my shoulder.  He said no.  I agreed.  This was easy....Michael',
+      'Request filed under: unholy, irrelevant, and slightly embarrassing.  Rejected....Michael',
+      'The antichrist does not get `/{command}`.  This is not a debate.  This is a stamp....Michael',
+      'No.  Also no.  Also the long version of no, which is still no....Michael',
+    ],
+
     fleeVergeefmij: [
       'You did not dare.  Understandable...  but unfortunate.  Your situation remains unchanged....Michael',
       'A strategic withdrawal.  I note this too....Michael',
@@ -381,6 +394,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     mijnrolError: 'The enrolment registers are troubled at the moment...  try again later....Michael',
     vibecheckError: 'Michael refuses to render a verdict at this time...  the energy is unclear....Michael',
     horoscopeError: 'The register refuses to read the stars...  try again later....Michael',
+    auracheckError: 'The field refused to be inspected...  try again later....Michael',
     getuigenisError: 'The register refuses to bear witness...  try again later....Michael',
     biechtError: 'The confessional is closed...  try again later....Michael',
     biechtEmpty: 'An empty confession does not count....Michael',
@@ -608,7 +622,9 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     dateLine: (date) => `*${date}*`,
     divider: '───────────────',
     chosenTitle: '**⚡ CHOSEN ONE OF THE DAY ⚡**',
+    antichristTitle: '**👹 ANTICHRIST OF THE DAY 👹**',
     currentChosen: (userId) => `**Current chosen one:** <@${userId}>`,
+    currentAntichrist: (userId) => `**Current antichrist:** <@${userId}>`,
   },
 
   // ─── Content: antichrist ─────────────────────────────────────────────────────
@@ -616,6 +632,16 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     header: '👹🔥👹🔥👹🔥👹🔥👹🔥',
     title: '# THE ANTICHRIST IS AMONG US',
     announcement: (userId) => `👹🔥👹🔥👹🔥👹🔥👹🔥\n# THE ANTICHRIST IS AMONG US\n👹🔥👹🔥👹🔥👹🔥👹🔥\n\n<@${userId}>\n\n*For the next 24 hours Michael will not grant your requests     this is deserved     or not     it does not matter...Michael*`,
+    dailyBoodschappen: [
+      'Do not congratulate them.  The title is a stain.  It lasts 24 hours or until I get bored....Michael',
+      'The field has appointed a villain for the day.  They may appeal.  I will not read it....Michael',
+      'This one is the problem now.  Officially.  Stamp wet.  Counter closed....Michael',
+      'Heaven needed a scapegoat.  The register pointed.  Here we are....Michael',
+    ],
+  },
+
+  auracheck: {
+    header: (username) => `🔮 **AURA INSPECTION: ${username}**`,
   },
 
   // ─── Content: date feature ───────────────────────────────────────────────────

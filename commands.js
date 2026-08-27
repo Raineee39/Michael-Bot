@@ -1,20 +1,5 @@
 import 'dotenv/config';
-import { getRPSChoices } from './game.js';
-import { capitalize, InstallGlobalCommands, InstallGuildCommands } from './utils.js';
-
-function createCommandChoices() {
-  const choices = getRPSChoices();
-  const commandChoices = [];
-
-  for (let choice of choices) {
-    commandChoices.push({
-      name: capitalize(choice),
-      value: choice.toLowerCase(),
-    });
-  }
-
-  return commandChoices;
-}
+import { InstallGlobalCommands, InstallGuildCommands } from './utils.js';
 
 const TEST_COMMAND = {
   name: 'test',
@@ -22,23 +7,6 @@ const TEST_COMMAND = {
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
-};
-
-const CHALLENGE_COMMAND = {
-  name: 'challenge',
-  description: 'Challenge to a match of rock paper scissors',
-  options: [
-    {
-      type: 3,
-      name: 'object',
-      description: 'Pick your object',
-      required: true,
-      choices: createCommandChoices(),
-    },
-  ],
-  type: 1,
-  integration_types: [0, 1],
-  contexts: [0, 2],
 };
 
 const DRAWCARD_COMMAND = {
@@ -372,7 +340,6 @@ const HOROSCOPE_COMMAND = {
 
 const ALL_COMMANDS = [
   TEST_COMMAND,
-  CHALLENGE_COMMAND,
   DRAWCARD_COMMAND,
   AURASCAN_COMMAND,
   CHOSENONE_COMMAND,
