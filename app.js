@@ -227,8 +227,29 @@ const PORT = process.env.PORT || 3000;
 // Tiny helper...  saves repeating Math.floor(Math.random()…) everywhere
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
-function resolveSlashUser(req, optionName, fallbackUserId, fallbackUsername) {
-  const opt = req.body.data?.options?.find(o => o.name === optionName);
+/** Discord always sends default option names, but keep aliases for safety. */
+function slashOptionValue(data, ...names) {
+  const opts = data?.options ?? [];
+  for (const name of names) {
+    const hit = opts.find((o) => o.name === name);
+    if (hit?.value != null && String(hit.value).trim()) return String(hit.value).trim();
+  }
+  const firstString = opts.find((o) => o.type === 3 && o.value != null);
+  return firstString ? String(firstString.value).trim() : '';
+}
+
+function resolveSlashCommandName(name) {
+  const aliases = {
+    confess: 'biecht',
+    horoscope: 'horoscoop',
+    witness: 'getuigenis',
+  };
+  return aliases[name] ?? name;
+}
+
+function resolveSlashUser(req, optionName, fallbackUserId, fallbackUsername, ...altNames) {
+  const names = [optionName, ...altNames];
+  const opt = req.body.data?.options?.find((o) => names.includes(o.name));
   const targetId = opt?.value ?? fallbackUserId;
   const resolved = req.body.data?.resolved?.users?.[targetId];
   const mem = loadUserMemory(targetId);
@@ -444,7 +465,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
    * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
    */
   if (type === InteractionType.APPLICATION_COMMAND) {
-    const { name } = data;
+    const name = resolveSlashCommandName(data.name);
 
     // "test" command
     if (name === 'test') {
@@ -1310,7 +1331,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     if (name === 'getuigenis') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
-      const { targetId, username: targetUsername } = resolveSlashUser(req, 'gebruiker', userId, username);
+      const { targetId, username: targetUsername } = resolveSlashUser(req, 'gebruiker', userId, username, 'user');
       ensureUserRecord(targetId, targetUsername);
       const memory = loadUserMemory(targetId);
       const g = lang.getuigenis ?? lang.vibecheck;
@@ -1348,17 +1369,18 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     if (name === 'biecht') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
-      const confession = data.options.find(o => o.name === 'biecht')?.value?.trim() ?? '';
+      const confession = slashOptionValue(data, 'biecht', 'confession');
       const channelId = req.body.channel_id ?? req.body.channel?.id;
 
       if (!confession) {
+        console.warn('[michael] biecht empty | options=', (data.options ?? []).map((o) => o.name).join(','));
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: { content: lang.ui.biechtEmpty, flags: InteractionResponseFlags.EPHEMERAL },
         });
       }
 
-      const { targetId, username: targetUsername } = resolveSlashUser(req, 'gebruiker', userId, username);
+      const { targetId, username: targetUsername } = resolveSlashUser(req, 'gebruiker', userId, username, 'user');
       const aboutSelf = targetId === userId;
       const safeConfession = confession.replace(/\n+/g, ' ').replace(/`/g, "'").slice(0, 500);
 
@@ -1408,18 +1430,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           aboutSelf,
           langCode,
         });
+        const reply = String(ack || lang.ui.biechtError).slice(0, DISCORD_MESSAGE_CONTENT_MAX);
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: { content: ack, flags: InteractionResponseFlags.EPHEMERAL },
+          body: { content: reply },
         });
         console.log(`[michael] biecht | target=${targetUsername} (${targetId}) | by=${username} | aboutSelf=${aboutSelf}`);
       } catch (err) {
-        console.error('biecht error:', err);
+        console.error('biecht error:', err?.message ?? err);
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
-            body: { content: lang.ui.biechtError, flags: InteractionResponseFlags.EPHEMERAL },
+            body: { content: lang.ui.biechtError },
           });
         } catch { /* token expired */ }
       }

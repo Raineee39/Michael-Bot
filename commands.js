@@ -434,7 +434,53 @@ const HOROSCOPE_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, FEEDBACK_COMMAND, MICHAELTAAL_COMMAND, IMAGINE_COMMAND, LISTENTOMICHAEL_COMMAND, GETUIGENIS_COMMAND, BIECHT_COMMAND, HOROSCOPE_COMMAND, SWITCHOFLIFE_COMMAND];
+/** English alias so /horoscope works even when the client locale is Dutch. */
+const HOROSCOPE_ALIAS_COMMAND = {
+  name: 'horoscope',
+  description: "Michael reads today's field — predictions drawn from the register",
+  description_localizations: {
+    'nl': 'Michael leest het veld voor vandaag — met voorspellingen uit het register',
+  },
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+/** English alias so /confess works even when the client locale is Dutch. */
+const CONFESS_ALIAS_COMMAND = {
+  name: 'confess',
+  description: 'Confess to the register — only you see Michael\'s reply',
+  description_localizations: {
+    'nl': 'Biecht in het register — alleen jij ziet Michaels antwoord',
+  },
+  options: [
+    {
+      type: 3,
+      name: 'confession',
+      description: 'What do you file in the register?',
+      name_localizations: { 'nl': 'biecht' },
+      description_localizations: {
+        'nl': 'Wat leg je in het register?',
+      },
+      required: true,
+    },
+    {
+      type: 6,
+      name: 'user',
+      description: 'Who is this confession about? (default: yourself)',
+      name_localizations: { 'nl': 'gebruiker' },
+      description_localizations: {
+        'nl': 'Over wie is deze biecht? (standaard: over jezelf)',
+      },
+      required: false,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, FEEDBACK_COMMAND, MICHAELTAAL_COMMAND, IMAGINE_COMMAND, LISTENTOMICHAEL_COMMAND, GETUIGENIS_COMMAND, BIECHT_COMMAND, CONFESS_ALIAS_COMMAND, HOROSCOPE_COMMAND, HOROSCOPE_ALIAS_COMMAND, SWITCHOFLIFE_COMMAND];
 
 // Register commands — guild IDs update instantly; global can take up to ~1 hour.
 const guildIds = process.env.GUILD_IDS?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
