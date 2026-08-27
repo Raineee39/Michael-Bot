@@ -227,29 +227,15 @@ const PORT = process.env.PORT || 3000;
 // Tiny helper...  saves repeating Math.floor(Math.random()…) everywhere
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
-/** Discord always sends default option names, but keep aliases for safety. */
-function slashOptionValue(data, ...names) {
-  const opts = data?.options ?? [];
-  for (const name of names) {
-    const hit = opts.find((o) => o.name === name);
-    if (hit?.value != null && String(hit.value).trim()) return String(hit.value).trim();
-  }
-  const firstString = opts.find((o) => o.type === 3 && o.value != null);
-  return firstString ? String(firstString.value).trim() : '';
+/** Read a slash-command string option by its registered (English) name. */
+function slashOptionValue(data, name) {
+  const hit = data?.options?.find((o) => o.name === name);
+  if (hit?.value != null && String(hit.value).trim()) return String(hit.value).trim();
+  return '';
 }
 
-function resolveSlashCommandName(name) {
-  const aliases = {
-    confess: 'biecht',
-    horoscope: 'horoscoop',
-    witness: 'getuigenis',
-  };
-  return aliases[name] ?? name;
-}
-
-function resolveSlashUser(req, optionName, fallbackUserId, fallbackUsername, ...altNames) {
-  const names = [optionName, ...altNames];
-  const opt = req.body.data?.options?.find((o) => names.includes(o.name));
+function resolveSlashUser(req, fallbackUserId, fallbackUsername) {
+  const opt = req.body.data?.options?.find((o) => o.name === 'user');
   const targetId = opt?.value ?? fallbackUserId;
   const resolved = req.body.data?.resolved?.users?.[targetId];
   const mem = loadUserMemory(targetId);
@@ -330,7 +316,7 @@ function getCosmicRole(userId, guildId) {
 }
 
 /** Antichrist gets "nee" on almost everything; only these stay open. */
-const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'uitverkorene', 'chat', 'cosmischestatus', 'feedback']);
+const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'chosenone', 'chat', 'cosmicstatus', 'feedback']);
 
 /** Snowflake to receive /feedback DMs (override with FEEDBACK_DM_USER_ID). */
 const FEEDBACK_OWNER_ID = process.env.FEEDBACK_DM_USER_ID || '49627618751811584';
@@ -465,7 +451,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
    * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
    */
   if (type === InteractionType.APPLICATION_COMMAND) {
-    const name = resolveSlashCommandName(data.name);
+    const { name } = data;
 
     // "test" command
     if (name === 'test') {
@@ -487,8 +473,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
     // "feedback"...  DM the bot owner with bug / feature / other reports
     if (name === 'feedback') {
-      const soort = data.options.find(o => o.name === 'soort')?.value ?? 'other';
-      const rawBericht = data.options.find(o => o.name === 'bericht')?.value ?? '';
+      const soort = slashOptionValue(data, 'kind') || 'other';
+      const rawBericht = slashOptionValue(data, 'message');
       const bericht = String(rawBericht).trim().replace(/`/g, "'");
       if (!bericht) {
         return res.send({
@@ -532,7 +518,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "trekkaart" command
-    if (name === 'trekkaart') {
+    if (name === 'drawcard') {
       const kaart = pick(lang.trekkaart.kaarten);
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -566,7 +552,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "uitverkorene" / chosenone (EN localization)
-    if (name === 'uitverkorene') {
+    if (name === 'chosenone') {
       if (!guildId) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -637,7 +623,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "dateer" command
-    if (name === 'dateer') {
+    if (name === 'dateangel') {
       const invokerUserId = req.body.member?.user?.id ?? req.body.user?.id;
       const dateMood = loadUserMemory(invokerUserId).currentMood ?? 'afwezig';
       const dateRounds = getDateRounds(lang);
@@ -653,7 +639,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "cosmischestatus"...  who holds antichrist / uitverkorene, + Michael's mood toward you
-    if (name === 'cosmischestatus') {
+    if (name === 'cosmicstatus') {
       const invokerId    = req.body.member?.user?.id ?? req.body.user?.id;
       const antichristId = guildId ? getCurrentAntichristUserId(guildId) : null;
       const uitId        = guildId ? getUitverkoreneUserId(guildId) : null;
@@ -679,7 +665,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "vergeefmij"...  roll-based forgiveness (user must click to roll)
-    if (name === 'vergeefmij') {
+    if (name === 'forgiveme') {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
       const memory   = loadUserMemory(userId);
       const currentMood = memory.currentMood ?? 'afwezig';
@@ -710,7 +696,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "mijnrol"...  shows the user their Michael-assigned character sheet
-    if (name === 'mijnrol') {
+    if (name === 'mycharacter') {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
 
@@ -775,7 +761,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "onderhandelen"...  wizard: pick field → modal for wish text → roll buttons
-    if (name === 'onderhandelen') {
+    if (name === 'negotiate') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const w        = lang.ui.negotiateWizard;
       return res.send({
@@ -802,7 +788,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "michaelhumeur"...  shows Michael's current persistent mood toward this user
-    if (name === 'michaelhumeur') {
+    if (name === 'michaelmood') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const mood   = loadUserMemory(userId).currentMood ?? 'afwezig';
       const humeurLines = lang.humeurLines[mood] ?? lang.humeurLines['afwezig'];
@@ -874,7 +860,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
     // "chat" command (was praatmetmichael)
     if (name === 'chat') {
-      const userInput = data.options.find(o => o.name === 'bericht').value;
+      const userInput = slashOptionValue(data, 'message');
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
       const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'");
@@ -1078,7 +1064,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     // "babychat": toddler Michael; 20% meltdown: -3 judgement, antichrist on servers.
     // Toddler and meltdown replies use Gemini Flash: generateBabyChatToddler / generateBabyChatMeltdown in utils/openai.js.
     if (name === 'babychat') {
-      const userInput = data.options.find(o => o.name === 'bericht').value;
+      const userInput = slashOptionValue(data, 'message');
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
       const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'");
@@ -1224,7 +1210,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     if (name === 'imagine') {
-      const userInput = data.options.find(o => o.name === 'beeld').value;
+      const userInput = slashOptionValue(data, 'image');
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
       const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'").slice(0, 400);
@@ -1277,7 +1263,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     if (name === 'listentomichael') {
-      const userInput = data.options.find(o => o.name === 'advies').value;
+      const userInput = slashOptionValue(data, 'advice');
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
       const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'").slice(0, 400);
@@ -1328,10 +1314,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    if (name === 'getuigenis') {
+    if (name === 'witness') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
-      const { targetId, username: targetUsername } = resolveSlashUser(req, 'gebruiker', userId, username, 'user');
+      const { targetId, username: targetUsername } = resolveSlashUser(req, userId, username);
       ensureUserRecord(targetId, targetUsername);
       const memory = loadUserMemory(targetId);
       const g = lang.getuigenis ?? lang.vibecheck;
@@ -1366,21 +1352,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    if (name === 'biecht') {
+    if (name === 'confess') {
       const userId = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
-      const confession = slashOptionValue(data, 'biecht', 'confession');
+      const confession = slashOptionValue(data, 'confession');
       const channelId = req.body.channel_id ?? req.body.channel?.id;
 
       if (!confession) {
-        console.warn('[michael] biecht empty | options=', (data.options ?? []).map((o) => o.name).join(','));
+        console.warn('[michael] confess empty | options=', (data.options ?? []).map((o) => o.name).join(','));
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: { content: lang.ui.biechtEmpty, flags: InteractionResponseFlags.EPHEMERAL },
         });
       }
 
-      const { targetId, username: targetUsername } = resolveSlashUser(req, 'gebruiker', userId, username, 'user');
+      const { targetId, username: targetUsername } = resolveSlashUser(req, userId, username);
       const aboutSelf = targetId === userId;
       const safeConfession = confession.replace(/\n+/g, ' ').replace(/`/g, "'").slice(0, 500);
 
@@ -1436,9 +1422,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           method: 'PATCH',
           body: { content: reply },
         });
-        console.log(`[michael] biecht | target=${targetUsername} (${targetId}) | by=${username} | aboutSelf=${aboutSelf}`);
+        console.log(`[michael] confess | target=${targetUsername} (${targetId}) | by=${username} | aboutSelf=${aboutSelf}`);
       } catch (err) {
-        console.error('biecht error:', err?.message ?? err);
+        console.error('confess error:', err?.message ?? err);
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
@@ -1449,8 +1435,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-    // "horoscoop" / horoscope (EN localization)
-    if (name === 'horoscoop') {
+    if (name === 'horoscope') {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 
       try {
@@ -1489,9 +1474,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           method: 'PATCH',
           body: { content, embeds },
         });
-        console.log(`[michael] horoscoop | guild=${guildId ?? 'dm'} | user=${invokerId}`);
+        console.log(`[michael] horoscope | guild=${guildId ?? 'dm'} | user=${invokerId}`);
       } catch (err) {
-        console.error('horoscoop error:', err);
+        console.error('horoscope error:', err);
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
@@ -1517,8 +1502,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "michaeltaal"...  set language (server or personal in DMs)
-    if (name === 'michaeltaal') {
+    if (name === 'setlanguage') {
       // DM context...  no guild, so set per-user language instead
       if (!guildId) {
         return res.send({
