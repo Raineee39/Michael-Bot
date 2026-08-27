@@ -73,22 +73,14 @@ export async function DiscordMultipart(endpoint, { method = 'PATCH', payload = {
 
 export async function InstallGlobalCommands(appId, commands) {
   const endpoint = `applications/${appId}/commands`;
-  try {
-    await DiscordRequest(endpoint, { method: 'PUT', body: commands });
-    console.log('Global commands registered:', commands.map(c => c.name).join(', '));
-  } catch (err) {
-    console.error('Failed to register global commands:', err);
-  }
+  await DiscordRequest(endpoint, { method: 'PUT', body: commands });
+  console.log('Global commands registered:', commands.map(c => c.name).join(', '));
 }
 
 export async function InstallGuildCommands(appId, guildId, commands) {
   const endpoint = `applications/${appId}/guilds/${guildId}/commands`;
-  try {
-    await DiscordRequest(endpoint, { method: 'PUT', body: commands });
-    console.log(`Guild commands registered in ${guildId}:`, commands.map(c => c.name).join(', '));
-  } catch (err) {
-    console.error('Failed to register guild commands:', err);
-  }
+  await DiscordRequest(endpoint, { method: 'PUT', body: commands });
+  console.log(`Guild commands registered in ${guildId}:`, commands.map(c => c.name).join(', '));
 }
 
 // Simple method that returns a random emoji from list

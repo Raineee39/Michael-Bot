@@ -330,7 +330,7 @@ const LISTENTOMICHAEL_COMMAND = {
 const IMAGINE_COMMAND = {
   name: 'imagine',
   description: 'Laat Michael een beeld maken van jouw prompt (hij voegt zijn eigen oordeel toe)',
-  name_localizations: { 'en-US': 'imagine', 'en-GB': 'imagine', ar: 'تخيّل' },
+  name_localizations: { 'en-US': 'imagine', 'en-GB': 'imagine', ar: 'تخيل-صورة' },
   description_localizations: {
     'en-US': 'Have Michael generate an image from your prompt (he adds his own judgement)',
     'en-GB': 'Have Michael generate an image from your prompt (he adds his own judgement)',
@@ -371,13 +371,10 @@ const SWITCHOFLIFE_COMMAND = {
 
 const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, FEEDBACK_COMMAND, MICHAELTAAL_COMMAND, IMAGINE_COMMAND, LISTENTOMICHAEL_COMMAND, SWITCHOFLIFE_COMMAND];
 
-// Clear any leftover guild-specific commands so they don't show up as duplicates
-if (process.env.GUILD_IDS) {
-  const guildIds = process.env.GUILD_IDS.split(',');
-  for (const guildId of guildIds) {
-    InstallGuildCommands(process.env.APP_ID, guildId.trim(), []);
-  }
-}
+// Register commands — guild IDs update instantly; global can take up to ~1 hour.
+const guildIds = process.env.GUILD_IDS?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
 
-// Register all commands globally
-InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
+for (const guildId of guildIds) {
+  await InstallGuildCommands(process.env.APP_ID, guildId, ALL_COMMANDS);
+}
+await InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
