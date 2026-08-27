@@ -20,6 +20,21 @@ export function isDutchQuietHoursForUnpromptedSends() {
   return hour >= 22 || hour < 10;
 }
 
+/** Add a unicode emoji reaction. Needs Add Reactions in the channel. */
+export async function addDiscordReaction(channelId, messageId, emoji) {
+  if (!channelId || !messageId || !emoji) return false;
+  try {
+    await DiscordRequest(
+      `channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`,
+      { method: 'PUT' },
+    );
+    return true;
+  } catch (err) {
+    console.warn('[michael] reaction failed:', err?.message ?? err);
+    return false;
+  }
+}
+
 export async function DiscordRequest(endpoint, options) {
   // append endpoint to root API URL
   const url = 'https://discord.com/api/v10/' + endpoint;

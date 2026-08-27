@@ -627,6 +627,50 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     currentAntichrist: (userId) => `**Huidige antichrist:** <@${userId}>`,
   },
 
+  dayLaw: {
+    leastLabel: 'Minst favoriet van vandaag',
+    forbiddenLabel: 'Verboden woord',
+    ruleLabel: 'Dagorder',
+    inForce: 'Deze kaart is wet tot de kaart van morgen.',
+    booksHeader: '**📕 DE BOEKEN VAN GISTEREN**',
+    booksFallback: 'Gisteren is gesloten.  Het register onthoudt.  U mag dat niet....Michael',
+    soFarTitle: 'Tot nu toe vandaag',
+    soFarForbidden: (userId, word) => `<@${userId}> zei het verboden woord (${word})`,
+    soFarProphecy: (userId, claim) => `Profetie over <@${userId}> gestempeld — ${claim}`,
+    soFarLeast: (userId) => `<@${userId}> (minst favoriet) heeft gesproken`,
+    soFarChosen: (userId) => `Uitverkorene <@${userId}> verscheen`,
+    soFarAntichrist: (userId) => `Antichrist <@${userId}> verscheen`,
+    soFarRule: (userId) => `<@${userId}> schuurde langs de dagorder`,
+    stampFallback: 'Genoteerd.  {user}.  De kaart blijft staan....Michael',
+    antichristLaw: (word) => word ? `  Het verboden woord van vandaag blijft **${word}**.  Niet dat U het mag gebruiken.` : '',
+    stamps: {
+      forbidden: [
+        '📜 **STEMPEL.**  {user} zei het woord.  {extra}.  Opgeborgen....Michael',
+        'Het verboden woord.  Hardop.  {user}.  Ik hoorde het....Michael',
+      ],
+      prophecy: [
+        '⚡ **ZOALS GESCHREVEN.**  {user} — {extra}....Michael',
+        'De kaart noemde dit.  {user} leverde.  Ik haat gelijk hebben....Michael',
+      ],
+      least: [
+        'De minst favoriet heeft gesproken.  {user}.  Ik ben op de hoogte....Michael',
+        '{user}  —  genoteerd.  De titel past nog....Michael',
+      ],
+      chosen: [
+        'De uitverkorene ademt.  {user}.  Draag het slechter....Michael',
+        '{user}  is gearriveerd.  Het ambt merkt het....Michael',
+      ],
+      antichrist: [
+        'De vlek spreekt.  {user}.  24 uur.  Nog steeds....Michael',
+        '{user}  —  antichrist aan de microfoon.  Charmant....Michael',
+      ],
+      rule: [
+        'Dagorder geschampt.  {user}.  {extra}....Michael',
+        '{user} liep tegen de regel van vandaag.  expres of niet.  Opgeborgen....Michael',
+      ],
+    },
+  },
+
   // ─── Content: antichrist ─────────────────────────────────────────────────────
   antichrist: {
     header: '👹🔥👹🔥👹🔥👹🔥👹🔥',

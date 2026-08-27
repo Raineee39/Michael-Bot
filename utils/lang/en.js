@@ -628,6 +628,50 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     currentAntichrist: (userId) => `**Current antichrist:** <@${userId}>`,
   },
 
+  dayLaw: {
+    leastLabel: "Today's least favourite",
+    forbiddenLabel: 'Forbidden word',
+    ruleLabel: 'Standing order',
+    inForce: 'This card is law until tomorrow\'s card.',
+    booksHeader: '**📕 YESTERDAY\'S BOOKS**',
+    booksFallback: 'Yesterday is closed.  The register remembers.  You may not....Michael',
+    soFarTitle: 'So far today',
+    soFarForbidden: (userId, word) => `<@${userId}> said the forbidden word (${word})`,
+    soFarProphecy: (userId, claim) => `Prophecy on <@${userId}> stamped — ${claim}`,
+    soFarLeast: (userId) => `<@${userId}> (least favourite) has spoken`,
+    soFarChosen: (userId) => `Chosen one <@${userId}> appeared`,
+    soFarAntichrist: (userId) => `Antichrist <@${userId}> appeared`,
+    soFarRule: (userId) => `<@${userId}> brushed the standing order`,
+    stampFallback: 'Noted.  {user}.  The card still stands....Michael',
+    antichristLaw: (word) => word ? `  Today's forbidden word remains **${word}**.  Not that you get to use it.` : '',
+    stamps: {
+      forbidden: [
+        '📜 **STAMP.**  {user} said the word.  {extra}.  Filed....Michael',
+        'The forbidden word.  Out loud.  {user}.  I heard it....Michael',
+      ],
+      prophecy: [
+        '⚡ **AS WRITTEN.**  {user} — {extra}....Michael',
+        'The card mentioned this.  {user} delivered.  I hate being right....Michael',
+      ],
+      least: [
+        'The least favourite has spoken.  {user}.  I am aware....Michael',
+        '{user}  —  noted.  The title still fits....Michael',
+      ],
+      chosen: [
+        'The chosen one breathes.  {user}.  Carry it worse....Michael',
+        '{user}  has arrived.  The office notices....Michael',
+      ],
+      antichrist: [
+        'The stain is speaking.  {user}.  24 hours.  Still....Michael',
+        '{user}  —  antichrist at the microphone.  Charming....Michael',
+      ],
+      rule: [
+        'Standing order grazed.  {user}.  {extra}....Michael',
+        '{user} walked into today\'s rule.  On purpose or not.  Filed....Michael',
+      ],
+    },
+  },
+
   // ─── Content: antichrist ─────────────────────────────────────────────────────
   antichrist: {
     header: '👹🔥👹🔥👹🔥👹🔥👹🔥',

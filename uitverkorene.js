@@ -13,31 +13,21 @@ const BOODSCHAPPEN = [
   'De hemel heeft gesproken     de boodschap is jouw naam     en een zeker gevoel van onvermijdelijkheid..Michael',
 ];
 
-const GIF_QUERIES = [
-  'lightning storm dramatic',
-  'chosen one destiny',
-  'angel wings sky',
-  'cosmic prophecy',
-  'divine eye',
-];
-
-const ANTICHRIST_GIF_QUERIES = [
-  'devil fire',
-  'dark angel',
-  'hell flames',
-];
-
-const MICHAEL_MISC_GIF_QUERIES = [
-  'archangel',
-  'judgement day',
-  'halo glow',
-];
-
-const HOROSCOPE_GIF_QUERIES = [
-  'horoscope stars',
-  'zodiac cosmic',
-  'night sky prophecy',
-  'crystal ball mystical',
+// Daily bulletin only. Tight phrases so Giphy does not wander into construction / sports.
+const DAILY_GIF_QUERIES = [
+  'archangel michael painting',
+  'angel choir singing',
+  'holy light heaven clouds',
+  'renaissance angel art',
+  'god speaking from clouds',
+  'halo angel meme',
+  'side eye cat meme',
+  'this is fine dog',
+  'exploding brain meme',
+  'dramatic stare reaction',
+  'spinning skull meme',
+  'praying hands meme',
+  'wide eyes reaction meme',
 ];
 
 function pick(arr) {
@@ -48,19 +38,7 @@ export function getRandomBoodschap() {
   return BOODSCHAPPEN[Math.floor(Math.random() * BOODSCHAPPEN.length)];
 }
 
-/** Giphy search term for horoscope / daily bulletin posts. */
+/** Giphy search term for the daily bulletin only. */
 export function getHoroscopeGifQuery() {
-  return pick(HOROSCOPE_GIF_QUERIES);
-}
-
-/** Giphy search term for the daily uitverkorene announcement. */
-export function getRandomGifQuery(langCode = 'nl') {
-  return pick(GIF_QUERIES);
-}
-
-/** Giphy search term for optional GIFs on /chat */
-export function getMichaelOptionalGifQuery(cosmicRole, langCode = 'nl') {
-  if (cosmicRole === 'antichrist') return pick(ANTICHRIST_GIF_QUERIES);
-  if (cosmicRole === 'uitverkorene') return pick(GIF_QUERIES);
-  return pick([...GIF_QUERIES, ...MICHAEL_MISC_GIF_QUERIES]);
+  return pick(DAILY_GIF_QUERIES);
 }

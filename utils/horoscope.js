@@ -1,5 +1,12 @@
-import { loadAllMemory, loadUserMemory, getJudgementLabel, resolveField } from './michael-memory.js';
-import { generateHoroscope } from './openai.js';
+import { loadAllMemory, loadUserMemory, getJudgementLabel, resolveField, patchUserState } from './michael-memory.js';
+import { generateBooksClosed, generateDayLaw, generateHoroscope } from './openai.js';
+import {
+  getTodayCard,
+  rollGuildDay,
+  saveTodayCard,
+  saveYesterdayClosing,
+  soFarLines,
+} from './day-ledger.js';
 
 const MICHAEL_MOODS = [
   'kosmisch', 'afwezig', 'loom', 'verward', 'passief-agressief', 'streng', 'woedend',
@@ -105,25 +112,51 @@ function clampContent(text, max = 1990) {
 }
 
 export function formatDailyBulletin(lang, { dateLabel, horoscopeBody }) {
-  const h = lang.horoscope;
-  return clampContent([
-    h.header,
-    h.dailyTitle,
-    h.dateLine(dateLabel),
-    '',
-    horoscopeBody,
-  ].join('\n'));
+  return formatDayCard(lang, { dateLabel, title: lang.horoscope.dailyTitle, card: null, horoscopeBody });
 }
 
 export function formatCommandHoroscope(lang, { dateLabel, horoscopeBody }) {
+  return formatDayCard(lang, { dateLabel, title: lang.horoscope.commandTitle, card: null, horoscopeBody });
+}
+
+export function formatDayCard(lang, { dateLabel, title, card, horoscopeBody, soFar = [], closing = '' }) {
   const h = lang.horoscope;
-  return clampContent([
+  const L = lang.dayLaw;
+  const parts = [
     h.header,
-    h.commandTitle,
+    title,
     h.dateLine(dateLabel),
     '',
-    horoscopeBody,
-  ].join('\n'));
+  ];
+  if (closing) {
+    parts.push(L.booksHeader, closing, '', h.divider, '');
+  }
+  if (card) {
+    parts.push(`**${h.moodLabel}:** ${card.mood}`);
+    parts.push('');
+    if (card.omen) parts.push(card.omen);
+    for (const p of card.prophecies ?? []) {
+      parts.push(`<@${p.userId}> ${p.claim}`);
+    }
+    parts.push('');
+    if (card.leastFavouriteUserId) {
+      const why = card.leastFavouriteReason ? ` (${card.leastFavouriteReason})` : '';
+      parts.push(`**${L.leastLabel}:** <@${card.leastFavouriteUserId}>${why}`);
+    }
+    if (card.forbiddenWord) parts.push(`**${L.forbiddenLabel}:** ${card.forbiddenWord}`);
+    if (card.rule) parts.push(`**${L.ruleLabel}:** ${card.rule}`);
+    for (const s of card.stats ?? []) {
+      parts.push(`**${s.label}:** ${s.value}`);
+    }
+    parts.push('', `*${L.inForce}*`);
+  } else if (horoscopeBody) {
+    parts.push(horoscopeBody);
+  }
+  if (soFar.length) {
+    parts.push('', h.divider, `**${L.soFarTitle}**`, ...soFar.map((line) => `• ${line}`));
+  }
+  parts.push('', '....Michael');
+  return clampContent(parts.join('\n'));
 }
 
 export function formatPersonalHoroscope(lang, { dateLabel, horoscopeBody }) {
@@ -173,6 +206,113 @@ export async function buildHoroscopeText({
     subjects,
     offices,
   });
+}
+
+function yesterdayDigest(closed) {
+  if (!closed) return '';
+  const lines = [];
+  if (closed.card?.mood) lines.push(`mood was: ${closed.card.mood}`);
+  if (closed.card?.forbiddenWord) lines.push(`forbidden word: ${closed.card.forbiddenWord}`);
+  for (const p of closed.card?.prophecies ?? []) {
+    lines.push(`prophecy <@${p.userId}> "${p.claim}" → ${p.status ?? 'open'}`);
+  }
+  for (const e of (closed.events ?? []).slice(-8)) {
+    lines.push(`${e.kind}${e.userId ? ` <@${e.userId}>` : ''}${e.word ? ` ${e.word}` : ''}${e.claim ? ` ${e.claim}` : ''}`);
+  }
+  return lines.join('\n');
+}
+
+function applyClosingJudgement(closed) {
+  if (!closed?.card) return;
+  for (const p of closed.card.prophecies ?? []) {
+    if (p.status === 'failed') patchUserState(p.userId, -1);
+  }
+}
+
+/**
+ * One law-card per guild per Amsterdam day. Creates it if missing.
+ * Rolls yesterday closed (failed prophecies + judgement + Gemini epilogue).
+ */
+export async function buildDayLawForGuild({
+  guildId,
+  memberIds,
+  langCode,
+  lang,
+  offices = {},
+  getCosmicRole,
+  title,
+}) {
+  const { closedYesterday } = rollGuildDay(guildId);
+  let closing = closedYesterday?.closing || '';
+  if (closedYesterday?.card && !closing) {
+    applyClosingJudgement(closedYesterday);
+    try {
+      closing = await generateBooksClosed({
+        langCode,
+        dateLabel: closedYesterday.dateKey,
+        digest: yesterdayDigest(closedYesterday),
+      });
+    } catch (err) {
+      console.error('[michael] books-closed failed:', err?.message ?? err);
+      closing = lang.dayLaw.booksFallback;
+    }
+    saveYesterdayClosing(guildId, closing);
+  }
+
+  const existing = getTodayCard(guildId);
+  if (existing) {
+    return {
+      card: existing,
+      content: formatDayCard(lang, {
+        dateLabel: amsterdamDateLabel(langCode),
+        title,
+        card: existing,
+        soFar: soFarLines(guildId, lang),
+        closing,
+      }),
+      offices,
+      created: false,
+    };
+  }
+
+  const mustInclude = [offices.chosenUserId, offices.antichristUserId].filter(Boolean);
+  const subjectIds = pickHoroscopeSubjects(memberIds, {
+    count: 4,
+    ensureUserIds: mustInclude,
+  });
+  const subjects = subjectIds.map((userId) => ({
+    userId,
+    username: loadUserMemory(userId).username || userId,
+    dossier: buildSubjectDossier(userId, loadUserMemory(userId), getCosmicRole),
+  }));
+  const allowed = new Set(subjects.map((s) => s.userId));
+  const safeOffices = {
+    chosenUserId: allowed.has(offices.chosenUserId) ? offices.chosenUserId : null,
+    antichristUserId: allowed.has(offices.antichristUserId) ? offices.antichristUserId : null,
+  };
+
+  const card = await generateDayLaw({
+    langCode,
+    lang,
+    dateLabel: amsterdamDateLabel(langCode),
+    aggregateMood: summarizeGuildMood(memberIds),
+    subjects,
+    offices: safeOffices,
+    yesterdayDigest: closedYesterday ? yesterdayDigest(closedYesterday) : '',
+  });
+
+  saveTodayCard(guildId, card, safeOffices);
+  return {
+    card,
+    content: formatDayCard(lang, {
+      dateLabel: amsterdamDateLabel(langCode),
+      title,
+      card,
+      closing,
+    }),
+    offices: safeOffices,
+    created: true,
+  };
 }
 
 export async function buildPersonalHoroscopeText(userId, langCode, lang) {

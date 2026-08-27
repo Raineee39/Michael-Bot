@@ -58,13 +58,15 @@ Default is **off**. Nothing in `.env` turns him on. Someone with Manage Server (
 - Name-mention / @bot replies
 - Rare snark on random messages
 
-**Always works** (switch does not matter): slash commands, buttons, daily bulletin, unfinished-business follow-ups after 10 minutes of silence.
+**Always works** (switch does not matter): slash commands, buttons, daily bulletin, today's-card stamps, unfinished-business follow-ups after 10 minutes of silence.
 
 Stored in `data/life-switch.json` on the VPS. Channel override beats server setting.
 
 ## Daily bulletin (10:00 Amsterdam)
 
-If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, Gemini writes a server-specific bulletin from member memory: general forecast plus gossip-prophecies (`<@mentions>`), and names that day's **chosen one** and **antichrist** (24 hours). `/horoscope` is the same style of call. The antichrist is refused on most commands, in public, with prejudice.
+If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, Gemini writes **today's card** — mood, omen, named prophecies, a forbidden word, a least favourite, a standing order. That card is **law until tomorrow's card**. `/horoscope` reprints the same card (and a short "so far" if anything was stamped). The antichrist is refused on most commands, in public, with prejudice.
+
+Michael watches chat and stamps rarely (max 4 public stamps a day, 25 minutes apart). First hit on a law is a short reply; repeats get a reaction. Next morning he closes yesterday's books, judgement moves, and the residue flavours the new card. This does not need `/switchoflife`. The bot needs **Add Reactions** in the server.
 
 ## Deploy (push to `main`)
 

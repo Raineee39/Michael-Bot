@@ -597,6 +597,204 @@ ${dossiers}
   }
 }
 
+function parseJsonObject(raw) {
+  const jsonMatch = String(raw ?? '').match(/\{[\s\S]*\}/);
+  return JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+}
+
+const FORBIDDEN_STOP = new Set([
+  'the', 'and', 'you', 'your', 'that', 'this', 'with', 'from', 'have', 'not',
+  'de', 'het', 'een', 'van', 'een', 'dat', 'die', 'niet', 'voor', 'met',
+  'ik', 'je', 'jij', 'u', 'we', 'they', 'are', 'was', 'for',
+]);
+
+function sanitizeForbiddenWord(word, fallbacks) {
+  const cleaned = String(word ?? '').trim().replace(/[^\p{L}'-]/gu, '');
+  if (cleaned.length < 3 || cleaned.length > 16) return fallbacks[0];
+  if (FORBIDDEN_STOP.has(cleaned.toLowerCase())) return fallbacks[0];
+  return cleaned.toUpperCase();
+}
+
+function allowId(id, allowed) {
+  const s = String(id ?? '').replace(/[<@!>]/g, '');
+  return allowed.has(s) ? s : null;
+}
+
+/** Structured day-law for one guild. Display is formatted in code. */
+export async function generateDayLaw({
+  langCode = 'nl',
+  lang,
+  dateLabel,
+  aggregateMood,
+  subjects = [],
+  offices = {},
+  yesterdayDigest = '',
+}) {
+  const allowed = new Set(subjects.map((s) => s.userId).filter(Boolean));
+  const chosenId = offices.chosenUserId && allowed.has(offices.chosenUserId) ? offices.chosenUserId : null;
+  const antId = offices.antichristUserId && allowed.has(offices.antichristUserId) ? offices.antichristUserId : null;
+  const fallbackWord = langCode === 'nl' ? 'STOF' : 'DUST';
+  const subjectBlock = subjects.length
+    ? subjects.map((s) => `<@${s.userId}> (${s.username}):\n${s.dossier}`).join('\n\n')
+    : '(no dossiers)';
+  const idsHint = [...allowed].map((id) => `<@${id}>`).join(', ') || '(none)';
+
+  const input = `
+${personaIntro(langCode)}
+Invent TODAY'S LAW for this Discord server. Date: ${dateLabel}.
+${lang.helpers.outputInstruction}
+This is a closed system for 24 hours. Petty celestial clerk. Not a paragraph.
+
+Field mood hint: ${aggregateMood?.dominantMood ?? 'afwezig'}. Known souls: ${aggregateMood?.knownUsers ?? 0}.
+${chosenId ? `CHOSEN ONE (must appear in a prophecy or omen): <@${chosenId}>` : ''}
+${antId ? `ANTICHRIST (must appear in a prophecy or omen): <@${antId}>` : ''}
+Allowed Discord IDs only: ${idsHint}
+${yesterdayDigest ? `\nYESTERDAY'S BOOKS (residue — do not recap, just let it flavour today's cruelty):\n${yesterdayDigest}\n` : ''}
+
+Return ONLY JSON (no markdown fences):
+{
+  "mood": "loud invented mood, caps and ! allowed",
+  "omen": "one short general omen sentence (weather / bureaucracy / cosmic)",
+  "prophecies": [
+    { "userId": "REAL_ID", "claim": "something they might SAY or DO in chat today", "watch": ["keyword", "keyword"] }
+  ],
+  "forbiddenWord": "ONE uncommon word, 3-12 letters",
+  "leastFavouriteUserId": "REAL_ID or empty",
+  "leastFavouriteReason": "one petty word",
+  "rule": "one stupid standing order for the server today",
+  "ruleWatch": ["optional", "keywords"],
+  "stats": [{ "label": "invented label", "value": "short value" }]
+}
+
+Rules:
+- 1 to 3 prophecies. Each watch list is 1 to 4 words that would appear in Discord if the prophecy comes true. Detectable in chat. No "will not X".
+- Never invent IDs. Never use IDs not in the allowed list.
+- forbiddenWord is not a name, not a common function word, not an insult slur.
+- 1 to 3 stats. Invent the labels.
+- English or Dutch to match the output instruction. Short strings.
+  `.trim();
+
+  const run = async () => {
+    const response = await client.responses.create({
+      model: 'gpt-4.1-mini',
+      max_output_tokens: 520,
+      input,
+    });
+    const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+    if (!raw) throw new Error('Gemini returned empty day law');
+    return parseJsonObject(raw);
+  };
+
+  let parsed;
+  try {
+    parsed = await run();
+  } catch (err) {
+    console.error('[gemini] day law first pass failed:', err?.message ?? err);
+    parsed = await run();
+  }
+
+  const prophecies = (Array.isArray(parsed.prophecies) ? parsed.prophecies : [])
+    .map((p, i) => {
+      const userId = allowId(p.userId, allowed);
+      if (!userId) return null;
+      const watch = (Array.isArray(p.watch) ? p.watch : [])
+        .map((w) => String(w).trim())
+        .filter((w) => w.length >= 3 && w.length <= 20)
+        .slice(0, 4);
+      if (!watch.length) return null;
+      return {
+        id: `p${i + 1}`,
+        userId,
+        claim: String(p.claim ?? '').trim().slice(0, 140),
+        watch,
+        status: 'open',
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const stats = (Array.isArray(parsed.stats) ? parsed.stats : [])
+    .map((s) => ({
+      label: String(s.label ?? '').trim().slice(0, 40),
+      value: String(s.value ?? '').trim().slice(0, 60),
+    }))
+    .filter((s) => s.label && s.value)
+    .slice(0, 3);
+
+  const least = allowId(parsed.leastFavouriteUserId, allowed);
+
+  return {
+    mood: String(parsed.mood ?? (langCode === 'nl' ? 'AMBtenaarlijk VERTOORND' : 'WRATHFUL!!!!!!!')).trim().slice(0, 48),
+    omen: String(parsed.omen ?? '').trim().slice(0, 180),
+    prophecies,
+    forbiddenWord: sanitizeForbiddenWord(parsed.forbiddenWord, [fallbackWord, 'TITHES', 'PAPIER']),
+    leastFavouriteUserId: least,
+    leastFavouriteReason: String(parsed.leastFavouriteReason ?? '').trim().slice(0, 32),
+    rule: String(parsed.rule ?? '').trim().slice(0, 160),
+    ruleWatch: (Array.isArray(parsed.ruleWatch) ? parsed.ruleWatch : [])
+      .map((w) => String(w).trim())
+      .filter((w) => w.length >= 3 && w.length <= 20)
+      .slice(0, 4),
+    stats,
+  };
+}
+
+export async function generateLawStamp({ kind, langCode = 'nl', userId, extra = '' }) {
+  const lang = getLang(langCode);
+  const { outputInstruction } = lang.helpers;
+  const kindHint = {
+    forbidden: `They said the forbidden word of the day. The word was: ${extra}. Stamp it. Do not repeat the word in all caps more than once.`,
+    prophecy: `A prophecy from this morning's card just came true: ${extra}. Claim it. "As written."`,
+    least: `This is today's least favourite. They have spoken. Note it. Do not pile on.`,
+    chosen: `Today's chosen one has spoken. A short blessing that sounds like a burden.`,
+    antichrist: `Today's antichrist has spoken in public. One stain. No sermon.`,
+    rule: `They brushed today's standing order: ${extra}. File it.`,
+  }[kind] ?? extra;
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 120,
+    input: `
+${personaIntro(langCode)}
+You are stamping the day's law in a Discord channel. ${kindHint}
+Mention <@${userId}> once.
+${outputInstruction}
+ONE or TWO short sentences. Discord markdown ok (**bold**). No paragraph. No list.
+Close with 2 to 5 dots followed by your sign-off name.
+Keep under 220 characters.
+    `.trim(),
+  });
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty law stamp');
+  return raw.slice(0, 280);
+}
+
+export async function generateBooksClosed({ langCode = 'nl', dateLabel, digest }) {
+  const lang = getLang(langCode);
+  const { outputInstruction } = lang.helpers;
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 220,
+    input: `
+${personaIntro(langCode)}
+Close yesterday's books. Date that closed: ${dateLabel}.
+You are a petty clerk reading the ledger aloud. Short. Specific. A little cruel.
+${outputInstruction}
+
+Ledger:
+${digest || '(nothing was stamped. The silence is also a verdict.)'}
+
+4 to 6 short lines. Discord markdown. No # headers.
+Name people only as <@id> if those ids appear in the ledger.
+End by saying the books are closed.
+Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty books-closed');
+  return raw.slice(0, 700);
+}
+
 export async function generateCosmicAppointment({
   role,
   userId,

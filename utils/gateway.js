@@ -14,6 +14,8 @@
 //       optional post-message revision ("Edit:") on that reply.
 //       When the life-switch is off (default), no reply is sent here.
 // 4. lastChannelId is tracked per user.
+// 5. Today's card is law (independent of life-switch): rare stamps / reactions.
+// 6. Ambient emoji reacts on ~10% of guild messages (45s cooldown, not at night).
 //
 // IMPORTANT: Requires the following Privileged Gateway Intents enabled in the
 // Discord Developer Portal:
@@ -21,13 +23,15 @@
 //   - Server Members Intent (required for GET /guilds/.../members — horoscope / daily)
 
 import { WebSocket } from 'ws';
-import { appendEditWithinDiscordLimit, DiscordRequest } from '../utils.js';
+import { addDiscordReaction, appendEditWithinDiscordLimit, DiscordRequest, isDutchQuietHoursForUnpromptedSends } from '../utils.js';
 import { addUnfinishedBusiness, loadUserMemory, updateLastChannel, ensureUserRecord } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
 import { resolveLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
 import { handleUnpromptedChat, scheduleBusinessResurface } from './unprompted-chat.js';
 import { isMichaelLifeActive } from './life-switch.js';
+import { handleDayLawMessage } from './day-watch.js';
+import { getCurrentAntichristUserId, getUitverkoreneUserId } from './cosmic-state.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 
@@ -37,6 +41,24 @@ const INTENTS = 1 | 2 | 512 | 32768;
 const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
 
 const MICHAEL_NAME_RE = /micha[eë]l/i;
+
+const AMBIENT_REACTS = ['🧿', '🪬', '👁️', '😇', '👼', '🕊️', '🙏', '✨', '🕯️', '⚖️', '⚡', '🌟', '🪽', '⛪', '✝️'];
+const AMBIENT_REACT_CHANCE = 0.10;
+const AMBIENT_REACT_COOLDOWN_MS = 45 * 1000;
+const lastAmbientReactAt = new Map();
+
+function maybeAmbientReact(guildId, channelId, messageId) {
+  if (!guildId || !channelId || !messageId) return;
+  if (isDutchQuietHoursForUnpromptedSends()) return;
+  const last = lastAmbientReactAt.get(channelId) ?? 0;
+  if (Date.now() - last < AMBIENT_REACT_COOLDOWN_MS) return;
+  if (Math.random() > AMBIENT_REACT_CHANCE) return;
+  lastAmbientReactAt.set(channelId, Date.now());
+  const emoji = AMBIENT_REACTS[Math.floor(Math.random() * AMBIENT_REACTS.length)];
+  addDiscordReaction(channelId, messageId, emoji).then((ok) => {
+    if (ok) console.log(`[michael] ambient react | ${emoji} | ch=${channelId}`);
+  });
+}
 
 /** True when the message says Michael/Michaël or @mentions the bot. */
 function messageMentionsMichael(msg, botUserId) {
@@ -152,6 +174,21 @@ export function startGateway() {
 
         // Track the user's most-recently-active channel.
         updateLastChannel(authorId, channelId, guildId);
+        maybeAmbientReact(guildId, channelId, msg.id);
+
+        if (guildId) {
+          handleDayLawMessage({
+            guildId,
+            channelId,
+            messageId: msg.id,
+            authorId,
+            content,
+            offices: {
+              chosenUserId: getUitverkoreneUserId(guildId),
+              antichristUserId: getCurrentAntichristUserId(guildId),
+            },
+          }).catch((err) => console.error('[michael] day-law watch failed:', err?.message ?? err));
+        }
 
         handleUnpromptedChat({
           messageId: msg.id,

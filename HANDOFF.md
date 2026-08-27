@@ -1,18 +1,13 @@
 # Handoff — 28 Aug 2026
 
 ## Status
-Horoscope card is punchier (uncommitted). Guild-only register was wiping globals, so DMs had no slash commands. `commands.js` now registers guild commands plus a global DM-only set (`contexts` 1+2) so chats get `/horoscope` etc. without duplicating names in servers.
+Uncommitted on Mac: day-law, punchier horoscope, DM globals (registered), env isolation, empty-embed fix, ambient reacts (nazar/hamsa), GIFs daily-only.
 
-## User must do — Mac register (I cannot)
-```bash
-npm run register
-```
+How to see today's law: `/horoscope` **in the server** opens or reprints the card. `/cosmicstatus` shows mood + forbidden word. 10:00 Amsterdam posts the same card to `DAILY_CHANNEL_ID`. DMs are personal, not the server law.
 
-Then open a DM with Michael and type `/horoscope`. Restart Discord if the list is stale.
+No new slash commands — do **not** register.
 
-Do **not** register on the VPS.
-
-## After push — VPS (behavior only; DMs need the Mac register)
+## After push — VPS
 ```bash
 cd /root/michael-bot && git pull && pm2 restart michael-bot --update-env
 ```

@@ -23,7 +23,7 @@ import {
   sendDmToUser,
 } from './utils.js';
 import { getRandomWisdom } from './wisdom.js';
-import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery, getHoroscopeGifQuery } from './uitverkorene.js';
+import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness } from './utils/michael-memory.js';
@@ -47,13 +47,12 @@ import {
 import { scheduleBusinessResurface } from './utils/unprompted-chat.js';
 import {
   amsterdamDateLabel,
-  buildHoroscopeText,
+  buildDayLawForGuild,
   buildPersonalHoroscopeText,
   buildSubjectDossier,
-  formatCommandHoroscope,
-  formatDailyBulletin,
   formatPersonalHoroscope,
 } from './utils/horoscope.js';
+import { amsterdamDateKey, getGuildDay, getTodayCard, markDayPosted } from './utils/day-ledger.js';
 
 const MANAGE_GUILD = BigInt(0x20);
 const MANAGE_CHANNELS = BigInt(0x10);
@@ -144,17 +143,37 @@ function readNegotiateModalValue(modalData) {
 // All flee/pardon/apology/refusal strings are now in lang packs (utils/lang/{nl,en,ar}.js)
 // and accessed via lang.ui.*  throughout the handler.
 
+function giphyStillUrl(pick) {
+  const candidates = [
+    pick?.images?.downsized_medium?.url,
+    pick?.images?.downsized?.url,
+    pick?.images?.fixed_height?.url,
+    pick?.images?.original?.url,
+  ];
+  for (const u of candidates) {
+    if (typeof u === 'string' && /^https:\/\//i.test(u) && !/\.mp4(\?|$)/i.test(u)) return u;
+  }
+  return null;
+}
+
+const GIPHY_REJECT_RE = /hammer|sledge|construction|demolition|workout|gym|repair|tool|nail|diy|boxing|golf|tennis|baseball|soccer|football|cooking|recipe|car crash|accident|power.?tool/i;
+
+function giphyTitleOk(item) {
+  const blob = [item?.title, item?.slug, item?.username].filter(Boolean).join(' ');
+  return !GIPHY_REJECT_RE.test(blob);
+}
+
 async function fetchGiphyGif(query) {
   const key = process.env.GIPHY_API_KEY;
   if (!key) return null;
   try {
-    const url = `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(query)}&limit=10&rating=g`;
+    const url = `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(query)}&limit=20&rating=g`;
     const res = await fetch(url);
     const data = await res.json();
-    const results = data.data;
-    if (!results?.length) return null;
+    const results = (data.data ?? []).filter((item) => giphyTitleOk(item) && giphyStillUrl(item));
+    if (!results.length) return null;
     const pick = results[Math.floor(Math.random() * results.length)];
-    return pick.images.original.url;
+    return giphyStillUrl(pick);
   } catch (err) {
     console.error('Giphy fetch failed:', err);
     return null;
@@ -210,12 +229,8 @@ async function buildCosmicAppointmentMessage(guildId, lang, role) {
   });
   const header = role === 'antichrist' ? lang.antichrist.header : lang.uitverkorene.header;
   const title = role === 'antichrist' ? lang.antichrist.title : lang.uitverkorene.title;
-  const gifQuery = role === 'antichrist'
-    ? getMichaelOptionalGifQuery('antichrist')
-    : getRandomGifQuery(lang.code);
-  const gif = await fetchGiphyGif(gifQuery);
   const content = [header, title, header, '', `<@${userId}>`, '', sermon].join('\n');
-  return { content, embeds: gif ? [{ image: { url: gif } }] : [], userId };
+  return { content, embeds: [], userId };
 }
 
 async function buildUitverkoreneMessage(guildId, lang) {
@@ -231,24 +246,27 @@ async function buildAntichristMessage(guildId, lang) {
 async function buildDailyBulletin(guildId, lang) {
   const langCode = getGuildLanguage(guildId);
   const memberIds = await fetchGuildHumanMemberIds(guildId);
-  const { first: chosenUserId, second: antichristUserId } = pickTwoDistinctIds(memberIds);
-  if (!chosenUserId) throw new Error('no human members in guild');
+  const existingCard = getTodayCard(guildId);
+  let chosenUserId = getUitverkoreneUserId(guildId);
+  let antichristUserId = getCurrentAntichristUserId(guildId);
 
-  setUitverkoreneForGuild(guildId, chosenUserId);
-  setAntichristForGuild(guildId, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
+  if (!existingCard) {
+    const picked = pickTwoDistinctIds(memberIds);
+    if (!picked.first) throw new Error('no human members in guild');
+    chosenUserId = chosenUserId || picked.first;
+    antichristUserId = antichristUserId || picked.second || picked.first;
+    setUitverkoreneForGuild(guildId, chosenUserId);
+    setAntichristForGuild(guildId, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
+  }
 
-  const horoscopeBody = await buildHoroscopeText({
+  const { content } = await buildDayLawForGuild({
+    guildId,
     memberIds,
     langCode,
     lang,
-    mode: 'daily',
     offices: { chosenUserId, antichristUserId },
     getCosmicRole: (uid) => getCosmicRole(uid, guildId),
-  });
-
-  const content = formatDailyBulletin(lang, {
-    dateLabel: amsterdamDateLabel(langCode),
-    horoscopeBody,
+    title: lang.horoscope.dailyTitle,
   });
   const gif = await fetchGiphyGif(getHoroscopeGifQuery());
   const embeds = gif ? [{ image: { url: gif } }] : [];
@@ -438,7 +456,7 @@ async function schedulePostRevision(channelId, messageId, originalContent, mood,
       const revised = appendEditWithinDiscordLimit(originalContent, editLine);
       await DiscordRequest(`channels/${channelId}/messages/${messageId}`, {
         method: 'PATCH',
-        body: { content: revised },
+        body: { content: revised, embeds: [] },
       });
       console.log(`[michael] revision applied | ${label} | ${messageId} | "${editLine.slice(0, 60)}"`);
     } catch (err) {
@@ -476,9 +494,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   ) {
     const refusalPool = lang.ui.antichristRefusals ?? lang.ui.nee;
     const refusal = pick(refusalPool).replace(/\{command\}/g, data?.name || 'that');
+    const lawNote = lang.dayLaw?.antichristLaw?.(getTodayCard(guildId)?.forbiddenWord) ?? '';
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: { content: refusal },
+      data: { content: `${refusal}${lawNote}` },
     });
   }
 
@@ -746,10 +765,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const moodBlock    = `\n\n──────────────────\n${cs.moodTowardYou}\n${pick(humeurLines)}\n${cs.moodLabel(moodName(lang, invokerMood))}`;
 
       const header = cs.header(eyeRow);
+      const card = guildId ? getTodayCard(guildId) : null;
+      const lawBlock = card
+        ? `\n\n${lang.horoscope.divider}\n**${lang.horoscope.moodLabel}:** ${card.mood}\n**${lang.dayLaw.forbiddenLabel}:** ${card.forbiddenWord}`
+        : '';
 
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `${header}\n${antichristLine}\n\n${uitLine}${moodBlock}` },
+        data: { content: `${header}\n${antichristLine}\n\n${uitLine}${moodBlock}${lawBlock}` },
       });
     }
 
@@ -1092,15 +1115,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             .catch(err => console.error('[michael] summarisation failed:', err));
         }
 
-        // ~25% chance of a thematic Giphy embed (same API as uitverkorene)
-        let gifUrl = null;
-        if (process.env.GIPHY_API_KEY && Math.random() < 0.25) {
-          gifUrl = await fetchGiphyGif(getMichaelOptionalGifQuery(cosmicRole, langCode));
-          if (gifUrl) console.log(`[michael] chat | gif | ${username}`);
-        }
         const messageBase = `> ${safeInput}\n\n${michaelMessage}`;
-        const patchBody = { content: messageBase };
-        if (gifUrl) patchBody.embeds = [{ image: { url: gifUrl } }];
+        const patchBody = { content: messageBase, embeds: [] };
         if (passiveTriggered) {
           patchBody.components = [{
             type: MessageComponentTypes.ACTION_ROW,
@@ -1228,7 +1244,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           const body = `> ${safeInput}\n\n${meltdown}`;
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
-            body: { content: body },
+            body: { content: body, embeds: [] },
           });
         } else {
           console.log(`[michael] babychat | toddler | ${username} (${userId})`);
@@ -1268,7 +1284,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           const messageBase = `> ${safeInput}\n\n${toddlerReply}`;
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',
-            body: { content: messageBase },
+            body: { content: messageBase, embeds: [] },
           });
 
           if (channelId) {
@@ -1527,24 +1543,34 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       try {
         const invokerId = req.body.member?.user?.id ?? req.body.user?.id;
         let content;
-        let embeds = [];
 
         if (guildId) {
           const memberIds = await fetchGuildHumanMemberIds(guildId, { fallbackIds: [invokerId] });
-          const currentChosen = getUitverkoreneUserId(guildId);
-          const currentAntichrist = getCurrentAntichristUserId(guildId);
-          const horoscopeBody = await buildHoroscopeText({
+          let currentChosen = getUitverkoreneUserId(guildId);
+          let currentAntichrist = getCurrentAntichristUserId(guildId);
+          if (!currentChosen || !currentAntichrist) {
+            const { first, second } = pickTwoDistinctIds(memberIds);
+            if (!currentChosen && first) {
+              currentChosen = first;
+              setUitverkoreneForGuild(guildId, first);
+            }
+            if (!currentAntichrist && second) {
+              currentAntichrist = second === currentChosen
+                ? (memberIds.find((id) => id !== currentChosen) ?? second)
+                : second;
+              setAntichristForGuild(guildId, currentAntichrist, Date.now() + 24 * 60 * 60 * 1000);
+            }
+          }
+          const law = await buildDayLawForGuild({
+            guildId,
             memberIds,
             langCode,
             lang,
-            mode: 'command',
             offices: { chosenUserId: currentChosen, antichristUserId: currentAntichrist },
             getCosmicRole: (uid) => getCosmicRole(uid, guildId),
+            title: lang.horoscope.commandTitle,
           });
-          content = formatCommandHoroscope(lang, {
-            dateLabel: amsterdamDateLabel(langCode),
-            horoscopeBody,
-          });
+          content = law.content;
         } else {
           const horoscopeBody = await buildPersonalHoroscopeText(invokerId, langCode, lang);
           content = formatPersonalHoroscope(lang, {
@@ -1555,22 +1581,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         if (!content?.trim()) throw new Error('horoscope content empty after formatting');
 
-        const gif = await fetchGiphyGif(getHoroscopeGifQuery());
-        if (gif) embeds = [{ image: { url: gif } }];
-
-        const payload = { content: content.slice(0, DISCORD_MESSAGE_CONTENT_MAX) };
-        try {
-          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-            method: 'PATCH',
-            body: { ...payload, ...(embeds.length ? { embeds } : {}) },
-          });
-        } catch (sendErr) {
-          console.error('horoscope embed send failed:', sendErr?.message ?? sendErr);
-          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-            method: 'PATCH',
-            body: payload,
-          });
-        }
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: content.slice(0, DISCORD_MESSAGE_CONTENT_MAX), embeds: [] },
+        });
         console.log(`[michael] horoscope | guild=${guildId ?? 'dm'} | user=${invokerId}`);
       } catch (err) {
         console.error('horoscope error:', err?.message ?? err);
@@ -2322,6 +2336,12 @@ cron.schedule('0 10 * * *', async () => {
     return;
   }
 
+  const already = getGuildDay(guildId);
+  if (already?.dateKey === amsterdamDateKey() && already.postedAt) {
+    console.log('[michael] daily bulletin skipped...  today\'s card already posted');
+    return;
+  }
+
   try {
     const cronLangCode = getGuildLanguage(guildId);
     const cronLang = getLang(cronLangCode);
@@ -2334,6 +2354,7 @@ cron.schedule('0 10 * * *', async () => {
         flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
       },
     });
+    markDayPosted(guildId, channelId);
     console.log(`Daily bulletin posted (horoscope + chosen=${chosenUserId} + antichrist=${antichristUserId}).`);
   } catch (err) {
     console.error('Daily bulletin failed:', err);
