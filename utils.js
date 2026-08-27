@@ -5,7 +5,7 @@ export const MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS = 1 << 12; // 4096
 
 /**
  * True between 22:00 and 09:59 (Europe/Amsterdam).
- * Only used for fully automated posts (daily uitverkorene cron, unprompted snark/quiet-queue).
+ * Only used for fully automated posts (daily bulletin cron, business resurfacing).
  * Slash commands and divine-pardon follow-ups are never gated by time.
  * Unprompted behaviour also requires /switchoflife to be on for that server or channel.
  */

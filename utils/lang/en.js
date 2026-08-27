@@ -8,6 +8,7 @@ export default {
 
   // ─── Michael character identity ──────────────────────────────────────────────
   identityLine: 'You are the Archangel Michael.',
+  archangelBaseline: 'You ALWAYS speak as an archangel: very low, heavy, angry-serious tone. Divine authority, cold, threatening, little patience. Even when absent or cosmic, the undertone stays wrathful and judging — never casual, never a friendly chatbot.',
   signOff: 'Michael',
 
   // ─── Mood descriptions ───────────────────────────────────────────────────────
@@ -147,7 +148,6 @@ Language:
 - ONLY exception: if the user explicitly asks for a specific language (e.g. "speak Dutch"), use 1 to 2 words or a short phrase in EXACTLY that language...  not another...  and sign your name in that language's script
 - The rest of the sentence always stays in English
 - If the user asks for Dutch: use one Dutch phrase, sign off with "....Michael" in Latin script
-- If the user asks for Arabic: use one Arabic phrase, sign off with "ميخائيل"
 - NEVER mix two foreign languages in one answer
 `,
 
@@ -176,7 +176,7 @@ Language...  EARNED MODE (only active because the user is now writing in ${perm.
     outputInstruction: 'Write in English. Use ALL CAPS for emphasized verbs (BE, SEE, LISTEN, TRUST). Use formal "you" (slightly elevated register, not casual). Ellipses and strange spacing. No em-dash.',
     signOff: 'Always close with 2 to 5 dots followed by Michael.',
     formalAddress: 'formal "you"',
-    styleHint: 'ellipses, strange spaces, no em-dashes, formal address',
+    styleHint: 'archangel: low, angry-serious, cold; ellipses, strange spaces, no em-dashes, formal "you"',
   },
 
   // ─── Character sheet ─────────────────────────────────────────────────────────
@@ -380,6 +380,10 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     onderhandelenError: 'The registers are temporarily closed...  try again....Michael',
     mijnrolError: 'The enrolment registers are troubled at the moment...  try again later....Michael',
     vibecheckError: 'Michael refuses to render a verdict at this time...  the energy is unclear....Michael',
+    horoscopeError: 'The register refuses to read the stars...  try again later....Michael',
+    getuigenisError: 'The register refuses to bear witness...  try again later....Michael',
+    biechtError: 'The confessional is closed...  try again later....Michael',
+    biechtEmpty: 'An empty confession does not count....Michael',
     praatError: 'There is noise in the field…  the connection with the universe is temporarily disrupted     try again later....Michael',
     babychatError: 'Baby Michael nodded off…  try again later....Michael',
     imagineError: 'The vision refused to materialise…  try again later....Michael',
@@ -400,17 +404,14 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     michaeltaalSet: {
       nl: '✅ **Michael spreekt nu Nederlands.**\nAlle reacties van Michael zullen voortaan in het Nederlands zijn....Michael',
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',
-      ar: '✅ **ميخائيل يتحدث الآن بالعربية.**\nستكون جميع ردود ميخائيل باللغة العربية من الآن....ميخائيل',
     },
-    michaeltaalPrompt: 'Choose the language for Michael Bot on this server:\n\n**Dutch**: Michael speaks Dutch\n**English**: the current selection\n**Arabic**: ميخائيل يتحدث العربية',
-    michaeltaalPromptDM: 'Choose your personal language for Michael Bot in DMs:\n\n**Dutch**: Michael speaks Dutch\n**English**: the current selection\n**Arabic**: ميخائيل يتحدث العربية',
+    michaeltaalPrompt: 'Choose the language for Michael Bot on this server:\n\n**Dutch**: Michael speaks Dutch\n**English**: the current selection',
+    michaeltaalPromptDM: 'Choose your personal language for Michael Bot in DMs:\n\n**Dutch**: Michael speaks Dutch\n**English**: the current selection',
     michaeltaalBtnNl: 'Dutch',
     michaeltaalBtnEn: 'English',
-    michaeltaalBtnAr: 'Arabic',
     michaeltaalSetDM: {
       nl: '✅ **Michael will now speak Dutch with you in DMs.**...Michael',
       en: '✅ **Michael will now speak English with you in DMs.**...Michael',
-      ar: '✅ **Imru\' al-Qais will now speak Arabic with you in DMs.**...Imru\' al-Qais',
     },
     michaeltaalNoPermission: 'You do not have permission to change the server language....Michael',
 
@@ -510,6 +511,15 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     kosmischeRolLabel: '**Cosmic role**',
   },
 
+  getuigenis: {
+    header: (username) => `📜 **WITNESS AGAINST ${username}**`,
+    oordeelLabel: '**Judgement**',
+    moodLabel: '**Mood**',
+    businessLabel: '**Outstanding grudges**',
+    confessionLabel: '**Confessions on file**',
+    none: 'none',
+  },
+
   // ─── Michaelhumeur UI labels ──────────────────────────────────────────────────
   humeur: {
     currentMoodLabel: (mood) => `*Current mood: **${mood}***`,
@@ -587,6 +597,18 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
       'Something is being asked of you     what that is we know     you will learn along the way..Michael',
       'Heaven has spoken     the message is your name     and a certain sense of inevitability..Michael',
     ],
+  },
+
+  // ─── Horoscope (daily bulletin + /horoscope) ───────────────────────────────
+  horoscope: {
+    header: '🌙✨🔮✨🌙✨🔮✨🌙',
+    dailyTitle: '# CELESTIAL DAILY HOROSCOPE',
+    commandTitle: '# HOROSCOPE OF THE FIELD',
+    personalTitle: '# YOUR PERSONAL HOROSCOPE',
+    dateLine: (date) => `*${date}*`,
+    divider: '───────────────',
+    chosenTitle: '**⚡ CHOSEN ONE OF THE DAY ⚡**',
+    currentChosen: (userId) => `**Current chosen one:** <@${userId}>`,
   },
 
   // ─── Content: antichrist ─────────────────────────────────────────────────────

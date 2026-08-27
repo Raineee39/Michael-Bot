@@ -40,6 +40,7 @@ function defaultUser(username) {
     lastChannelId:     null,   // most recent channel this user was active in
     lastGuildId:       null,   // guild of that channel...  for delayed consequences when no shadow match
     unfinishedBusiness: [],    // Feature 1...  items Michael hasn't let go of
+    confessions:         [],   // secrets filed against this soul (self or by others)
     recentThemes:      [],     // Feature 2...  topic snapshots for contradiction engine
     languagePermission: null, // unlocked after repeated requests for a non-Dutch language
     languageRequestCounts: {}, // { en: 2, fr: 1 }...  per-language tallies toward unlock
@@ -65,6 +66,7 @@ export function loadUserMemory(userId) {
   if (user.lastChannelId === undefined)    user.lastChannelId = null;
   if (user.lastGuildId === undefined)      user.lastGuildId = null;
   if (user.unfinishedBusiness === undefined) user.unfinishedBusiness = [];
+  if (user.confessions === undefined) user.confessions = [];
   if (user.recentThemes === undefined)     user.recentThemes = [];
   if (user.languagePermission === undefined) user.languagePermission = null;
   if (user.languageRequestCounts === undefined || typeof user.languageRequestCounts !== 'object') {
@@ -72,6 +74,59 @@ export function loadUserMemory(userId) {
   }
   migrateMichaelRollenspel(user);
   return user;
+}
+
+/** Create or refresh a user record without logging a chat turn. */
+export function ensureUserRecord(userId, username = '') {
+  const all = loadAll();
+  if (!all[userId]) {
+    all[userId] = defaultUser(username);
+    saveAll(all);
+    return all[userId];
+  }
+  if (username && all[userId].username !== username) {
+    all[userId].username = username;
+    saveAll(all);
+  }
+  return all[userId];
+}
+
+const MAX_CONFESSIONS = 15;
+
+/**
+ * File a confession on a user's record (self-confession or about them).
+ * Returns the new confession id.
+ */
+export function addConfession(targetUserId, targetUsername, {
+  confessorId,
+  confessorName,
+  text,
+  aboutSelf = true,
+}) {
+  const all = loadAll();
+  const user = all[targetUserId] ?? defaultUser(targetUsername);
+  if (!user.confessions) user.confessions = [];
+  const entry = {
+    id: randomUUID(),
+    confessorId,
+    confessorName,
+    text: String(text).slice(0, 500),
+    aboutSelf: Boolean(aboutSelf),
+    createdAt: Date.now(),
+  };
+  user.confessions.push(entry);
+  user.confessions = user.confessions.slice(-MAX_CONFESSIONS);
+  if (targetUsername) user.username = targetUsername;
+  all[targetUserId] = user;
+  saveAll(all);
+  console.log(`[michael] confession filed | target=${targetUserId} | by=${confessorId} | aboutSelf=${aboutSelf}`);
+  return entry.id;
+}
+
+/** Recent confessions for witness dossiers (newest first). */
+export function getRecentConfessions(userId, limit = 3) {
+  const user = loadUserMemory(userId);
+  return [...(user.confessions ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
 }
 
 /**
@@ -157,7 +212,6 @@ const LANG_SPECS = [
   { code: 'es', displayName: 'Spanish', promptName: 'Spanish', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(spaans|spanish|español|espanol|spreek\s+spaans)\b/i },
   { code: 'it', displayName: 'Italian', promptName: 'Italian', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(italiaans|italian|italiano|spreek\s+italiaans)\b/i },
   { code: 'pt', displayName: 'Portuguese', promptName: 'Portuguese', signOffHint: 'End with 2 to 6 dots followed by Michael in Latin script.', re: /\b(portugees|portuguese|português|portugues)\b/i },
-  { code: 'ar', displayName: 'Arabic', promptName: 'Arabic', signOffHint: 'End with 2 to 6 dots followed by ميخائيل (Michael in Arabic script).', re: /\b(arabisch|arabic|بالعربية|in\s+het\s+arabisch)\b/i },
   { code: 'ja', displayName: 'Japanese', promptName: 'Japanese', signOffHint: 'End with 2 to 6 dots followed by ミカエル or Michael in katakana.', re: /\b(japans|japanese|日本語|nihongo)\b/i },
   { code: 'ru', displayName: 'Russian', promptName: 'Russian', signOffHint: 'End with 2 to 6 dots followed by Михаил or Michael in Cyrillic.', re: /\b(russisch|russian|по-русски|rus(sisch)?)\b/i },
 ];
@@ -202,8 +256,6 @@ export function userSpeaksUnlockedLanguage(perm, userInput) {
       return /\b(che|come|però|perché|grazie|ciao|buongiorno|questo|quello|sono|non |molto)\b/i.test(s) || /\bper\s+favore\b/i.test(s);
     case 'pt':
       return /\b(você|voces|obrigado|obrigada|como|por\s+favor|olá|não|muito|mais|vocês|está)\b/i.test(s);
-    case 'ar':
-      return /[\u0600-\u06FF]/.test(s);
     case 'ja':
       return /[\u3040-\u30ff\u4e00-\u9fff]/.test(s);
     case 'ru':
@@ -309,12 +361,12 @@ export function addUnfinishedBusiness(userId, {
   channelId = null,
 }) {
   const all = loadAll();
-  if (!all[userId]) return; // skip unknown users
+  if (!all[userId]) return null; // skip unknown users
   const user = all[userId];
   if (!user.unfinishedBusiness) user.unfinishedBusiness = [];
-  if (user.unfinishedBusiness.length >= MAX_UNFINISHED) return; // don't pile on
+  if (user.unfinishedBusiness.length >= MAX_UNFINISHED) return null; // don't pile on
 
-  user.unfinishedBusiness.push({
+  const item = {
     id:              randomUUID(),
     prompt:          String(prompt).slice(0, 120),
     reason,
@@ -323,11 +375,13 @@ export function addUnfinishedBusiness(userId, {
     lastMentionedAt: null,
     messageId,
     channelId,
-  });
+  };
+  user.unfinishedBusiness.push(item);
 
   all[userId] = user;
   saveAll(all);
   console.log(`[michael] unfinished-business | user=${userId} | sev=${severity} | ${String(reason).slice(0, 60)}`);
+  return item.id;
 }
 
 /**
@@ -452,24 +506,24 @@ function clampStat(n) {
 
 /**
  * Resolve a multilingual character field to a string for the given language.
- * Accepts either old-format strings (returned as-is) or new-format {nl,en,ar} objects.
+ * Accepts either old-format strings (returned as-is) or new-format {nl,en} objects.
  */
 export function resolveField(field, langCode = 'nl') {
   if (!field) return '?';
   if (typeof field === 'string') return field;
-  return field[langCode] ?? field.nl ?? field.en ?? field.ar ?? Object.values(field)[0] ?? '?';
+  const code = langCode === 'ar' ? 'nl' : langCode;
+  return field[code] ?? field.nl ?? field.en ?? Object.values(field)[0] ?? '?';
 }
 
-/** Normalise a raw text field into a {nl, en, ar} object (or preserve existing object). */
+/** Normalise a raw text field into a {nl, en} object (or preserve existing object). */
 function normalizeTextField(raw, fallbacks, maxLen = 100) {
   if (!raw) return { ...fallbacks };
   if (typeof raw === 'string') {
-    // Old string format...  store under nl; other langs will be filled by translation
     return { nl: raw.slice(0, maxLen) };
   }
   if (typeof raw === 'object') {
     const out = {};
-    for (const lang of ['nl', 'en', 'ar']) {
+    for (const lang of ['nl', 'en']) {
       if (raw[lang]) out[lang] = String(raw[lang]).slice(0, maxLen);
     }
     return Object.keys(out).length ? out : { ...fallbacks };
@@ -487,11 +541,11 @@ export function normalizeMichaelCharacter(raw) {
   }
   return {
     archetype: normalizeTextField(raw?.archetype,
-      { nl: 'onbenoemde zwerver', en: 'unnamed wanderer', ar: 'الناسك المجهول' }, 80),
+      { nl: 'onbenoemde zwerver', en: 'unnamed wanderer' }, 80),
     lineage:   normalizeTextField(raw?.lineage,
-      { nl: 'gewone mens', en: 'ordinary human', ar: 'إنسان عادي' }, 80),
+      { nl: 'gewone mens', en: 'ordinary human' }, 80),
     title:     normalizeTextField(raw?.title,
-      { nl: 'zonder erkenbare titel', en: 'of unrecognised title', ar: 'بلا لقب معترَف به' }, 120),
+      { nl: 'zonder erkenbare titel', en: 'of unrecognised title' }, 120),
     stats,
     assignedAt: typeof raw?.assignedAt === 'number' ? raw.assignedAt : now,
     lastUpdatedAt: now,

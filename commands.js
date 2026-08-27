@@ -47,8 +47,8 @@ const CHALLENGE_COMMAND = {
 const TREKKAART_COMMAND = {
   name: 'trekkaart',
   description: 'Ontvang een wijsheid van Aartsengel Michaël',
-  name_localizations: { 'en-US': 'drawcard', 'en-GB': 'drawcard', ar: 'بطاقة-حكمة' },
-  description_localizations: { 'en-US': 'Receive a wisdom from Archangel Michael', 'en-GB': 'Receive a wisdom from Archangel Michael', ar: 'احصل على حكمة من الملاك ميخائيل' },
+  name_localizations: { 'en-US': 'drawcard', 'en-GB': 'drawcard' },
+  description_localizations: { 'en-US': 'Receive a wisdom from Archangel Michael', 'en-GB': 'Receive a wisdom from Archangel Michael' },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -57,15 +57,15 @@ const TREKKAART_COMMAND = {
 const AURASCAN_COMMAND = {
   name: 'aurascan',
   description: 'Ontvang een persoonlijke aura-lezing van Michaël',
-  name_localizations: { 'en-US': 'aurascan', 'en-GB': 'aurascan', ar: 'مسح-الأورا' },
-  description_localizations: { 'en-US': 'Receive a personal aura reading from Michael', 'en-GB': 'Receive a personal aura reading from Michael', ar: 'احصل على قراءة أورا شخصية من ميخائيل' },
+  name_localizations: { 'en-US': 'aurascan', 'en-GB': 'aurascan' },
+  description_localizations: { 'en-US': 'Receive a personal aura reading from Michael', 'en-GB': 'Receive a personal aura reading from Michael' },
   options: [
     {
       type: 3,
       name: 'bericht',
       description: 'Vertel iets over jezelf',
-      name_localizations: { 'en-US': 'message', 'en-GB': 'message', ar: 'رسالة' },
-      description_localizations: { 'en-US': 'Tell something about yourself', 'en-GB': 'Tell something about yourself', ar: 'أخبر شيئاً عن نفسك' },
+      name_localizations: { 'en-US': 'message', 'en-GB': 'message' },
+      description_localizations: { 'en-US': 'Tell something about yourself', 'en-GB': 'Tell something about yourself' },
       required: true,
     },
   ],
@@ -77,8 +77,8 @@ const AURASCAN_COMMAND = {
 const UITVERKORENE_COMMAND = {
   name: 'uitverkorene',
   description: 'Michaël kiest een nieuwe uitverkorene in de server',
-  name_localizations: { 'en-US': 'chosenone', 'en-GB': 'chosenone', ar: 'المختار' },
-  description_localizations: { 'en-US': 'Michael chooses a new chosen one in the server', 'en-GB': 'Michael chooses a new chosen one in the server', ar: 'يختار ميخائيل مختاراً جديداً في الخادم' },
+  name_localizations: { 'en-US': 'chosenone', 'en-GB': 'chosenone' },
+  description_localizations: { 'en-US': 'Michael chooses a new chosen one in the server', 'en-GB': 'Michael chooses a new chosen one in the server' },
   type: 1,
   integration_types: [0],
   contexts: [0],
@@ -87,8 +87,8 @@ const UITVERKORENE_COMMAND = {
 const ANTICHRIST_COMMAND = {
   name: 'antichrist',
   description: 'Michaël wijst de antichrist aan. ... voor 24 uur geweigerd',
-  name_localizations: { 'en-US': 'antichrist', 'en-GB': 'antichrist', ar: 'الدجال' },
-  description_localizations: { 'en-US': 'Michael designates the antichrist. Refused for 24 hours.', 'en-GB': 'Michael designates the antichrist. Refused for 24 hours.', ar: 'يعيِّن ميخائيل الدجال. مرفوض لمدة 24 ساعة.' },
+  name_localizations: { 'en-US': 'antichrist', 'en-GB': 'antichrist' },
+  description_localizations: { 'en-US': 'Michael designates the antichrist. Refused for 24 hours.', 'en-GB': 'Michael designates the antichrist. Refused for 24 hours.' },
   type: 1,
   integration_types: [0],
   contexts: [0],
@@ -97,8 +97,8 @@ const ANTICHRIST_COMMAND = {
 const DATEER_COMMAND = {
   name: 'dateer',
   description: 'Ga op date met Aartsengel Michaël',
-  name_localizations: { 'en-US': 'dateangel', 'en-GB': 'dateangel', ar: 'موعد-غرامي' },
-  description_localizations: { 'en-US': 'Go on a date with Archangel Michael', 'en-GB': 'Go on a date with Archangel Michael', ar: 'اذهب في موعد غرامي مع الملاك ميخائيل' },
+  name_localizations: { 'en-US': 'dateangel', 'en-GB': 'dateangel' },
+  description_localizations: { 'en-US': 'Go on a date with Archangel Michael', 'en-GB': 'Go on a date with Archangel Michael' },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -107,15 +107,15 @@ const DATEER_COMMAND = {
 const PRAATMETMICHAEL_COMMAND = {
   name: 'chat',
   description: 'Praat met Michael en ontvang twijfelachtig spiritueel advies',
-  name_localizations: { 'en-US': 'chat', 'en-GB': 'chat', ar: 'حوار' },
-  description_localizations: { 'en-US': 'Talk to Michael and receive dubious spiritual advice', 'en-GB': 'Talk to Michael and receive dubious spiritual advice', ar: 'تحدَّث مع امرئ القيس واحصل على حكمة مشكوك فيها' },
+  name_localizations: { 'en-US': 'chat', 'en-GB': 'chat' },
+  description_localizations: { 'en-US': 'Talk to Michael and receive dubious spiritual advice', 'en-GB': 'Talk to Michael and receive dubious spiritual advice' },
   options: [
     {
       type: 3,
       name: 'bericht',
       description: 'Wat wil je tegen Michael zeggen?',
-      name_localizations: { 'en-US': 'message', 'en-GB': 'message', ar: 'رسالة' },
-      description_localizations: { 'en-US': 'What do you want to say?', 'en-GB': 'What do you want to say?', ar: 'ماذا تريد أن تقول؟' },
+      name_localizations: { 'en-US': 'message', 'en-GB': 'message' },
+      description_localizations: { 'en-US': 'What do you want to say?', 'en-GB': 'What do you want to say?' },
       required: true,
     },
   ],
@@ -127,19 +127,18 @@ const PRAATMETMICHAEL_COMMAND = {
 const BABYCHAT_COMMAND = {
   name: 'babychat',
   description: 'Michael antwoordt als peuter; 20% kans dat hij woedend wordt',
-  name_localizations: { 'en-US': 'babychat', 'en-GB': 'babychat', ar: 'دردشة-طفل' },
+  name_localizations: { 'en-US': 'babychat', 'en-GB': 'babychat' },
   description_localizations: {
     'en-US': 'Michael answers like a toddler; 20% chance he snaps and demotes you',
     'en-GB': 'Michael answers like a toddler; 20% chance he snaps and demotes you',
-    ar: 'ميخائيل يردّ كطفل صغير؛ 20% احتمال أن ينفجر ويخفضك',
   },
   options: [
     {
       type: 3,
       name: 'bericht',
       description: 'Wat zeg je tegen baby-Michael?',
-      name_localizations: { 'en-US': 'message', 'en-GB': 'message', ar: 'رسالة' },
-      description_localizations: { 'en-US': 'What do you say to baby Michael?', 'en-GB': 'What do you say to baby Michael?', ar: 'ماذا تقول لميخائيل الطفل؟' },
+      name_localizations: { 'en-US': 'message', 'en-GB': 'message' },
+      description_localizations: { 'en-US': 'What do you say to baby Michael?', 'en-GB': 'What do you say to baby Michael?' },
       required: true,
     },
   ],
@@ -151,8 +150,8 @@ const BABYCHAT_COMMAND = {
 const VIBECHECK_COMMAND = {
   name: 'vibecheck',
   description: 'Wat vindt Michaël eigenlijk van jou?',
-  name_localizations: { 'en-US': 'vibecheck', 'en-GB': 'vibecheck', ar: 'فحص-الطاقة' },
-  description_localizations: { 'en-US': "What does Michael actually think of you?", 'en-GB': "What does Michael actually think of you?", ar: 'ماذا يعتقد ميخائيل عنك في الواقع؟' },
+  name_localizations: { 'en-US': 'vibecheck', 'en-GB': 'vibecheck' },
+  description_localizations: { 'en-US': "What does Michael actually think of you?", 'en-GB': "What does Michael actually think of you?" },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -161,8 +160,8 @@ const VIBECHECK_COMMAND = {
 const COSMISCHESTATUS_COMMAND = {
   name: 'cosmischestatus',
   description: 'Wie draagt het veld op dit moment? Antichrist en uitverkorene.',
-  name_localizations: { 'en-US': 'cosmicstatus', 'en-GB': 'cosmicstatus', ar: 'الحالة-الكونية' },
-  description_localizations: { 'en-US': 'Who holds the field right now? Antichrist and chosen one.', 'en-GB': 'Who holds the field right now? Antichrist and chosen one.', ar: 'من يحمل الحقل الآن؟ الدجال والمختار.' },
+  name_localizations: { 'en-US': 'cosmicstatus', 'en-GB': 'cosmicstatus' },
+  description_localizations: { 'en-US': 'Who holds the field right now? Antichrist and chosen one.', 'en-GB': 'Who holds the field right now? Antichrist and chosen one.' },
   type: 1,
   integration_types: [0],
   contexts: [0],
@@ -171,8 +170,8 @@ const COSMISCHESTATUS_COMMAND = {
 const MICHAELHUMEUR_COMMAND = {
   name: 'michaelhumeur',
   description: 'Hoe voelt Michael zich tegenover jou op dit moment?',
-  name_localizations: { 'en-US': 'michaelmood', 'en-GB': 'michaelmood', ar: 'مزاج-ميخائيل' },
-  description_localizations: { 'en-US': "How does Michael feel toward you right now?", 'en-GB': "How does Michael feel toward you right now?", ar: 'كيف يشعر ميخائيل تجاهك الآن؟' },
+  name_localizations: { 'en-US': 'michaelmood', 'en-GB': 'michaelmood' },
+  description_localizations: { 'en-US': "How does Michael feel toward you right now?", 'en-GB': "How does Michael feel toward you right now?" },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -181,8 +180,8 @@ const MICHAELHUMEUR_COMMAND = {
 const VERGEEFMIJ_COMMAND = {
   name: 'vergeefmij',
   description: 'Bied je excuses aan bij Michael en hoop op zijn genade.',
-  name_localizations: { 'en-US': 'forgiveme', 'en-GB': 'forgiveme', ar: 'اغفر-لي' },
-  description_localizations: { 'en-US': 'Apologise to Michael and hope for his mercy.', 'en-GB': 'Apologise to Michael and hope for his mercy.', ar: 'اعتذر لميخائيل وأمل في رحمته.' },
+  name_localizations: { 'en-US': 'forgiveme', 'en-GB': 'forgiveme' },
+  description_localizations: { 'en-US': 'Apologise to Michael and hope for his mercy.', 'en-GB': 'Apologise to Michael and hope for his mercy.' },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -191,15 +190,15 @@ const VERGEEFMIJ_COMMAND = {
 const AURACHECK_COMMAND = {
   name: 'auracheck',
   description: 'Laat Michael de aura lezen van een andere gebruiker.',
-  name_localizations: { 'en-US': 'auracheck', 'en-GB': 'auracheck', ar: 'فحص-أورا' },
-  description_localizations: { 'en-US': "Let Michael read another user's aura.", 'en-GB': "Let Michael read another user's aura.", ar: 'دع ميخائيل يقرأ أورا مستخدم آخر.' },
+  name_localizations: { 'en-US': 'auracheck', 'en-GB': 'auracheck' },
+  description_localizations: { 'en-US': "Let Michael read another user's aura.", 'en-GB': "Let Michael read another user's aura." },
   options: [
     {
       type: 6,
       name: 'gebruiker',
       description: 'De gebruiker wiens aura Michael moet lezen.',
-      name_localizations: { 'en-US': 'user', 'en-GB': 'user', ar: 'مستخدم' },
-      description_localizations: { 'en-US': 'The user whose aura Michael should read.', 'en-GB': 'The user whose aura Michael should read.', ar: 'المستخدم الذي يجب على ميخائيل قراءة أوراه.' },
+      name_localizations: { 'en-US': 'user', 'en-GB': 'user' },
+      description_localizations: { 'en-US': 'The user whose aura Michael should read.', 'en-GB': 'The user whose aura Michael should read.' },
       required: true,
     },
   ],
@@ -211,8 +210,8 @@ const AURACHECK_COMMAND = {
 const MIJNROL_COMMAND = {
   name: 'mijnrol',
   description: 'Bekijk de rol die Michaël voor je heeft vastgesteld in zijn kosmische veldcampagne.',
-  name_localizations: { 'en-US': 'mycharacter', 'en-GB': 'mycharacter', ar: 'شخصيتي' },
-  description_localizations: { 'en-US': "View the role Michael has assigned you in his cosmic field campaign.", 'en-GB': "View the role Michael has assigned you in his cosmic field campaign.", ar: 'اعرض الدور الذي عيَّنه ميخائيل لك في حملته الكونية.' },
+  name_localizations: { 'en-US': 'mycharacter', 'en-GB': 'mycharacter' },
+  description_localizations: { 'en-US': "View the role Michael has assigned you in his cosmic field campaign.", 'en-GB': "View the role Michael has assigned you in his cosmic field campaign." },
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -222,13 +221,12 @@ const ONDERHANDELEN_COMMAND = {
   name: 'onderhandelen',
   description:
     'Smek vóór het register: kies archetype, afstamming of titel, spreek je wens, waag de worp.',
-  name_localizations: { 'en-US': 'negotiate', 'en-GB': 'negotiate', ar: 'تفاوض' },
+  name_localizations: { 'en-US': 'negotiate', 'en-GB': 'negotiate' },
   description_localizations: {
     'en-US':
       'Grovel before the register: pick archetype, lineage, or title, state your wish, roll.',
     'en-GB':
       'Grovel before the register: pick archetype, lineage, or title, state your wish, roll.',
-    ar: 'توسَّل واستذل قبل أن يُفتَح باب التفاوض...  اختر النمط أو السلالة أو اللقب، ثم قول مرادك وارمِ.',
   },
   type: 1,
   integration_types: [0, 1],
@@ -238,43 +236,40 @@ const ONDERHANDELEN_COMMAND = {
 const FEEDBACK_COMMAND = {
   name: 'feedback',
   description: 'Stuur bug, idee of opmerking naar de maker van Michael (privé doorgestuurd).',
-  name_localizations: { 'en-US': 'feedback', 'en-GB': 'feedback', ar: 'ملاحظات' },
+  name_localizations: { 'en-US': 'feedback', 'en-GB': 'feedback' },
   description_localizations: {
     'en-US': "Send a bug, idea, or note to Michael's maker (forwarded privately).",
     'en-GB': "Send a bug, idea, or note to Michael's maker (forwarded privately).",
-    ar: 'أرسل تقريراً أو فكرة أو ملاحظة لصانع ميخائيل (يُمرَّر سراً).',
   },
   options: [
     {
       type: 3,
       name: 'soort',
       description: 'Bug, feature of iets anders?',
-      name_localizations: { 'en-US': 'kind', 'en-GB': 'kind', ar: 'النوع' },
+      name_localizations: { 'en-US': 'kind', 'en-GB': 'kind' },
       description_localizations: {
         'en-US': 'Bug, feature, or something else?',
         'en-GB': 'Bug, feature, or something else?',
-        ar: 'خلل، ميزة، أو شيء آخر؟',
       },
       required: true,
       choices: [
-        { name: 'Bug', value: 'bug', name_localizations: { 'en-US': 'Bug', 'en-GB': 'Bug', ar: 'خطأ' } },
+        { name: 'Bug', value: 'bug', name_localizations: { 'en-US': 'Bug', 'en-GB': 'Bug' } },
         {
           name: 'Feature / idee',
           value: 'feature',
-          name_localizations: { 'en-US': 'Feature / idea', 'en-GB': 'Feature / idea', ar: 'ميزة / فكرة' },
+          name_localizations: { 'en-US': 'Feature / idea', 'en-GB': 'Feature / idea' },
         },
-        { name: 'Anders', value: 'other', name_localizations: { 'en-US': 'Other', 'en-GB': 'Other', ar: 'آخر' } },
+        { name: 'Anders', value: 'other', name_localizations: { 'en-US': 'Other', 'en-GB': 'Other' } },
       ],
     },
     {
       type: 3,
       name: 'bericht',
       description: 'Jouw bericht aan de maker',
-      name_localizations: { 'en-US': 'message', 'en-GB': 'message', ar: 'النص' },
+      name_localizations: { 'en-US': 'message', 'en-GB': 'message' },
       description_localizations: {
         'en-US': 'Your message to the maker',
         'en-GB': 'Your message to the maker',
-        ar: 'نصك لصانع البوت',
       },
       required: true,
     },
@@ -288,11 +283,10 @@ const FEEDBACK_COMMAND = {
 const MICHAELTAAL_COMMAND = {
   name: 'michaeltaal',
   description: 'Set the language Michael Bot uses on this server / Stel de taal in van Michael Bot',
-  name_localizations: { 'en-US': 'setlanguage', 'en-GB': 'setlanguage', ar: 'لغة-ميخائيل' },
+  name_localizations: { 'en-US': 'setlanguage', 'en-GB': 'setlanguage' },
   description_localizations: {
     'en-US': 'Set the language Michael Bot uses on this server (or your personal language in DMs)',
     'en-GB': 'Set the language Michael Bot uses on this server (or your personal language in DMs)',
-    ar: 'اضبط لغة الخادم...  أو لغتك الشخصية في الرسائل الخاصة',
   },
   type: 1,
   integration_types: [0, 1],
@@ -302,22 +296,20 @@ const MICHAELTAAL_COMMAND = {
 const LISTENTOMICHAEL_COMMAND = {
   name: 'listentomichael',
   description: 'Vraag Michael om advies; hij antwoordt in een spraakbericht',
-  name_localizations: { 'en-US': 'listentomichael', 'en-GB': 'listentomichael', ar: 'استمع-لقيس' },
+  name_localizations: { 'en-US': 'listentomichael', 'en-GB': 'listentomichael' },
   description_localizations: {
     'en-US': 'Ask Michael for advice; he answers in a voice message',
     'en-GB': 'Ask Michael for advice; he answers in a voice message',
-    ar: 'اطلب نصيحة امرئ القيس؛ يجيبك بصوت',
   },
   options: [
     {
       type: 3,
       name: 'advies',
       description: 'Waar wil je advies over?',
-      name_localizations: { 'en-US': 'advice', 'en-GB': 'advice', ar: 'نصيحة' },
+      name_localizations: { 'en-US': 'advice', 'en-GB': 'advice' },
       description_localizations: {
         'en-US': 'What do you want advice about?',
         'en-GB': 'What do you want advice about?',
-        ar: 'عن أي شيء تريد النصيحة؟',
       },
       required: true,
     },
@@ -330,24 +322,85 @@ const LISTENTOMICHAEL_COMMAND = {
 const IMAGINE_COMMAND = {
   name: 'imagine',
   description: 'Laat Michael een beeld maken van jouw prompt (hij voegt zijn eigen oordeel toe)',
-  name_localizations: { 'en-US': 'imagine', 'en-GB': 'imagine', ar: 'تخيل-صورة' },
+  name_localizations: { 'en-US': 'imagine', 'en-GB': 'imagine' },
   description_localizations: {
     'en-US': 'Have Michael generate an image from your prompt (he adds his own judgement)',
     'en-GB': 'Have Michael generate an image from your prompt (he adds his own judgement)',
-    ar: 'دع امرأ القيس يولّد صورة من طلبك (ويضيف حكمه)',
   },
   options: [
     {
       type: 3,
       name: 'beeld',
       description: 'Wat moet Michael visualiseren?',
-      name_localizations: { 'en-US': 'image', 'en-GB': 'image', ar: 'صورة' },
+      name_localizations: { 'en-US': 'image', 'en-GB': 'image' },
       description_localizations: {
         'en-US': 'What should Michael visualise?',
         'en-GB': 'What should Michael visualise?',
-        ar: 'ماذا يجب أن يتصوّر؟',
       },
       required: true,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const GETUIGENIS_COMMAND = {
+  name: 'getuigenis',
+  description: 'Laat Michael getuigen over jouw ziel — of die van een ander',
+  name_localizations: { 'en-US': 'witness', 'en-GB': 'witness' },
+  description_localizations: {
+    'en-US': 'Let Michael bear witness on your soul — or someone else\'s',
+    'en-GB': 'Let Michael bear witness on your soul — or someone else\'s',
+  },
+  options: [
+    {
+      type: 6,
+      name: 'gebruiker',
+      description: 'Over wie moet Michael getuigen? (standaard: jij)',
+      name_localizations: { 'en-US': 'user', 'en-GB': 'user' },
+      description_localizations: {
+        'en-US': 'Who should Michael witness against? (default: you)',
+        'en-GB': 'Who should Michael witness against? (default: you)',
+      },
+      required: false,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const BIECHT_COMMAND = {
+  name: 'biecht',
+  description: 'Biecht in het register — alleen jij ziet Michaels antwoord',
+  name_localizations: { 'en-US': 'confess', 'en-GB': 'confess' },
+  description_localizations: {
+    'en-US': 'Confess to the register — only you see Michael\'s reply',
+    'en-GB': 'Confess to the register — only you see Michael\'s reply',
+  },
+  options: [
+    {
+      type: 3,
+      name: 'biecht',
+      description: 'Wat leg je in het register?',
+      name_localizations: { 'en-US': 'confession', 'en-GB': 'confession' },
+      description_localizations: {
+        'en-US': 'What do you file in the register?',
+        'en-GB': 'What do you file in the register?',
+      },
+      required: true,
+    },
+    {
+      type: 6,
+      name: 'gebruiker',
+      description: 'Over wie is deze biecht? (standaard: over jezelf)',
+      name_localizations: { 'en-US': 'user', 'en-GB': 'user' },
+      description_localizations: {
+        'en-US': 'Who is this confession about? (default: yourself)',
+        'en-GB': 'Who is this confession about? (default: yourself)',
+      },
+      required: false,
     },
   ],
   type: 1,
@@ -358,18 +411,30 @@ const IMAGINE_COMMAND = {
 const SWITCHOFLIFE_COMMAND = {
   name: 'switchoflife',
   description: 'Zet Michaël aan of uit in dit kanaal of op deze server',
-  name_localizations: { 'en-US': 'switchoflife', 'en-GB': 'switchoflife', ar: 'مفتاح-الحياة' },
+  name_localizations: { 'en-US': 'switchoflife', 'en-GB': 'switchoflife' },
   description_localizations: {
     'en-US': 'Turn Michael on or off in this channel or for the whole server',
     'en-GB': 'Turn Michael on or off in this channel or for the whole server',
-    ar: 'شغّل أو أوقف ميخائيل في هذه القناة أو على الخادم كاملاً',
   },
   type: 1,
   integration_types: [0],
   contexts: [0],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, FEEDBACK_COMMAND, MICHAELTAAL_COMMAND, IMAGINE_COMMAND, LISTENTOMICHAEL_COMMAND, SWITCHOFLIFE_COMMAND];
+const HOROSCOPE_COMMAND = {
+  name: 'horoscoop',
+  description: 'Michael leest het veld voor vandaag — met voorspellingen uit het register',
+  name_localizations: { 'en-US': 'horoscope', 'en-GB': 'horoscope' },
+  description_localizations: {
+    'en-US': "Michael reads today's field — predictions drawn from the register",
+    'en-GB': "Michael reads today's field — predictions drawn from the register",
+  },
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, TREKKAART_COMMAND, AURASCAN_COMMAND, UITVERKORENE_COMMAND, ANTICHRIST_COMMAND, DATEER_COMMAND, PRAATMETMICHAEL_COMMAND, BABYCHAT_COMMAND, VIBECHECK_COMMAND, COSMISCHESTATUS_COMMAND, MICHAELHUMEUR_COMMAND, VERGEEFMIJ_COMMAND, MIJNROL_COMMAND, ONDERHANDELEN_COMMAND, FEEDBACK_COMMAND, MICHAELTAAL_COMMAND, IMAGINE_COMMAND, LISTENTOMICHAEL_COMMAND, GETUIGENIS_COMMAND, BIECHT_COMMAND, HOROSCOPE_COMMAND, SWITCHOFLIFE_COMMAND];
 
 // Register commands — guild IDs update instantly; global can take up to ~1 hour.
 const guildIds = process.env.GUILD_IDS?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];

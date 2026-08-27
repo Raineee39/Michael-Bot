@@ -20,9 +20,9 @@ function saveAll(data) {
   writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
-const VALID_LANG_CODES = new Set(['nl', 'en', 'ar']);
+const VALID_LANG_CODES = new Set(['nl', 'en']);
 
-/** Returns the language code ('nl' | 'en' | 'ar') for a guild. Defaults to 'nl'. */
+/** Returns the language code ('nl' | 'en') for a guild. Defaults to 'nl'. */
 export function getGuildLanguage(guildId) {
   if (!guildId) return 'nl';
   const all = loadAll();

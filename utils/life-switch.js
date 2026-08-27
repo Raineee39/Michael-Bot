@@ -27,17 +27,22 @@ function channelHasOverride(channels, channelId) {
   return channelId != null && Object.prototype.hasOwnProperty.call(channels, channelId);
 }
 
-/** Is Michael's proactive life (name replies, snark, quiet queue) on here? Default: off. */
+/** Is Michael's proactive life (name replies, snark) on here? Default: off. */
 export function isMichaelLifeActive(guildId, channelId) {
   if (!guildId) return false;
   const { guilds, channels } = loadAll();
   if (channelHasOverride(channels, channelId)) return Boolean(channels[channelId]);
-  return Boolean(guilds[guildId]);
+  if (Object.prototype.hasOwnProperty.call(guilds, guildId)) return Boolean(guilds[guildId]);
+  // Legacy global env (pre-/switchoflife) — honoured until a guild is toggled explicitly.
+  return process.env.MICHAEL_ALLOW_UNPROMPTED_CHANNEL_POSTS === 'true';
 }
 
 export function getLifeSwitchStatus(guildId, channelId) {
   const { guilds, channels } = loadAll();
-  const guildOn = Boolean(guilds[guildId]);
+  const guildExplicit = Object.prototype.hasOwnProperty.call(guilds, guildId);
+  const guildOn = guildExplicit
+    ? Boolean(guilds[guildId])
+    : process.env.MICHAEL_ALLOW_UNPROMPTED_CHANNEL_POSTS === 'true';
   const channelExplicit = channelHasOverride(channels, channelId);
   const channelOn = channelExplicit ? Boolean(channels[channelId]) : guildOn;
   return {

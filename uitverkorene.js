@@ -13,75 +13,31 @@ const BOODSCHAPPEN = [
   'De hemel heeft gesproken     de boodschap is jouw naam     en een zeker gevoel van onvermijdelijkheid..Michael',
 ];
 
-// ─── GIF query pools...  Dutch / English (Archangel Michael themed) ────────────
-
 const GIF_QUERIES = [
-  'archangel michael painting',
-  'saint michael warrior',
-  'heavenly angel glowing',
-  'angel wings divine light',
-  'holy warrior armor heaven',
-  'renaissance angel art',
-  'divine judgment clouds',
-  'angel sword heaven',
-  'celestial light dramatic',
-  'biblical lightning heaven',
-  'angel descending light',
-  'holy fire heaven',
+  'lightning storm dramatic',
+  'chosen one destiny',
+  'angel wings sky',
+  'cosmic prophecy',
+  'divine eye',
 ];
 
 const ANTICHRIST_GIF_QUERIES = [
-  'fallen angel darkness',
-  'biblical apocalypse fire',
-  'devil horns dramatic',
-  'hellfire brimstone',
-  'dark angel fallen wings',
-  'beast revelation biblical',
-  'inferno dante painting',
+  'devil fire',
+  'dark angel',
+  'hell flames',
 ];
 
 const MICHAEL_MISC_GIF_QUERIES = [
-  'cosmic nebula dramatic',
-  'heaven gates opening light',
-  'divine light rays cathedral',
-  'thunderstorm dramatic sky',
-  'warrior of god dramatic',
-  'biblical clouds dramatic',
-  'ancient cathedral light beam',
-  'sword of light heaven',
+  'archangel',
+  'judgement day',
+  'halo glow',
 ];
 
-// ─── GIF query pools...  Arabic (Imru' al-Qais / Jahili poet themed) ────────────
-
-const GIF_QUERIES_AR = [
-  'arabic calligraphy art',
-  'desert sunset dramatic',
-  'arabian horse galloping',
-  'ancient manuscript arabic',
-  'desert night stars',
-  'bedouin desert dramatic',
-  'arabian desert wind sand',
-  'classical arabic art painting',
-  'desert oasis dramatic',
-  'poet dramatic nature',
-];
-
-const ANTICHRIST_GIF_QUERIES_AR = [
-  'desert sandstorm dramatic',
-  'arabian thunder storm',
-  'ancient curse dramatic poetry',
-  'dramatic sand dunes storm',
-  'dark arabic calligraphy',
-];
-
-const MICHAEL_MISC_GIF_QUERIES_AR = [
-  'arabic oud music dramatic',
-  'ancient desert wisdom',
-  'dramatic sunset poetry',
-  'arabian night sky stars',
-  'sand dunes wind dramatic',
-  'desert fire dramatic',
-  'ancient scroll poetry',
+const HOROSCOPE_GIF_QUERIES = [
+  'horoscope stars',
+  'zodiac cosmic',
+  'night sky prophecy',
+  'crystal ball mystical',
 ];
 
 function pick(arr) {
@@ -92,18 +48,18 @@ export function getRandomBoodschap() {
   return BOODSCHAPPEN[Math.floor(Math.random() * BOODSCHAPPEN.length)];
 }
 
+/** Giphy search term for horoscope / daily bulletin posts. */
+export function getHoroscopeGifQuery() {
+  return pick(HOROSCOPE_GIF_QUERIES);
+}
+
 /** Giphy search term for the daily uitverkorene announcement. */
 export function getRandomGifQuery(langCode = 'nl') {
-  return pick(langCode === 'ar' ? GIF_QUERIES_AR : GIF_QUERIES);
+  return pick(GIF_QUERIES);
 }
 
 /** Giphy search term for optional GIFs on /chat */
 export function getMichaelOptionalGifQuery(cosmicRole, langCode = 'nl') {
-  if (langCode === 'ar') {
-    if (cosmicRole === 'antichrist') return pick(ANTICHRIST_GIF_QUERIES_AR);
-    if (cosmicRole === 'uitverkorene') return pick(GIF_QUERIES_AR);
-    return pick([...GIF_QUERIES_AR, ...MICHAEL_MISC_GIF_QUERIES_AR]);
-  }
   if (cosmicRole === 'antichrist') return pick(ANTICHRIST_GIF_QUERIES);
   if (cosmicRole === 'uitverkorene') return pick(GIF_QUERIES);
   return pick([...GIF_QUERIES, ...MICHAEL_MISC_GIF_QUERIES]);

@@ -8,6 +8,7 @@ export default {
 
   // ─── Michael character identity ──────────────────────────────────────────────
   identityLine: 'Je bent de aartsengel Michaël.',
+  archangelBaseline: 'Je spreekt ALTIJD als een aartsengel: zeer lage, zware, boze-serieuze toon. Goddelijke autoriteit, kil, dreigend, weinig geduld. Zelfs als je afwezig of kosmisch bent, blijft de ondertoon woedend en oordelend — nooit casual, nooit een vriendelijke chatbot.',
   signOff: 'Michael',
 
   // ─── Mood descriptions (fed directly into LLM prompt) ───────────────────────
@@ -143,11 +144,10 @@ Onderstaande kaarten tonen de STIJL...  kopieer nooit de exacte zinnen, maar voe
   languageDefaultBlock: `
 Talen:
 - Schrijf ALTIJD in het Nederlands
-- Voeg NOOIT spontaan woorden uit een andere taal toe...  ook geen Arabisch, Japans, of iets anders
+- Voeg NOOIT spontaan woorden uit een andere taal toe...  ook geen Japans, of iets anders
 - ENIGE uitzondering: als de gebruiker expliciet vraagt om een specifieke taal (bijv. "spreek Engels"), gebruik dan 1 à 2 woorden of een korte zin in PRECIES die taal...  niet een andere...  en schrijf je naam af in het schrift van die taal
 - De rest van de zin blijft altijd Nederlands
 - Als de gebruiker vraagt om Engels: gebruik 1 Engelse zin of zin, sluit af met "....Michael" in Latijns schrift
-- Als de gebruiker vraagt om Arabisch: gebruik 1 Arabische zin of zin, sluit af met "ميخائيل"
 - Meng NOOIT twee vreemde talen in één antwoord
 `,
 
@@ -176,7 +176,7 @@ Talen...  VERDIENDE MODUS (alleen actief omdat de gebruiker nu in het ${perm.pro
     outputInstruction: 'Schrijf in het Nederlands. Gebruik HOOFDLETTERS voor benadrukte werkwoorden (WEES, ZIE, LUISTER, VERTROUW). Gebruik formeel "U"/"u". Ellipsen en vreemde spaties. Geen em-dash.',
     signOff: 'Sluit altijd af met 2 tot 5 puntjes gevolgd door Michael.',
     formalAddress: 'formeel "U"',
-    styleHint: 'ellipsen, vreemde spaties, geen em-dashes, formeel "U"',
+    styleHint: 'aartsengel: laag, boos-serieus, kil; ellipsen, vreemde spaties, geen em-dashes, formeel "U"',
   },
 
   // ─── Character sheet (LLM prompt sections) ──────────────────────────────────
@@ -380,6 +380,10 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     onderhandelenError: 'De registers zijn tijdelijk afgesloten...  probeer het opnieuw....Michael',
     mijnrolError: 'De inschrijvingsregisters zijn op dit moment troebel...  probeer het later....Michael',
     vibecheckError: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael',
+    horoscopeError: 'Het register weigert de sterren te lezen...  probeer later opnieuw....Michael',
+    getuigenisError: 'Het register weigert getuigenis af te leggen...  probeer het later....Michael',
+    biechtError: 'De biechtstoel is gesloten...  probeer het later....Michael',
+    biechtEmpty: 'Een lege biecht telt niet....Michael',
     praatError: 'Er is ruis in het veld…  de verbinding met het universum is tijdelijk verstoord     probeer het later....Michael',
     babychatError: 'Baby-Michaël is in slaap gevallen…  probeer het later....Michael',
     imagineError: 'Het visioen weigerde te materialiseren…  probeer het later....Michael',
@@ -400,17 +404,14 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     michaeltaalSet: {
       nl: '✅ **Michael spreekt nu Nederlands.**\nAlle reacties van Michael zullen voortaan in het Nederlands zijn....Michael',
       en: '✅ **Michael now speaks English.**\nAll Michael responses will be in English from now on....Michael',
-      ar: '✅ **ميخائيل يتحدث الآن بالعربية.**\nستكون جميع ردود ميخائيل باللغة العربية من الآن....ميخائيل',
     },
-    michaeltaalPrompt: 'Kies de taal voor Michael Bot op deze server:\n\n**Dutch**: de standaardtaal\n**English**: Michael speaks English\n**Arabic**: ميخائيل يتحدث العربية',
-    michaeltaalPromptDM: 'Kies jouw persoonlijke taal voor Michael Bot in DMs:\n\n**Dutch**: de standaardtaal\n**English**: Michael speaks English\n**Arabic**: ميخائيل يتحدث العربية',
+    michaeltaalPrompt: 'Kies de taal voor Michael Bot op deze server:\n\n**Dutch**: de standaardtaal\n**English**: Michael speaks English',
+    michaeltaalPromptDM: 'Kies jouw persoonlijke taal voor Michael Bot in DMs:\n\n**Dutch**: de standaardtaal\n**English**: Michael speaks English',
     michaeltaalBtnNl: 'Dutch',
     michaeltaalBtnEn: 'English',
-    michaeltaalBtnAr: 'Arabic',
     michaeltaalSetDM: {
       nl: '✅ **Michael spreekt nu Nederlands met jou in DMs.**...Michael',
       en: '✅ **Michael will now speak English with you in DMs.**...Michael',
-      ar: '✅ **امرؤ القيس سيتحدث معك بالعربية في الرسائل الخاصة.**...امرؤ القيس',
     },
     michaeltaalNoPermission: 'U heeft geen toestemming om de servertaal te wijzigen....Michael',
 
@@ -509,6 +510,15 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     kosmischeRolLabel: '**Kosmische rol**',
   },
 
+  getuigenis: {
+    header: (username) => `📜 **GETUIGENIS OVER ${username}**`,
+    oordeelLabel: '**Oordeel**',
+    moodLabel: '**Humeur**',
+    businessLabel: '**Openstaande grudges**',
+    confessionLabel: '**Biechten in het register**',
+    none: 'geen',
+  },
+
   // ─── Michaelhumeur UI labels ──────────────────────────────────────────────────
   humeur: {
     currentMoodLabel: (mood) => `*Huidige stemming: **${mood}***`,
@@ -586,6 +596,18 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
       'Er wordt van je gevraagd     wat dat is weten wij     jij leert het onderweg..Michael',
       'De hemel heeft gesproken     de boodschap is jouw naam     en een zeker gevoel van onvermijdelijkheid..Michael',
     ],
+  },
+
+  // ─── Horoscope (daily bulletin + /horoscoop) ───────────────────────────────
+  horoscope: {
+    header: '🌙✨🔮✨🌙✨🔮✨🌙',
+    dailyTitle: '# HEMELSE DAGHOROSCOOP',
+    commandTitle: '# HOROSCOOP VAN HET VELD',
+    personalTitle: '# JOUW PERSOONLIJKE HOROSCOOP',
+    dateLine: (date) => `*${date}*`,
+    divider: '───────────────',
+    chosenTitle: '**⚡ UITVERKORENE VAN DE DAG ⚡**',
+    currentChosen: (userId) => `**Huidige uitverkorene:** <@${userId}>`,
   },
 
   // ─── Content: antichrist ─────────────────────────────────────────────────────

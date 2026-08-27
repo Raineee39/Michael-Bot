@@ -21,25 +21,25 @@ const STAT_KEYS = ['aura', 'discipline', 'chaos', 'inzicht', 'volharding'];
 
 /** When the user names a standard lineage, negotiation success must grant it (not a poetic substitute). */
 const LINEAGE_TRILINGUAL = {
-  'half-elf': { nl: 'halfelf', en: 'half-elf', ar: 'نصف إلف' },
-  'half-orc': { nl: 'half-ork', en: 'half-orc', ar: 'نصف أورك' },
-  tiefling: { nl: 'tiefling', en: 'tiefling', ar: 'تيفلينج' },
-  dragonborn: { nl: 'draakgeborene', en: 'dragonborn', ar: 'ولد التنين' },
-  halfling: { nl: 'halfling', en: 'halfling', ar: 'هالفلينج' },
-  aasimar: { nl: 'aasimar', en: 'aasimar', ar: 'آسيمار' },
-  gnome: { nl: 'gnoom', en: 'gnome', ar: 'غوم' },
-  dwarf: { nl: 'dwerg', en: 'dwarf', ar: 'قزم' },
-  orc: { nl: 'ork', en: 'orc', ar: 'أورك' },
-  elf: { nl: 'elf', en: 'elf', ar: 'إلف' },
-  human: { nl: 'mens', en: 'human', ar: 'إنسان' },
-  genasi: { nl: 'genasi', en: 'genasi', ar: 'جيناسي' },
-  tabaxi: { nl: 'tabaxi', en: 'tabaxi', ar: 'تاباكسي' },
-  firbolg: { nl: 'firbolg', en: 'firbolg', ar: 'فيربولغ' },
-  goliath: { nl: 'goliath', en: 'goliath', ar: 'جولياث' },
-  triton: { nl: 'triton', en: 'triton', ar: 'تريتون' },
-  warforged: { nl: 'warforged', en: 'warforged', ar: 'مُصْنَع حَيّ' },
-  lizardfolk: { nl: 'hagedismensen', en: 'lizardfolk', ar: 'سحاليّون' },
-  kenku: { nl: 'kenku', en: 'kenku', ar: 'كنكو' },
+  'half-elf': { nl: 'halfelf', en: 'half-elf' },
+  'half-orc': { nl: 'half-ork', en: 'half-orc' },
+  tiefling: { nl: 'tiefling', en: 'tiefling' },
+  dragonborn: { nl: 'draakgeborene', en: 'dragonborn' },
+  halfling: { nl: 'halfling', en: 'halfling' },
+  aasimar: { nl: 'aasimar', en: 'aasimar' },
+  gnome: { nl: 'gnoom', en: 'gnome' },
+  dwarf: { nl: 'dwerg', en: 'dwarf' },
+  orc: { nl: 'ork', en: 'orc' },
+  elf: { nl: 'elf', en: 'elf' },
+  human: { nl: 'mens', en: 'human' },
+  genasi: { nl: 'genasi', en: 'genasi' },
+  tabaxi: { nl: 'tabaxi', en: 'tabaxi' },
+  firbolg: { nl: 'firbolg', en: 'firbolg' },
+  goliath: { nl: 'goliath', en: 'goliath' },
+  triton: { nl: 'triton', en: 'triton' },
+  warforged: { nl: 'warforged', en: 'warforged' },
+  lizardfolk: { nl: 'hagedismensen', en: 'lizardfolk' },
+  kenku: { nl: 'kenku', en: 'kenku' },
 };
 
 /** @returns {keyof typeof LINEAGE_TRILINGUAL | null} */
@@ -88,13 +88,6 @@ const WORSE_FRAGMENTS = {
     '...  the challenger',
     '...  of the unworthy enrolment',
   ],
-  ar: [
-    '...  والسجلات تضيق',
-    '...  امرؤ القيس يُدوِّن العصيان',
-    '...  اللقب مختصَر من الميدان',
-    '...  المُنازِع',
-    '...  التسجيل الناقص',
-  ],
 };
 
 function pick(arr) {
@@ -107,9 +100,9 @@ export async function ensureMichaelCharacter(userId, username, langCode = 'nl') 
   if (mem.michaelCharacter) {
     const titleField = mem.michaelCharacter.title;
     // Heal old-format string titles that accumulated mixed-language fragments.
-    // New-format {nl,en,ar} objects have per-language titles and don't need healing.
+    // New-format {nl,en} objects have per-language titles and don't need healing.
     if (typeof titleField === 'string') {
-      const allFragments = [...WORSE_FRAGMENTS.nl, ...WORSE_FRAGMENTS.en, ...WORSE_FRAGMENTS.ar];
+      const allFragments = [...WORSE_FRAGMENTS.nl, ...WORSE_FRAGMENTS.en, ];
       const seen = new Set();
       let anyDupe = false;
       for (const f of allFragments) {
@@ -182,24 +175,24 @@ function detectRequestKind(verzoek) {
   return null;
 }
 
-/** Get the {nl, en, ar} title object from a character (handles old string format). */
+/** Get the {nl, en} title object from a character (handles old string format). */
 function getTitleObj(character) {
   const t = character.title;
-  if (!t) return { nl: '', en: '', ar: '' };
-  if (typeof t === 'string') return { nl: t, en: t, ar: t };
-  return { nl: t.nl ?? '', en: t.en ?? t.nl ?? '', ar: t.ar ?? t.nl ?? '' };
+  if (!t) return { nl: '', en: '' };
+  if (typeof t === 'string') return { nl: t, en: t };
+  return { nl: t.nl ?? '', en: t.en ?? t.nl ?? '' };
 }
 
 /** Strip all known worse fragments from a title string. */
 function stripWorseFragments(base) {
   let s = base;
-  for (const lang of ['nl', 'en', 'ar']) {
+  for (const lang of ['nl', 'en']) {
     for (const f of WORSE_FRAGMENTS[lang]) s = s.split(f).join('');
   }
   return s.trim();
 }
 
-/** Michael generates a new value for a character field in all 3 languages via LLM. */
+/** Michael generates a new value for a character field in both languages via LLM. */
 async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzoek = '', forcedKind = null) {
   const { generateCharacterFieldChange } = await import('./openai.js');
 
@@ -226,7 +219,6 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
       title: {
         nl: stripWorseFragments(raw.nl),
         en: stripWorseFragments(raw.en),
-        ar: stripWorseFragments(raw.ar),
       },
       stats: character.stats,
     };
@@ -253,14 +245,13 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
   }
 
   if (branch < 0.62) {
-    // Title branch...  LLM generates a new title in all 3 languages
+    // Title branch...  LLM generates a new title in both languages
     // Strip existing worse fragments from each lang's title before passing to LLM
     const raw = getTitleObj(character);
     const cleaned = {
       title: {
         nl: stripWorseFragments(raw.nl),
         en: stripWorseFragments(raw.en),
-        ar: stripWorseFragments(raw.ar),
       },
       stats: character.stats,
     };
@@ -270,7 +261,7 @@ async function applyNegotiationSuccess(userId, character, langCode = 'nl', verzo
   }
 
   if (branch < 0.82) {
-    // Archetype branch...  LLM generates new archetype in all 3 languages
+    // Archetype branch...  LLM generates new archetype in both languages
     const newArchetype = await generateCharacterFieldChange('archetype', { verzoek, characterBefore: character, langCode });
     patchMichaelCharacter(userId, { archetype: newArchetype });
     return { kind: 'archetype', field: 'archetype', newValue: newArchetype };
@@ -305,7 +296,7 @@ async function applyNegotiationFailure(userId, character, langCode = 'nl', verzo
   if (branch === 'title_worse') {
     const titleObj = getTitleObj(character);
     const newTitle = {};
-    for (const lang of ['nl', 'en', 'ar']) {
+    for (const lang of ['nl', 'en']) {
       const worseFragments = WORSE_FRAGMENTS[lang];
       const base = titleObj[lang];
       const available = worseFragments.filter(f => !base.includes(f));
@@ -324,7 +315,6 @@ async function applyNegotiationFailure(userId, character, langCode = 'nl', verzo
       title: {
         nl: stripWorseFragments(raw.nl),
         en: stripWorseFragments(raw.en),
-        ar: stripWorseFragments(raw.ar),
       },
       stats: character.stats,
     };

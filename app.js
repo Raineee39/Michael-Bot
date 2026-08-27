@@ -24,10 +24,10 @@ import {
 } from './utils.js';
 import { getRandomWisdom } from './wisdom.js';
 import { getRandomAuraLezing } from './aura.js';
-import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery } from './uitverkorene.js';
+import { getRandomBoodschap, getRandomGifQuery, getMichaelOptionalGifQuery, getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField } from './utils/michael-memory.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck } from './utils/openai.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
@@ -45,6 +45,15 @@ import {
   toggleChannelLife,
   toggleGuildLife,
 } from './utils/life-switch.js';
+import { scheduleBusinessResurface } from './utils/unprompted-chat.js';
+import {
+  amsterdamDateLabel,
+  buildHoroscopeText,
+  buildPersonalHoroscopeText,
+  formatCommandHoroscope,
+  formatDailyBulletin,
+  formatPersonalHoroscope,
+} from './utils/horoscope.js';
 
 const MANAGE_GUILD = BigInt(0x20);
 const MANAGE_CHANNELS = BigInt(0x10);
@@ -152,12 +161,16 @@ async function fetchGiphyGif(query) {
   }
 }
 
-async function fetchRandomHumanUserId(guildId) {
+async function fetchGuildHumanMemberIds(guildId) {
   const membersRes = await DiscordRequest(`guilds/${guildId}/members?limit=1000`, { method: 'GET' });
   const members = await membersRes.json();
-  const humans = members.filter(m => !m.user.bot);
-  if (!humans.length) throw new Error('no human members in guild');
-  return humans[Math.floor(Math.random() * humans.length)].user.id;
+  return members.filter(m => !m.user.bot).map(m => m.user.id);
+}
+
+async function fetchRandomHumanUserId(guildId) {
+  const ids = await fetchGuildHumanMemberIds(guildId);
+  if (!ids.length) throw new Error('no human members in guild');
+  return ids[Math.floor(Math.random() * ids.length)];
 }
 
 async function buildUitverkoreneMessage(guildId, lang) {
@@ -181,11 +194,100 @@ async function buildUitverkoreneMessage(guildId, lang) {
   return { content, embeds, chosenUserId: userId };
 }
 
+async function buildDailyBulletin(guildId, lang) {
+  const langCode = getGuildLanguage(guildId);
+  const chosenUserId = await fetchRandomHumanUserId(guildId);
+  const memberIds = await fetchGuildHumanMemberIds(guildId);
+  const getCosmicRoleFn = (uid) => getCosmicRole(uid, guildId);
+
+  const horoscopeBody = await buildHoroscopeText({
+    memberIds,
+    langCode,
+    lang,
+    mode: 'daily',
+    ensureUserIds: [chosenUserId],
+    getCosmicRole: getCosmicRoleFn,
+  });
+
+  const boodschap = pick(lang.uitverkorene.boodschappen);
+  const content = formatDailyBulletin(lang, {
+    dateLabel: amsterdamDateLabel(langCode),
+    horoscopeBody,
+    chosenUserId,
+    boodschap,
+  });
+  const gif = await fetchGiphyGif(getHoroscopeGifQuery());
+  const embeds = gif ? [{ image: { url: gif } }] : [];
+  return { content, embeds, chosenUserId };
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Tiny helper...  saves repeating Math.floor(Math.random()…) everywhere
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+function resolveSlashUser(req, optionName, fallbackUserId, fallbackUsername) {
+  const opt = req.body.data?.options?.find(o => o.name === optionName);
+  const targetId = opt?.value ?? fallbackUserId;
+  const resolved = req.body.data?.resolved?.users?.[targetId];
+  const mem = loadUserMemory(targetId);
+  const username = resolved?.username ?? (mem.username || fallbackUsername);
+  return { targetId, username };
+}
+
+function fileUnfinishedBusiness(userId, username, details, guildId) {
+  const businessId = addUnfinishedBusiness(userId, details);
+  if (businessId && details.channelId && guildId) {
+    scheduleBusinessResurface({
+      messageId: details.messageId ?? null,
+      channelId: details.channelId,
+      authorId: userId,
+      username,
+      guildId,
+      businessId,
+    });
+  }
+  return businessId;
+}
+
+function buildWitnessDossier(targetId, targetUsername, memory, guildId, lang, langCode) {
+  const g = lang.getuigenis ?? lang.vibecheck;
+  const label = getJudgementLabel(memory.judgementScore ?? 0);
+  const mood = memory.currentMood ?? 'afwezig';
+  const cosmic = getCosmicRole(targetId, guildId);
+  const character = memory.michaelCharacter;
+  const business = getOutstandingBusiness(targetId);
+  const confessions = getRecentConfessions(targetId, 3);
+  const realPrompts = memory.prompts.filter(p => !p.startsWith('[')).slice(-3);
+  const none = g.none ?? 'none';
+
+  const lines = [
+    `${g.oordeelLabel?.replace(/\*\*/g, '') ?? 'Judgement'}: ${label} (${memory.judgementScore ?? 0})`,
+    `${g.moodLabel?.replace(/\*\*/g, '') ?? 'Mood'}: ${moodName(lang, mood)}`,
+    `Impression: ${memory.impression ?? none}`,
+    `Recent messages: ${realPrompts.length ? realPrompts.join(' | ') : none}`,
+    `Cosmic role: ${cosmic ?? none}`,
+  ];
+
+  if (character) {
+    lines.push(`Character: ${resolveField(character.archetype, langCode)} / ${resolveField(character.lineage, langCode)} / ${resolveField(character.title, langCode)}`);
+  }
+
+  lines.push(`${g.businessLabel?.replace(/\*\*/g, '') ?? 'Grudges'}: ${business.length ? business.map(b => b.reason).join('; ') : none}`);
+
+  if (confessions.length) {
+    lines.push(`${g.confessionLabel?.replace(/\*\*/g, '') ?? 'Confessions'}:`);
+    for (const c of confessions) {
+      const who = c.aboutSelf ? 'self' : `by ${c.confessorName}`;
+      lines.push(`- (${who}) ${c.text.slice(0, 120)}`);
+    }
+  } else {
+    lines.push(`${g.confessionLabel?.replace(/\*\*/g, '') ?? 'Confessions'}: ${none}`);
+  }
+
+  return lines.join('\n');
+}
 
 /** Cosmic roles are per-guild and persisted in data/cosmic-state.json (see utils/cosmic-state.js). */
 function isAntichrist(userId, guildId) {
@@ -602,7 +704,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const mr = lang.mijnrol;
         const statBar = (v) => '█'.repeat(Math.round(v / 3)) + '░'.repeat(6 - Math.round(v / 3));
         const safeComment = comment.slice(0, 300);
-        const embedColor = langCode === 'ar' ? 0xd97706 : 0x7c3aed; // desert gold / cosmic purple
+        const embedColor = 0x7c3aed;
         const embedTitle = mr.title.replace(/^#+\s*/, ''); // strip markdown heading prefix
 
         // Build stat list: pad names to the same width for monospace alignment
@@ -773,12 +875,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (BAIT_RE.test(userInput)) {
         console.log(`[michael] chat | bait-dismissal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId, guildId ?? null);
-        addUnfinishedBusiness(userId, {
+        fileUnfinishedBusiness(userId, username, {
           prompt:   userInput,
           reason:   'De gebruiker probeerde Michael te commanderen of te dwingen te reageren',
           severity: 2,
           channelId,
-        });
+        }, guildId ?? null);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${pick(lang.ui.baitDismissals)}` },
@@ -790,12 +892,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (CODE_REQUEST_RE.test(userInput)) {
         console.log(`[michael] chat | code-refusal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId, guildId ?? null);
-        addUnfinishedBusiness(userId, {
+        fileUnfinishedBusiness(userId, username, {
           prompt:   userInput,
           reason:   'De gebruiker vroeg om technische hulp...  buiten Michaels domein maar hij vergeet het niet',
           severity: 1,
           channelId,
-        });
+        }, guildId ?? null);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${pick(lang.ui.codeRefusals)}` },
@@ -864,19 +966,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
         // Feature 1...  Create unfinished business for negative interactions
         if (scoreDelta <= -2 || INSULT_RE.test(userInput)) {
-          addUnfinishedBusiness(userId, {
+          fileUnfinishedBusiness(userId, username, {
             prompt:   userInput,
             reason:   scoreDelta <= -2 ? 'Belediging of agressief bericht' : 'Negatieve trilling in het veld',
             severity: 3,
             channelId,
-          });
+          }, guildId ?? null);
         } else if (scoreDelta === -1) {
-          addUnfinishedBusiness(userId, {
+          fileUnfinishedBusiness(userId, username, {
             prompt:   userInput,
             reason:   'Respectloos of provocerend bericht',
             severity: 2,
             channelId,
-          });
+          }, guildId ?? null);
         }
 
         // Feature 2...  Store theme snapshot for future contradiction detection
@@ -972,12 +1074,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (BAIT_RE.test(userInput)) {
         console.log(`[michael] babychat | bait-dismissal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId, guildId ?? null);
-        addUnfinishedBusiness(userId, {
+        fileUnfinishedBusiness(userId, username, {
           prompt: userInput,
           reason: 'De gebruiker probeerde Michael te commanderen of te dwingen te reageren',
           severity: 2,
           channelId,
-        });
+        }, guildId ?? null);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${pick(lang.ui.baitDismissals)}` },
@@ -988,12 +1090,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (CODE_REQUEST_RE.test(userInput)) {
         console.log(`[michael] babychat | code-refusal | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId, guildId ?? null);
-        addUnfinishedBusiness(userId, {
+        fileUnfinishedBusiness(userId, username, {
           prompt: userInput,
           reason: 'De gebruiker vroeg om technische hulp...  buiten Michaels domein maar hij vergeet het niet',
           severity: 1,
           channelId,
-        });
+        }, guildId ?? null);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `> ${safeInput}\n\n${pick(lang.ui.codeRefusals)}` },
@@ -1019,12 +1121,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             setAntichristForGuild(guildId, userId, Date.now() + 24 * 60 * 60 * 1000);
           }
           saveUserMemory(userId, username, userInput, mood, -3, nextMood(mood, -3), channelId, guildId ?? null);
-          addUnfinishedBusiness(userId, {
+          fileUnfinishedBusiness(userId, username, {
             prompt: userInput,
             reason: 'Baby-Michaël brak...  kosmische woede na /babychat',
             severity: 3,
             channelId,
-          });
+          }, guildId ?? null);
           addTheme(userId, userInput);
 
           let body = `> ${safeInput}\n\n${meltdown}`;
@@ -1044,19 +1146,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId, guildId ?? null);
 
           if (scoreDelta <= -2 || INSULT_RE.test(userInput)) {
-            addUnfinishedBusiness(userId, {
+            fileUnfinishedBusiness(userId, username, {
               prompt: userInput,
               reason: scoreDelta <= -2 ? 'Belediging of agressief bericht' : 'Negatieve trilling in het veld',
               severity: 3,
               channelId,
-            });
+            }, guildId ?? null);
           } else if (scoreDelta === -1) {
-            addUnfinishedBusiness(userId, {
+            fileUnfinishedBusiness(userId, username, {
               prompt: userInput,
               reason: 'Respectloos of provocerend bericht',
               severity: 2,
               channelId,
-            });
+            }, guildId ?? null);
           }
           addTheme(userId, userInput);
 
@@ -1205,6 +1307,178 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
+    if (name === 'getuigenis') {
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const { targetId, username: targetUsername } = resolveSlashUser(req, 'gebruiker', userId, username);
+      ensureUserRecord(targetId, targetUsername);
+      const memory = loadUserMemory(targetId);
+      const g = lang.getuigenis ?? lang.vibecheck;
+      const label = getJudgementLabel(memory.judgementScore ?? 0);
+      const dossier = buildWitnessDossier(targetId, targetUsername, memory, guildId, lang, langCode);
+
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+
+      try {
+        const sermon = await generateWitnessStatement(targetUsername, dossier, langCode);
+        const lines = [
+          g.header(targetUsername),
+          '',
+          `${g.oordeelLabel}  ${label}  *(${memory.judgementScore ?? 0})*`,
+          '',
+          sermon,
+        ];
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: lines.join('\n') },
+        });
+        console.log(`[michael] getuigenis | subject=${targetUsername} (${targetId}) | by=${username}`);
+      } catch (err) {
+        console.error('getuigenis error:', err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.getuigenisError },
+          });
+        } catch { /* token expired */ }
+      }
+      return;
+    }
+
+    if (name === 'biecht') {
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const confession = data.options.find(o => o.name === 'biecht')?.value?.trim() ?? '';
+      const channelId = req.body.channel_id ?? req.body.channel?.id;
+
+      if (!confession) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.biechtEmpty, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+
+      const { targetId, username: targetUsername } = resolveSlashUser(req, 'gebruiker', userId, username);
+      const aboutSelf = targetId === userId;
+      const safeConfession = confession.replace(/\n+/g, ' ').replace(/`/g, "'").slice(0, 500);
+
+      ensureUserRecord(targetId, targetUsername);
+      ensureUserRecord(userId, username);
+
+      res.send({
+        type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { flags: InteractionResponseFlags.EPHEMERAL },
+      });
+
+      try {
+        const scoreDelta = await scoreMichaelMessage(safeConfession);
+        const appliedDelta = aboutSelf
+          ? scoreDelta
+          : (scoreDelta <= 0 ? scoreDelta : -1);
+
+        addConfession(targetId, targetUsername, {
+          confessorId: userId,
+          confessorName: username,
+          text: safeConfession,
+          aboutSelf,
+        });
+
+        patchUserState(targetId, appliedDelta, null);
+
+        if (!aboutSelf && scoreDelta <= -1) {
+          fileUnfinishedBusiness(targetId, targetUsername, {
+            prompt: safeConfession,
+            reason: `Biecht over hen door ${username}`,
+            severity: scoreDelta <= -2 ? 3 : 2,
+            channelId,
+          }, guildId ?? null);
+        } else if (aboutSelf && scoreDelta <= -2) {
+          fileUnfinishedBusiness(userId, username, {
+            prompt: safeConfession,
+            reason: 'Zware biecht — Michael vergeet het niet',
+            severity: 3,
+            channelId,
+          }, guildId ?? null);
+        }
+
+        const ack = await generateConfessionAck({
+          confessorName: username,
+          targetName: targetUsername,
+          confession: safeConfession,
+          aboutSelf,
+          langCode,
+        });
+
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: ack, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+        console.log(`[michael] biecht | target=${targetUsername} (${targetId}) | by=${username} | aboutSelf=${aboutSelf}`);
+      } catch (err) {
+        console.error('biecht error:', err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.biechtError, flags: InteractionResponseFlags.EPHEMERAL },
+          });
+        } catch { /* token expired */ }
+      }
+      return;
+    }
+
+    // "horoscoop" / horoscope (EN localization)
+    if (name === 'horoscoop') {
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+
+      try {
+        const invokerId = req.body.member?.user?.id ?? req.body.user?.id;
+        let content;
+        let embeds = [];
+
+        if (guildId) {
+          const memberIds = await fetchGuildHumanMemberIds(guildId);
+          const currentChosen = getUitverkoreneUserId(guildId);
+          const horoscopeBody = await buildHoroscopeText({
+            memberIds,
+            langCode,
+            lang,
+            mode: 'command',
+            ensureUserIds: currentChosen ? [currentChosen] : [],
+            getCosmicRole: (uid) => getCosmicRole(uid, guildId),
+          });
+          content = formatCommandHoroscope(lang, {
+            dateLabel: amsterdamDateLabel(langCode),
+            horoscopeBody,
+            chosenUserId: currentChosen,
+          });
+        } else {
+          const horoscopeBody = await buildPersonalHoroscopeText(invokerId, langCode, lang);
+          content = formatPersonalHoroscope(lang, {
+            dateLabel: amsterdamDateLabel(langCode),
+            horoscopeBody,
+          });
+        }
+
+        const gif = await fetchGiphyGif(getHoroscopeGifQuery());
+        if (gif) embeds = [{ image: { url: gif } }];
+
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content, embeds },
+        });
+        console.log(`[michael] horoscoop | guild=${guildId ?? 'dm'} | user=${invokerId}`);
+      } catch (err) {
+        console.error('horoscoop error:', err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.horoscopeError },
+          });
+        } catch { /* token expired */ }
+      }
+      return;
+    }
+
     // "switchoflife"...  toggle Michael's proactive presence per channel or server
     if (name === 'switchoflife') {
       if (!guildId) {
@@ -1234,7 +1508,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
               components: [
                 { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_nl:${invokingUserId}`, label: lang.ui.michaeltaalBtnNl, style: ButtonStyleTypes.SECONDARY },
                 { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_en:${invokingUserId}`, label: lang.ui.michaeltaalBtnEn, style: ButtonStyleTypes.SECONDARY },
-                { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaaldm_ar:${invokingUserId}`, label: lang.ui.michaeltaalBtnAr, style: ButtonStyleTypes.SECONDARY },
               ],
             }],
           },
@@ -1262,7 +1535,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             components: [
               { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_nl:${guildId}`, label: lang.ui.michaeltaalBtnNl, style: ButtonStyleTypes.SECONDARY },
               { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_en:${guildId}`, label: lang.ui.michaeltaalBtnEn, style: ButtonStyleTypes.SECONDARY },
-              { type: MessageComponentTypes.BUTTON, custom_id: `michaeltaal_ar:${guildId}`, label: lang.ui.michaeltaalBtnAr, style: ButtonStyleTypes.SECONDARY },
             ],
           }],
         },
@@ -1892,7 +2164,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       }
 
-      const newLangCode = componentId.replace('michaeltaal_', '').split(':')[0]; // nl / en / ar
+      const newLangCode = componentId.replace('michaeltaal_', '').split(':')[0]; // nl / en
       const targetGuildId = componentId.split(':')[1] ?? guildId;
       setGuildLanguage(targetGuildId, newLangCode);
       const newLang = getLang(newLangCode);
@@ -1907,7 +2179,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     // ── Language selector buttons (DM / per-user) ──────────────────────────
     if (componentId.startsWith('michaeltaaldm_')) {
       const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
-      const newLangCode = componentId.replace('michaeltaaldm_', '').split(':')[0]; // nl / en / ar
+      const newLangCode = componentId.replace('michaeltaaldm_', '').split(':')[0]; // nl / en
       setUserLanguage(clickerId, newLangCode);
       const newLang = getLang(newLangCode);
       const confirmMsg = newLang.ui.michaeltaalSetDM?.[newLangCode]
@@ -1928,13 +2200,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 });
 
 // ─── Unfinished-business housekeeping ─────────────────────────────────────────
-// Unprompted chat (snark + quiet delayed reply) lives in utils/unprompted-chat.js.
+// Unprompted snark (life-switch) + business resurfacing live in utils/unprompted-chat.js.
 cron.schedule('*/15 * * * *', () => {
   const allMem = loadAllMemory();
   Object.keys(allMem).forEach((uid) => maybeAgeBusiness(uid));
 });
 
-// Daily uitverkorene...  runs at 10:00 AM Amsterdam time (independent of /switchoflife)
+// Daily bulletin (horoscope + chosen one + mood)...  runs at 10:00 AM Amsterdam time
 // Change the cron expression to adjust the time: 'minute hour * * *'
 cron.schedule('0 10 * * *', async () => {
   const guildId = process.env.DAILY_GUILD_ID;
@@ -1942,14 +2214,14 @@ cron.schedule('0 10 * * *', async () => {
   if (!guildId || !channelId) return;
 
   if (isDutchQuietHoursForUnpromptedSends()) {
-    console.log('[michael] daily uitverkorene skipped...  Dutch quiet hours 22:00 to 10:00');
+    console.log('[michael] daily bulletin skipped...  Dutch quiet hours 22:00 to 10:00');
     return;
   }
 
   try {
     const cronLangCode = getGuildLanguage(guildId);
     const cronLang = getLang(cronLangCode);
-    const { content, embeds, chosenUserId } = await buildUitverkoreneMessage(guildId, cronLang);
+    const { content, embeds, chosenUserId } = await buildDailyBulletin(guildId, cronLang);
     setUitverkoreneForGuild(guildId, chosenUserId);
     await DiscordRequest(`channels/${channelId}/messages`, {
       method: 'POST',
@@ -1959,9 +2231,9 @@ cron.schedule('0 10 * * *', async () => {
         flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
       },
     });
-    console.log('Daily uitverkorene posted.');
+    console.log('Daily bulletin posted (horoscope + uitverkorene).');
   } catch (err) {
-    console.error('Daily uitverkorene failed:', err);
+    console.error('Daily bulletin failed:', err);
   }
 }, { timezone: 'Europe/Amsterdam' });
 

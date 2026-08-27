@@ -1,18 +1,19 @@
 // Discord Gateway (WebSocket) listener.
 //
 // Behaviour:
-// 1. Unprompted chat (when /switchoflife is on for this server or channel):
+// 1. Unprompted chat when /switchoflife is on for this server or channel:
 //    a. 0.5% chance of an immediate snarky reply to a random message.
-//    b. 5% chance to queue that message as the one delayed reply;
-//       it sends after 10 minutes of silence in that channel.
-// 2. When a non-bot message mentions "michael" (case-insensitive):
+// 2. Unfinished business (independent of life-switch):
+//    After 10 minutes of silence Michael circles back to a filed grudge,
+//    replying to the earlier message to keep the conversation going.
+// 3. When a non-bot message mentions "michael"/"michaël" or @mentions the bot:
 //    a. Feature 3...  "Do not respond" trap: if the message contains baiting
 //       language, there is a 70% chance Michael silently ignores it and queues
 //       an unfinished business item instead of replying.
 //    b. If life-switch is on: Michael always replies with a short canned line;
 //       optional post-message revision ("Edit:") on that reply.
 //       When the life-switch is off (default), no reply is sent here.
-// 3. lastChannelId is tracked per user.
+// 4. lastChannelId is tracked per user.
 //
 // IMPORTANT: Requires the following Privileged Gateway Intents enabled in the
 // Discord Developer Portal:
@@ -20,11 +21,11 @@
 
 import { WebSocket } from 'ws';
 import { appendEditWithinDiscordLimit, DiscordRequest } from '../utils.js';
-import { addUnfinishedBusiness, loadUserMemory, updateLastChannel } from './michael-memory.js';
+import { addUnfinishedBusiness, loadUserMemory, updateLastChannel, ensureUserRecord } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
 import { resolveLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
-import { handleUnpromptedChat } from './unprompted-chat.js';
+import { handleUnpromptedChat, scheduleBusinessResurface } from './unprompted-chat.js';
 import { isMichaelLifeActive } from './life-switch.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
@@ -33,6 +34,32 @@ const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 const INTENTS = 1 | 512 | 32768;
 
 const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s+je\s+niet|durf\s+niet|zeg\s+iets|waarom\s+reageer|coward|lafaard|bange\s+engel|kom\s+op\s+dan|wees\s+geen\s+lafaard|reageer\s+op\s+mij|zeg\s+dan\s+iets|ben\s+je\s+er\s+wel)\b/i;
+
+const MICHAEL_NAME_RE = /micha[eë]l/i;
+
+/** True when the message says Michael/Michaël or @mentions the bot. */
+function messageMentionsMichael(msg, botUserId) {
+  const content = msg.content ?? '';
+  if (MICHAEL_NAME_RE.test(content)) return true;
+  const ids = new Set([botUserId, process.env.APP_ID].filter(Boolean));
+  if (!ids.size || !Array.isArray(msg.mentions)) return false;
+  return msg.mentions.some((u) => ids.has(u.id));
+}
+
+function queueGatewayBusiness(authorId, username, details, guildId) {
+  ensureUserRecord(authorId, username);
+  const businessId = addUnfinishedBusiness(authorId, details);
+  if (businessId && details.channelId && guildId) {
+    scheduleBusinessResurface({
+      messageId: details.messageId ?? null,
+      channelId: details.channelId,
+      authorId,
+      username,
+      guildId,
+      businessId,
+    });
+  }
+}
 
 // ─── Post-message revision helper (Feature 5) ─────────────────────────────────
 //
@@ -70,6 +97,7 @@ export function startGateway() {
 
   let heartbeatInterval = null;
   let lastSeq = null;
+  let botUserId = process.env.BOT_USER_ID || null;
 
   function connect() {
     const ws = new WebSocket(GATEWAY_URL);
@@ -103,18 +131,23 @@ export function startGateway() {
       // Heartbeat ACK...  nothing to do
       if (op === 11) return;
 
+      if (op === 0 && t === 'READY') {
+        botUserId = d.user?.id ?? botUserId;
+        console.log(`Gateway: ready as ${d.user?.username} (${botUserId})`);
+        return;
+      }
+
       // ── DISPATCH...  MESSAGE_CREATE ──────────────────────────────────────────
       if (op === 0 && t === 'MESSAGE_CREATE') {
         const msg = d;
         if (msg.author?.bot) return;    // ignore bots
-        if (!msg.content) return;       // ignore empty / content-blocked
 
         const channelId = msg.channel_id;
         const authorId  = msg.author.id;
-        const content   = msg.content;
+        const content   = msg.content ?? '';
 
         const guildId = msg.guild_id ?? null;
-        const mentionsMichael = /michael/i.test(content) || /امرؤ القيس|امرئ القيس|القيس/.test(content);
+        const mentionsMichael = messageMentionsMichael(msg, botUserId);
 
         // Track the user's most-recently-active channel.
         updateLastChannel(authorId, channelId, guildId);
@@ -122,52 +155,48 @@ export function startGateway() {
         handleUnpromptedChat({
           messageId: msg.id,
           channelId,
-          authorId,
-          username: msg.author?.global_name || msg.author?.username,
-          content,
           guildId,
           mentionsMichael,
         });
 
-        // Only continue for messages that mention Michael or (in Arabic mode) Imru' al-Qais
+        // Only continue for messages that mention Michael
         if (!mentionsMichael) return;
 
         // Feature 3...  Bait / forcing trap
         if (BAIT_RE.test(content)) {
           if (Math.random() < 0.70) {
             // Michael silently ignores...  queues unfinished business to resurface later
-            addUnfinishedBusiness(authorId, {
+            queueGatewayBusiness(authorId, msg.author?.username ?? authorId, {
               prompt:   content,
               reason:   'De gebruiker probeerde Michael te commanderen of te provoceren',
               severity: 2,
               messageId: msg.id,
               channelId,
-            });
+            }, guildId);
             console.log(`[michael] gateway | bait-silent + business | user=${authorId}`);
             return; // no immediate reply
           }
           // 30% chance: still replies, but also queues business
-          addUnfinishedBusiness(authorId, {
+          queueGatewayBusiness(authorId, msg.author?.username ?? authorId, {
             prompt:   content,
             reason:   'Provocationele vraag...  Michael antwoordde maar vergeet het niet',
             severity: 1,
             messageId: msg.id,
             channelId,
-          });
+          }, guildId);
         }
 
-        if (!isMichaelLifeActive(guildId, channelId)) return;
+        if (!isMichaelLifeActive(guildId, channelId)) {
+          console.log(`[michael] gateway | name-mention skipped | life-switch off | ch=${channelId}`);
+          return;
+        }
+
+        ensureUserRecord(authorId, msg.author?.username ?? authorId);
 
         const gwLangCode = resolveLanguage(guildId, authorId);
         const gwLang = getLang(gwLangCode);
 
-        // In Arabic mode: if someone said "michael" (not the poet's name), use the
-        // identity-rejection replies ("Who do you speak of? I am Imru' al-Qais.")
-        // If they said the poet's name correctly, use normal nameReplies.
-        const saidMichael = /michael/i.test(content);
-        const pool = (gwLangCode === 'ar' && saidMichael && gwLang.ui.wrongNameReplies)
-          ? gwLang.ui.wrongNameReplies
-          : (gwLang.ui.nameReplies ?? gwLang.ui.shadowReplyLines);
+        const pool = gwLang.ui.nameReplies ?? gwLang.ui.shadowReplyLines;
         const reply = pool[Math.floor(Math.random() * pool.length)];
 
         try {
