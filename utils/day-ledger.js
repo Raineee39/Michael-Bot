@@ -129,8 +129,18 @@ export function markDayPosted(guildId, channelId) {
   return mutate(guildId, (day) => {
     day.postedAt = Date.now();
     day.postedChannelId = channelId;
+    const ids = new Set(day.postedChannelIds ?? []);
+    if (channelId) ids.add(String(channelId));
+    day.postedChannelIds = [...ids];
     return day;
   });
+}
+
+export function wasChannelPostedToday(guildId, channelId) {
+  const day = getGuildDay(guildId);
+  if (!day || day.dateKey !== amsterdamDateKey() || !channelId) return false;
+  const ids = day.postedChannelIds ?? (day.postedChannelId ? [day.postedChannelId] : []);
+  return ids.map(String).includes(String(channelId));
 }
 
 export function saveYesterdayClosing(guildId, closing) {

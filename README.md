@@ -62,7 +62,7 @@ Default is **off**. Nothing in `.env` turns him on. Someone with Manage Server (
 
 Stored in `data/life-switch.json` on the VPS. Channel override beats server setting.
 
-## Daily bulletin (10:00 Amsterdam)
+## Daily bulletin (10:00 Amsterdam, plus 11:00 in `183545688859213834`)
 
 If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, Gemini writes **today's card** — mood, omen, named prophecies, a forbidden word, a least favourite, a standing order. That card is **law until tomorrow's card**. `/horoscope` reprints the same card (and a short "so far" if anything was stamped). The antichrist is refused on most commands, in public, with prejudice.
 

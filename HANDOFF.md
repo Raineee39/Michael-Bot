@@ -1,13 +1,13 @@
 # Handoff — 28 Aug 2026
 
 ## Status
-Uncommitted on Mac: day-law, punchier horoscope, DM globals (registered), env isolation, empty-embed fix, ambient reacts (nazar/hamsa), GIFs daily-only.
+11:00 Amsterdam daily post added for channel `183545688859213834` (guild looked up from the channel). Catch-up on boot if it is already 11:00–21:59 and that channel has not been posted today. Still uncommitted otherwise.
 
-How to see today's law: `/horoscope` **in the server** opens or reprints the card. `/cosmicstatus` shows mood + forbidden word. 10:00 Amsterdam posts the same card to `DAILY_CHANNEL_ID`. DMs are personal, not the server law.
+## VPS — NOW (I cannot type this)
+Commit + push from the Mac, then:
 
-No new slash commands — do **not** register.
-
-## After push — VPS
 ```bash
 cd /root/michael-bot && git pull && pm2 restart michael-bot --update-env
 ```
+
+Do **not** register. If restart is after 11:00, catch-up should still post today.

@@ -52,7 +52,7 @@ import {
   buildSubjectDossier,
   formatPersonalHoroscope,
 } from './utils/horoscope.js';
-import { amsterdamDateKey, getGuildDay, getTodayCard, markDayPosted } from './utils/day-ledger.js';
+import { getTodayCard, markDayPosted, wasChannelPostedToday } from './utils/day-ledger.js';
 
 const MANAGE_GUILD = BigInt(0x20);
 const MANAGE_CHANNELS = BigInt(0x10);
@@ -2324,40 +2324,58 @@ cron.schedule('*/15 * * * *', () => {
   Object.keys(allMem).forEach((uid) => maybeAgeBusiness(uid));
 });
 
-// Daily bulletin (horoscope + chosen one + mood)...  runs at 10:00 AM Amsterdam time
-// Change the cron expression to adjust the time: 'minute hour * * *'
-cron.schedule('0 10 * * *', async () => {
-  const guildId = process.env.DAILY_GUILD_ID;
-  const channelId = process.env.DAILY_CHANNEL_ID;
+async function guildIdForChannel(channelId) {
+  const res = await DiscordRequest(`channels/${channelId}`, { method: 'GET' });
+  const channel = await res.json();
+  return channel.guild_id ?? null;
+}
+
+async function postDailyBulletin(guildId, channelId, label) {
   if (!guildId || !channelId) return;
-
   if (isDutchQuietHoursForUnpromptedSends()) {
-    console.log('[michael] daily bulletin skipped...  Dutch quiet hours 22:00 to 10:00');
+    console.log(`[michael] daily bulletin skipped | ${label} | Dutch quiet hours`);
     return;
   }
-
-  const already = getGuildDay(guildId);
-  if (already?.dateKey === amsterdamDateKey() && already.postedAt) {
-    console.log('[michael] daily bulletin skipped...  today\'s card already posted');
+  if (wasChannelPostedToday(guildId, channelId)) {
+    console.log(`[michael] daily bulletin skipped | ${label} | already posted to ${channelId}`);
     return;
   }
+  const cronLangCode = getGuildLanguage(guildId);
+  const cronLang = getLang(cronLangCode);
+  const { content, embeds, chosenUserId, antichristUserId } = await buildDailyBulletin(guildId, cronLang);
+  await DiscordRequest(`channels/${channelId}/messages`, {
+    method: 'POST',
+    body: {
+      content,
+      embeds,
+      flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
+    },
+  });
+  markDayPosted(guildId, channelId);
+  console.log(`[michael] daily bulletin posted | ${label} | ch=${channelId} | chosen=${chosenUserId} | antichrist=${antichristUserId}`);
+}
 
+// Default daily card...  10:00 Amsterdam, DAILY_GUILD_ID + DAILY_CHANNEL_ID
+cron.schedule('0 10 * * *', async () => {
   try {
-    const cronLangCode = getGuildLanguage(guildId);
-    const cronLang = getLang(cronLangCode);
-    const { content, embeds, chosenUserId, antichristUserId } = await buildDailyBulletin(guildId, cronLang);
-    await DiscordRequest(`channels/${channelId}/messages`, {
-      method: 'POST',
-      body: {
-        content,
-        embeds,
-        flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
-      },
-    });
-    markDayPosted(guildId, channelId);
-    console.log(`Daily bulletin posted (horoscope + chosen=${chosenUserId} + antichrist=${antichristUserId}).`);
+    await postDailyBulletin(process.env.DAILY_GUILD_ID, process.env.DAILY_CHANNEL_ID, '10:00');
   } catch (err) {
-    console.error('Daily bulletin failed:', err);
+    console.error('Daily bulletin failed (10:00):', err);
+  }
+}, { timezone: 'Europe/Amsterdam' });
+
+// Extra board...  11:00 Amsterdam in this channel (guild resolved from the channel)
+const ELEVEN_AM_CHANNEL_ID = '183545688859213834';
+cron.schedule('0 11 * * *', async () => {
+  try {
+    const guildId = await guildIdForChannel(ELEVEN_AM_CHANNEL_ID);
+    if (!guildId) {
+      console.error(`[michael] daily bulletin 11:00 | no guild for channel ${ELEVEN_AM_CHANNEL_ID}`);
+      return;
+    }
+    await postDailyBulletin(guildId, ELEVEN_AM_CHANNEL_ID, '11:00');
+  } catch (err) {
+    console.error('Daily bulletin failed (11:00):', err);
   }
 }, { timezone: 'Europe/Amsterdam' });
 
@@ -2451,8 +2469,32 @@ async function logDiscordIdentity() {
   }
 }
 
+function amsterdamHour() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Amsterdam',
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  return parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+}
+
+async function catchUpElevenAmBulletin() {
+  const hour = amsterdamHour();
+  if (hour < 11 || hour >= 22) return;
+  try {
+    const guildId = await guildIdForChannel(ELEVEN_AM_CHANNEL_ID);
+    if (!guildId) return;
+    if (wasChannelPostedToday(guildId, ELEVEN_AM_CHANNEL_ID)) return;
+    console.log('[michael] daily bulletin 11:00 catch-up');
+    await postDailyBulletin(guildId, ELEVEN_AM_CHANNEL_ID, '11:00-catchup');
+  } catch (err) {
+    console.error('Daily bulletin catch-up failed (11:00):', err);
+  }
+}
+
 app.listen(PORT, () => {
   console.log('Listening on port', PORT);
   logDiscordIdentity();
   startGateway();
+  catchUpElevenAmBulletin();
 });
