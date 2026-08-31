@@ -11,7 +11,12 @@ Daily horoscope / uitverkorene was repeating the same people and, in servers lik
 
 ## Daily times
 - Default board: 10:00 Europe/Amsterdam (`DAILY_GUILD_ID` / `DAILY_CHANNEL_ID`). Skips if that target is Moons Grill.
-- Moons Grill: 11:00 Amsterdam (10:00 UK in BST). Guild + channel hardcoded as `183545688859213834`.
+- Moons Grill: 11:00 Amsterdam (10:00 UK in BST). Guild + `#general` are the same snowflake `183545688859213834` (pre-2017 default channel). Do not "fix" that.
+
+## 31 Aug 11:00 post
+The cropped bit was **YESTERDAY'S BOOKS** in a markdown code block, so `<@userid>` stayed literal (Discord never resolves mentions inside `code`). Strip fences / inline backticks / 4-space indent before posting. Today's card was fine.
+
+Omen/prophecy lines were hard-sliced (180/140 chars) so a sentence could die and stats still printed. Caps are higher now and trim at a sentence stop.
 
 ## Next
-Deploy and restart so the 10:00 / 11:00 crons pick up office rotation and the Moons Grill hour. First day after deploy still uses older dossiers (`lastGuildId` + prompts) until people slash in that server.
+Deploy/restart for the format fix. Today's Moons Grill card is already saved if `generateDayLaw` ran; `/horoscope` in that server reprints it.

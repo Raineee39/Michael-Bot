@@ -620,6 +620,17 @@ function allowId(id, allowed) {
   return allowed.has(s) ? s : null;
 }
 
+/** Keep the sentence if it fits; otherwise cut at the last stop before max. */
+function trimAtSentence(text, max) {
+  const s = String(text ?? '').trim();
+  if (s.length <= max) return s;
+  const window = s.slice(0, max);
+  const stop = Math.max(window.lastIndexOf('. '), window.lastIndexOf('! '), window.lastIndexOf('? '), window.lastIndexOf('…'));
+  if (stop >= Math.floor(max * 0.45)) return window.slice(0, stop + 1).trim();
+  const space = window.lastIndexOf(' ');
+  return (space > 20 ? window.slice(0, space) : window).trim();
+}
+
 /** Structured day-law for one guild. Display is formatted in code. */
 export async function generateDayLaw({
   langCode = 'nl',
@@ -677,7 +688,7 @@ Rules:
   const run = async () => {
     const response = await client.responses.create({
       model: 'gpt-4.1-mini',
-      max_output_tokens: 520,
+      max_output_tokens: 700,
       input,
     });
     const raw = response.output?.[0]?.content?.[0]?.text?.trim();
@@ -705,7 +716,7 @@ Rules:
       return {
         id: `p${i + 1}`,
         userId,
-        claim: String(p.claim ?? '').trim().slice(0, 140),
+        claim: trimAtSentence(p.claim, 240),
         watch,
         status: 'open',
       };
@@ -724,13 +735,13 @@ Rules:
   const least = allowId(parsed.leastFavouriteUserId, allowed);
 
   return {
-    mood: String(parsed.mood ?? (langCode === 'nl' ? 'AMBtenaarlijk VERTOORND' : 'WRATHFUL!!!!!!!')).trim().slice(0, 48),
-    omen: String(parsed.omen ?? '').trim().slice(0, 180),
+    mood: trimAtSentence(parsed.mood ?? (langCode === 'nl' ? 'AMBtenaarlijk VERTOORND' : 'WRATHFUL!!!!!!!'), 80),
+    omen: trimAtSentence(parsed.omen, 320),
     prophecies,
     forbiddenWord: sanitizeForbiddenWord(parsed.forbiddenWord, [fallbackWord, 'TITHES', 'PAPIER']),
     leastFavouriteUserId: least,
-    leastFavouriteReason: String(parsed.leastFavouriteReason ?? '').trim().slice(0, 32),
-    rule: String(parsed.rule ?? '').trim().slice(0, 160),
+    leastFavouriteReason: String(parsed.leastFavouriteReason ?? '').trim().slice(0, 40),
+    rule: trimAtSentence(parsed.rule, 240),
     ruleWatch: (Array.isArray(parsed.ruleWatch) ? parsed.ruleWatch : [])
       .map((w) => String(w).trim())
       .filter((w) => w.length >= 3 && w.length <= 20)
@@ -774,25 +785,30 @@ export async function generateBooksClosed({ langCode = 'nl', dateLabel, digest }
   const { outputInstruction } = lang.helpers;
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
-    max_output_tokens: 220,
+    max_output_tokens: 160,
     input: `
 ${personaIntro(langCode)}
-Close yesterday's books. Date that closed: ${dateLabel}.
-You are a petty clerk reading the ledger aloud. Short. Specific. A little cruel.
+Write a SHORT epilogue for yesterday (${dateLabel}). Petty clerk. Two or three sentences max.
 ${outputInstruction}
+
+Use this ledger only as flavour. Do NOT recap it. Do NOT write DATE OF CLOSURE. Do NOT write FAILED. Do NOT list statuses. Do NOT use code fences.
 
 Ledger:
 ${digest || '(nothing was stamped. The silence is also a verdict.)'}
 
-4 to 6 short lines. Discord markdown. No # headers.
-Name people only as <@id> if those ids appear in the ledger.
-End by saying the books are closed.
+Mention at most one <@id> if it fits. Then say the books are closed.
 Close with 2 to 5 dots followed by your sign-off name.
     `.trim(),
   });
   const raw = response.output?.[0]?.content?.[0]?.text?.trim();
   if (!raw) throw new Error('Gemini returned empty books-closed');
-  return raw.slice(0, 700);
+  return raw
+    .replace(/```[a-z]*\n?([\s\S]*?)```/gi, '$1')
+    .replace(/```/g, '')
+    .replace(/`(<@\d+>)`/g, '$1')
+    .replace(/^ {4}/gm, '')
+    .trim()
+    .slice(0, 320);
 }
 
 export async function generateCosmicAppointment({

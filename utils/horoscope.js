@@ -154,6 +154,43 @@ function clampContent(text, max = 1990) {
   return `${s.slice(0, max - 24)}\n...(register full)..Michael`;
 }
 
+/** Discord does not ping or render <@id> inside ``` / `code` / 4-space blocks. */
+function plainMentions(text) {
+  return String(text ?? '')
+    .replace(/```[a-z]*\n?([\s\S]*?)```/gi, '$1')
+    .replace(/```/g, '')
+    .replace(/`(<@\d+>)`/g, '$1')
+    .replace(/^ {4}/gm, '')
+    .trim();
+}
+
+function buildCardBody(lang, card, horoscopeBody) {
+  const h = lang.horoscope;
+  const L = lang.dayLaw;
+  const lines = [];
+  if (card) {
+    lines.push(`**${h.moodLabel}:** ${card.mood}`, '');
+    if (card.omen) lines.push(card.omen);
+    for (const p of card.prophecies ?? []) {
+      lines.push(`<@${p.userId}> ${p.claim}`);
+    }
+    lines.push('');
+    if (card.leastFavouriteUserId) {
+      const why = card.leastFavouriteReason ? ` (${card.leastFavouriteReason})` : '';
+      lines.push(`**${L.leastLabel}:** <@${card.leastFavouriteUserId}>${why}`);
+    }
+    if (card.forbiddenWord) lines.push(`**${L.forbiddenLabel}:** ${card.forbiddenWord}`);
+    if (card.rule) lines.push(`**${L.ruleLabel}:** ${card.rule}`);
+    for (const s of card.stats ?? []) {
+      lines.push(`**${s.label}:** ${s.value}`);
+    }
+    lines.push('', `*${L.inForce}*`);
+  } else if (horoscopeBody) {
+    lines.push(horoscopeBody);
+  }
+  return lines.join('\n').trim();
+}
+
 export function formatDailyBulletin(lang, { dateLabel, horoscopeBody }) {
   return formatDayCard(lang, { dateLabel, title: lang.horoscope.dailyTitle, card: null, horoscopeBody });
 }
@@ -165,41 +202,27 @@ export function formatCommandHoroscope(lang, { dateLabel, horoscopeBody }) {
 export function formatDayCard(lang, { dateLabel, title, card, horoscopeBody, soFar = [], closing = '' }) {
   const h = lang.horoscope;
   const L = lang.dayLaw;
-  const parts = [
-    h.header,
-    title,
-    h.dateLine(dateLabel),
-    '',
-  ];
-  if (closing) {
-    parts.push(L.booksHeader, closing, '', h.divider, '');
-  }
-  if (card) {
-    parts.push(`**${h.moodLabel}:** ${card.mood}`);
-    parts.push('');
-    if (card.omen) parts.push(card.omen);
-    for (const p of card.prophecies ?? []) {
-      parts.push(`<@${p.userId}> ${p.claim}`);
-    }
-    parts.push('');
-    if (card.leastFavouriteUserId) {
-      const why = card.leastFavouriteReason ? ` (${card.leastFavouriteReason})` : '';
-      parts.push(`**${L.leastLabel}:** <@${card.leastFavouriteUserId}>${why}`);
-    }
-    if (card.forbiddenWord) parts.push(`**${L.forbiddenLabel}:** ${card.forbiddenWord}`);
-    if (card.rule) parts.push(`**${L.ruleLabel}:** ${card.rule}`);
-    for (const s of card.stats ?? []) {
-      parts.push(`**${s.label}:** ${s.value}`);
-    }
-    parts.push('', `*${L.inForce}*`);
-  } else if (horoscopeBody) {
-    parts.push(horoscopeBody);
-  }
-  if (soFar.length) {
-    parts.push('', h.divider, `**${L.soFarTitle}**`, ...soFar.map((line) => `• ${line}`));
-  }
-  parts.push('', '....Michael');
-  return clampContent(parts.join('\n'));
+  const head = [h.header, title, h.dateLine(dateLabel), ''].join('\n');
+  const body = buildCardBody(lang, card, horoscopeBody);
+  const soFarBlock = soFar.length
+    ? [h.divider, `**${L.soFarTitle}**`, ...soFar.map((line) => `• ${line}`)].join('\n')
+    : '';
+  const closeClean = plainMentions(closing).slice(0, 320);
+  const closeBlock = closeClean ? [h.divider, L.booksHeader, closeClean].join('\n') : '';
+  const foot = '....Michael';
+
+  const assemble = (includeSoFar, includeClose) => [
+    head,
+    body,
+    includeSoFar ? soFarBlock : '',
+    includeClose ? closeBlock : '',
+    foot,
+  ].filter(Boolean).join('\n').trim();
+
+  let out = assemble(true, true);
+  if (out.length > 1990) out = assemble(false, true);
+  if (out.length > 1990) out = assemble(false, false);
+  return clampContent(out);
 }
 
 export function formatPersonalHoroscope(lang, { dateLabel, horoscopeBody }) {
@@ -340,15 +363,31 @@ export async function buildDayLawForGuild({
     antichristUserId: allowed.has(offices.antichristUserId) ? offices.antichristUserId : null,
   };
 
-  const card = await generateDayLaw({
-    langCode,
-    lang,
-    dateLabel: amsterdamDateLabel(langCode),
-    aggregateMood: summarizeGuildMood(memberIds),
-    subjects,
-    offices: safeOffices,
-    yesterdayDigest: closedYesterday ? yesterdayDigest(closedYesterday) : '',
-  });
+  let card;
+  try {
+    card = await generateDayLaw({
+      langCode,
+      lang,
+      dateLabel: amsterdamDateLabel(langCode),
+      aggregateMood: summarizeGuildMood(memberIds),
+      subjects,
+      offices: safeOffices,
+      yesterdayDigest: closedYesterday ? yesterdayDigest(closedYesterday) : '',
+    });
+  } catch (err) {
+    console.error('[michael] day law failed, using fallback card:', err?.message ?? err);
+    card = {
+      mood: langCode === 'nl' ? 'HET REGISTER STOTTERT' : 'THE REGISTER STUTTERS',
+      omen: lang.dayLaw.booksFallback,
+      prophecies: [],
+      forbiddenWord: langCode === 'nl' ? 'STOF' : 'DUST',
+      leastFavouriteUserId: null,
+      leastFavouriteReason: '',
+      rule: '',
+      ruleWatch: [],
+      stats: [],
+    };
+  }
 
   saveTodayCard(guildId, card, safeOffices);
   return {

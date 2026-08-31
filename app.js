@@ -2402,7 +2402,8 @@ async function postDailyBulletin(guildId, channelId, label) {
   console.log(`[michael] daily bulletin posted | ${label} | ch=${channelId} | chosen=${chosenUserId} | antichrist=${antichristUserId}`);
 }
 
-// Moons Grill (UK): 11:00 Amsterdam = 10:00 UK while BST is in effect
+// Moons Grill (UK): 11:00 Amsterdam = 10:00 UK while BST is in effect.
+// Guilds created before Aug 2017 have a default #general whose channel id equals the guild id.
 const MOONS_GRILL_GUILD_ID = '183545688859213834';
 const MOONS_GRILL_CHANNEL_ID = '183545688859213834';
 
