@@ -26,7 +26,7 @@ import { getRandomWisdom } from './wisdom.js';
 import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness } from './utils/michael-memory.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
@@ -52,7 +52,7 @@ import {
   buildSubjectDossier,
   formatPersonalHoroscope,
 } from './utils/horoscope.js';
-import { getTodayCard, markDayPosted, wasChannelPostedToday } from './utils/day-ledger.js';
+import { getTodayCard, markDayPosted, recentFeaturedUserIds, wasChannelPostedToday } from './utils/day-ledger.js';
 
 const MANAGE_GUILD = BigInt(0x20);
 const MANAGE_CHANNELS = BigInt(0x10);
@@ -186,6 +186,15 @@ function memoryMemberIdsForGuild(guildId) {
     .map(([id]) => id);
 }
 
+function shuffleIds(ids) {
+  const out = [...ids];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 async function fetchGuildHumanMemberIds(guildId, { fallbackIds = [] } = {}) {
   const extras = [...fallbackIds, ...memoryMemberIdsForGuild(guildId)].filter(Boolean);
   try {
@@ -202,18 +211,69 @@ async function fetchGuildHumanMemberIds(guildId, { fallbackIds = [] } = {}) {
   }
 }
 
+/**
+ * Daily / horoscope pool: people who used Michael in this guild.
+ * Falls back to members with any dossier, then the full member list.
+ */
+async function resolveDailyMemberPool(guildId, { fallbackIds = [] } = {}) {
+  const members = await fetchGuildHumanMemberIds(guildId, { fallbackIds });
+  const memberSet = new Set(members);
+  const interactors = interactorIdsForGuild(guildId).filter((id) => !memberSet.size || memberSet.has(id));
+  const extras = (fallbackIds ?? []).filter(Boolean);
+  let pool;
+  let source;
+  if (interactors.length >= 2) {
+    pool = [...new Set([...interactors, ...extras])];
+    source = 'interactors';
+  } else {
+    const known = members.filter((id) => loadAllMemory()[id]);
+    if (known.length >= 2) {
+      pool = [...new Set([...known, ...extras])];
+      source = 'known-members';
+    } else if (members.length) {
+      pool = [...new Set([...members, ...extras])];
+      source = 'all-members';
+    } else {
+      pool = [...new Set([...interactors, ...extras])];
+      source = 'interactors-fallback';
+    }
+  }
+  console.log(`[michael] daily pool | guild=${guildId} | source=${source} | n=${pool.length} | interactors=${interactors.length}`);
+  return pool;
+}
+
 async function fetchRandomHumanUserId(guildId, fallbackIds = []) {
-  const ids = await fetchGuildHumanMemberIds(guildId, { fallbackIds });
+  const ids = await resolveDailyMemberPool(guildId, { fallbackIds });
   if (!ids.length) throw new Error('no human members in guild');
   return ids[Math.floor(Math.random() * ids.length)];
 }
 
-/** Two different humans when possible (chosen one + antichrist). */
-function pickTwoDistinctIds(ids) {
+/** Two different humans when possible (chosen one + antichrist). Rotates away from exclude when the pool allows. */
+function pickTwoDistinctIds(ids, { exclude = [] } = {}) {
   const unique = [...new Set((ids ?? []).filter(Boolean))];
   if (!unique.length) return { first: null, second: null };
-  const shuffled = unique.sort(() => Math.random() - 0.5);
+  const banned = new Set((exclude ?? []).filter(Boolean));
+  const fresh = unique.filter((id) => !banned.has(id));
+  const pool = fresh.length >= 2 ? fresh : unique;
+  const shuffled = shuffleIds(pool);
   return { first: shuffled[0], second: shuffled[1] ?? shuffled[0] };
+}
+
+function assignFreshDailyOffices(guildId, memberIds) {
+  const avoid = [
+    getUitverkoreneUserId(guildId),
+    getCurrentAntichristUserId(guildId),
+    ...recentFeaturedUserIds(guildId, 3),
+  ];
+  const picked = pickTwoDistinctIds(memberIds, { exclude: avoid });
+  if (!picked.first) throw new Error('no human members in guild');
+  const chosenUserId = picked.first;
+  const antichristUserId = picked.second && picked.second !== chosenUserId
+    ? picked.second
+    : (memberIds.find((id) => id !== chosenUserId) ?? chosenUserId);
+  setUitverkoreneForGuild(guildId, chosenUserId);
+  setAntichristForGuild(guildId, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
+  return { chosenUserId, antichristUserId };
 }
 
 async function buildCosmicAppointmentMessage(guildId, lang, role) {
@@ -245,18 +305,13 @@ async function buildAntichristMessage(guildId, lang) {
 
 async function buildDailyBulletin(guildId, lang) {
   const langCode = getGuildLanguage(guildId);
-  const memberIds = await fetchGuildHumanMemberIds(guildId);
+  const memberIds = await resolveDailyMemberPool(guildId);
   const existingCard = getTodayCard(guildId);
   let chosenUserId = getUitverkoreneUserId(guildId);
   let antichristUserId = getCurrentAntichristUserId(guildId);
 
   if (!existingCard) {
-    const picked = pickTwoDistinctIds(memberIds);
-    if (!picked.first) throw new Error('no human members in guild');
-    chosenUserId = chosenUserId || picked.first;
-    antichristUserId = antichristUserId || picked.second || picked.first;
-    setUitverkoreneForGuild(guildId, chosenUserId);
-    setAntichristForGuild(guildId, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
+    ({ chosenUserId, antichristUserId } = assignFreshDailyOffices(guildId, memberIds));
   }
 
   const { content } = await buildDayLawForGuild({
@@ -485,6 +540,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   // Resolve guild language for all subsequent handlers
   const guildId = req.body.guild_id;
   const invokingUserId = req.body.member?.user?.id ?? req.body.user?.id;
+  if (guildId && invokingUserId) {
+    noteGuildInteraction(
+      invokingUserId,
+      guildId,
+      req.body.member?.user?.username ?? req.body.user?.username ?? '',
+    );
+  }
   const langCode = resolveLanguage(guildId, invokingUserId);
   const lang = getLang(langCode);
   if (
@@ -1545,21 +1607,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         let content;
 
         if (guildId) {
-          const memberIds = await fetchGuildHumanMemberIds(guildId, { fallbackIds: [invokerId] });
+          const memberIds = await resolveDailyMemberPool(guildId, { fallbackIds: [invokerId] });
           let currentChosen = getUitverkoreneUserId(guildId);
           let currentAntichrist = getCurrentAntichristUserId(guildId);
-          if (!currentChosen || !currentAntichrist) {
-            const { first, second } = pickTwoDistinctIds(memberIds);
-            if (!currentChosen && first) {
-              currentChosen = first;
-              setUitverkoreneForGuild(guildId, first);
-            }
-            if (!currentAntichrist && second) {
-              currentAntichrist = second === currentChosen
-                ? (memberIds.find((id) => id !== currentChosen) ?? second)
-                : second;
-              setAntichristForGuild(guildId, currentAntichrist, Date.now() + 24 * 60 * 60 * 1000);
-            }
+          if (!getTodayCard(guildId) || !currentChosen || !currentAntichrist) {
+            ({ chosenUserId: currentChosen, antichristUserId: currentAntichrist } =
+              assignFreshDailyOffices(guildId, memberIds));
           }
           const law = await buildDayLawForGuild({
             guildId,
@@ -2324,12 +2377,6 @@ cron.schedule('*/15 * * * *', () => {
   Object.keys(allMem).forEach((uid) => maybeAgeBusiness(uid));
 });
 
-async function guildIdForChannel(channelId) {
-  const res = await DiscordRequest(`channels/${channelId}`, { method: 'GET' });
-  const channel = await res.json();
-  return channel.guild_id ?? null;
-}
-
 async function postDailyBulletin(guildId, channelId, label) {
   if (!guildId || !channelId) return;
   if (isDutchQuietHoursForUnpromptedSends()) {
@@ -2355,27 +2402,51 @@ async function postDailyBulletin(guildId, channelId, label) {
   console.log(`[michael] daily bulletin posted | ${label} | ch=${channelId} | chosen=${chosenUserId} | antichrist=${antichristUserId}`);
 }
 
+// Moons Grill (UK): 11:00 Amsterdam = 10:00 UK while BST is in effect
+const MOONS_GRILL_GUILD_ID = '183545688859213834';
+const MOONS_GRILL_CHANNEL_ID = '183545688859213834';
+
+function isMoonsGrillDailyTarget(guildId, channelId) {
+  return String(guildId ?? '') === MOONS_GRILL_GUILD_ID
+    || String(channelId ?? '') === MOONS_GRILL_CHANNEL_ID;
+}
+
+/** Channel snowflake for the post; guild id for the card (lookup if the two constants match). */
+async function moonsGrillTargets() {
+  const channelId = MOONS_GRILL_CHANNEL_ID;
+  let guildId = MOONS_GRILL_GUILD_ID;
+  try {
+    const res = await DiscordRequest(`channels/${channelId}`, { method: 'GET' });
+    const ch = await res.json();
+    if (ch.guild_id) guildId = ch.guild_id;
+  } catch (err) {
+    console.warn(`[michael] Moons Grill channel lookup failed | using guild=${guildId}:`, err?.message ?? err);
+  }
+  return { guildId, channelId };
+}
+
 // Default daily card...  10:00 Amsterdam, DAILY_GUILD_ID + DAILY_CHANNEL_ID
+// Moons Grill is excluded here so it only fires at 11:00 (UK morning).
 cron.schedule('0 10 * * *', async () => {
   try {
-    await postDailyBulletin(process.env.DAILY_GUILD_ID, process.env.DAILY_CHANNEL_ID, '10:00');
+    const guildId = process.env.DAILY_GUILD_ID;
+    const channelId = process.env.DAILY_CHANNEL_ID;
+    if (isMoonsGrillDailyTarget(guildId, channelId)) {
+      console.log('[michael] daily bulletin 10:00 skipped | Moons Grill posts at 11:00 Amsterdam');
+      return;
+    }
+    await postDailyBulletin(guildId, channelId, '10:00');
   } catch (err) {
     console.error('Daily bulletin failed (10:00):', err);
   }
 }, { timezone: 'Europe/Amsterdam' });
 
-// Extra board...  11:00 Amsterdam in this channel (guild resolved from the channel)
-const ELEVEN_AM_CHANNEL_ID = '183545688859213834';
 cron.schedule('0 11 * * *', async () => {
   try {
-    const guildId = await guildIdForChannel(ELEVEN_AM_CHANNEL_ID);
-    if (!guildId) {
-      console.error(`[michael] daily bulletin 11:00 | no guild for channel ${ELEVEN_AM_CHANNEL_ID}`);
-      return;
-    }
-    await postDailyBulletin(guildId, ELEVEN_AM_CHANNEL_ID, '11:00');
+    const { guildId, channelId } = await moonsGrillTargets();
+    await postDailyBulletin(guildId, channelId, '11:00-moons-grill');
   } catch (err) {
-    console.error('Daily bulletin failed (11:00):', err);
+    console.error('Daily bulletin failed (11:00 Moons Grill):', err);
   }
 }, { timezone: 'Europe/Amsterdam' });
 
@@ -2482,13 +2553,12 @@ async function catchUpElevenAmBulletin() {
   const hour = amsterdamHour();
   if (hour < 11 || hour >= 22) return;
   try {
-    const guildId = await guildIdForChannel(ELEVEN_AM_CHANNEL_ID);
-    if (!guildId) return;
-    if (wasChannelPostedToday(guildId, ELEVEN_AM_CHANNEL_ID)) return;
-    console.log('[michael] daily bulletin 11:00 catch-up');
-    await postDailyBulletin(guildId, ELEVEN_AM_CHANNEL_ID, '11:00-catchup');
+    const { guildId, channelId } = await moonsGrillTargets();
+    if (wasChannelPostedToday(guildId, channelId)) return;
+    console.log('[michael] daily bulletin 11:00 catch-up | Moons Grill');
+    await postDailyBulletin(guildId, channelId, '11:00-moons-grill-catchup');
   } catch (err) {
-    console.error('Daily bulletin catch-up failed (11:00):', err);
+    console.error('Daily bulletin catch-up failed (11:00 Moons Grill):', err);
   }
 }
 

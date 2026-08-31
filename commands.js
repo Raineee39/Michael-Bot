@@ -1,5 +1,5 @@
 import './utils/load-env.js';
-import { InstallGlobalCommands, InstallGuildCommands } from './utils.js';
+import { DiscordRequest, InstallGlobalCommands, InstallGuildCommands } from './utils.js';
 
 const TEST_COMMAND = {
   name: 'test',
@@ -371,7 +371,16 @@ const DM_COMMANDS = ALL_COMMANDS
   .filter((cmd) => (cmd.contexts ?? []).some((c) => DM_CONTEXTS.includes(c)))
   .map((cmd) => ({ ...cmd, contexts: DM_CONTEXTS, integration_types: [0, 1] }));
 
-const guildIds = process.env.GUILD_IDS?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
+async function guildIdsForRegister() {
+  const extra = process.env.GUILD_IDS?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
+  const res = await DiscordRequest('users/@me/guilds?limit=200', { method: 'GET' });
+  const guilds = await res.json();
+  const fromBot = Array.isArray(guilds) ? guilds.map((g) => g.id) : [];
+  return [...new Set([...fromBot, ...extra])];
+}
+
+const guildIds = await guildIdsForRegister();
+console.log('Registering guild commands in', guildIds.join(', ') || '(none)');
 
 if (guildIds.length) {
   for (const guildId of guildIds) {

@@ -1,13 +1,17 @@
-# Handoff — 28 Aug 2026
+# Handoff — 31 Aug 2026
 
 ## Status
-11:00 Amsterdam daily post added for channel `183545688859213834` (guild looked up from the channel). Catch-up on boot if it is already 11:00–21:59 and that channel has not been posted today. Still uncommitted otherwise.
+Daily horoscope / uitverkorene was repeating the same people and, in servers like Moons Grill, naming lurkers who never use Michael.
 
-## VPS — NOW (I cannot type this)
-Commit + push from the Mac, then:
+## What changed
+- Offices (chosen + antichrist) **re-roll every new Amsterdam day**. They are no longer reused from `cosmic-state.json`.
+- The pick pool prefers people who **used a Michael command in that guild** (`lastSeenByGuild`), not the full member list or “last channel they spoke in”.
+- Horoscope subjects are a **weighted rotation** (recency + dossier), and recent featured IDs (last ~3 days) are excluded when the pool is large enough.
+- Slash / button / modal use stamps `lastSeenByGuild` so future dailies stay on actual interactors.
 
-```bash
-cd /root/michael-bot && git pull && pm2 restart michael-bot --update-env
-```
+## Daily times
+- Default board: 10:00 Europe/Amsterdam (`DAILY_GUILD_ID` / `DAILY_CHANNEL_ID`). Skips if that target is Moons Grill.
+- Moons Grill: 11:00 Amsterdam (10:00 UK in BST). Guild + channel hardcoded as `183545688859213834`.
 
-Do **not** register. If restart is after 11:00, catch-up should still post today.
+## Next
+Deploy and restart so the 10:00 / 11:00 crons pick up office rotation and the Moons Grill hour. First day after deploy still uses older dossiers (`lastGuildId` + prompts) until people slash in that server.

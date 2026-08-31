@@ -32,7 +32,9 @@ npm run register   # register slash commands with Discord (run from a machine wh
 npm start
 ```
 
-Register from your Mac if the VPS token cannot update the application (Discord 403 / code 20012). Do not put `npm run register` in the VPS deploy chain. After register, commands that are not server-only (`/horoscope`, `/chat`, …) also appear in DMs with the bot. Server-only ones (`/chosenone`, `/antichrist`, `/switchoflife`, `/cosmicstatus`) stay in servers.
+The running bot reads env on the **VPS only**. Register from your Mac if the VPS token cannot update the application (Discord 403 / code 20012) — that Mac `.env` is only for `npm run register` (APP_ID + matching token). Do not put register in the VPS deploy chain.
+
+Register asks Discord which servers the bot is in and installs there, so you do not need to list every guild in `GUILD_IDS`. After register, commands that are not server-only (`/horoscope`, `/chat`, …) also appear in DMs. Server-only ones (`/chosenone`, `/antichrist`, `/switchoflife`, `/cosmicstatus`) stay in servers.
 
 In the [Discord Developer Portal](https://discord.com/developers/applications/1492114301840916560/bot) → **Bot** → Privileged Gateway Intents, leave **Message Content** on and turn **Server Members Intent** on. Without that last toggle, Discord returns 403 `Missing Access` on the member list and `/horoscope` cannot see the server.
 
@@ -62,9 +64,9 @@ Default is **off**. Nothing in `.env` turns him on. Someone with Manage Server (
 
 Stored in `data/life-switch.json` on the VPS. Channel override beats server setting.
 
-## Daily bulletin (10:00 Amsterdam, plus 11:00 in `183545688859213834`)
+## Daily bulletin (10:00 Amsterdam; Moons Grill 11:00 Amsterdam / 10:00 UK)
 
-If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, Gemini writes **today's card** — mood, omen, named prophecies, a forbidden word, a least favourite, a standing order. That card is **law until tomorrow's card**. `/horoscope` reprints the same card (and a short "so far" if anything was stamped). The antichrist is refused on most commands, in public, with prejudice.
+If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, Gemini writes **today's card** at **10:00 Europe/Amsterdam**. Moons Grill (`183545688859213834`) is one hour later: **11:00 Amsterdam**, so it lands at **10:00 UK** during BST. That card is **law until tomorrow's card**. `/horoscope` reprints the same card (and a short "so far" if anything was stamped). The antichrist is refused on most commands, in public, with prejudice.
 
 Michael watches chat and stamps rarely (max 4 public stamps a day, 25 minutes apart). First hit on a law is a short reply; repeats get a reaction. Next morning he closes yesterday's books, judgement moves, and the residue flavours the new card. This does not need `/switchoflife`. The bot needs **Add Reactions** in the server.
 

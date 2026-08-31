@@ -52,7 +52,46 @@ function emptyDay(dateKey) {
     postedAt: null,
     postedChannelId: null,
     yesterday: null,
+    featuredHistory: [],
   };
+}
+
+function featuredIdsFromDay(day) {
+  if (!day) return [];
+  return [
+    day.offices?.chosenUserId,
+    day.offices?.antichristUserId,
+    ...(day.card?.prophecies ?? []).map((p) => p.userId),
+    day.card?.leastFavouriteUserId,
+  ].filter(Boolean);
+}
+
+function appendFeaturedHistory(prev) {
+  const entry = {
+    dateKey: prev.dateKey,
+    userIds: [...new Set(featuredIdsFromDay(prev))],
+  };
+  return [...(prev.featuredHistory ?? []), entry].slice(-7);
+}
+
+/** User IDs named on recent daily cards (offices + prophecies), newest last. */
+export function recentFeaturedUserIds(guildId, days = 3) {
+  const day = getGuildDay(guildId);
+  if (!day) return [];
+  const rows = [...(day.featuredHistory ?? [])];
+  if (day.dateKey === amsterdamDateKey() && day.yesterday) {
+    rows.push({
+      dateKey: day.yesterday.dateKey,
+      userIds: [
+        day.yesterday.offices?.chosenUserId,
+        day.yesterday.offices?.antichristUserId,
+        ...(day.yesterday.card?.prophecies ?? []).map((p) => p.userId),
+      ].filter(Boolean),
+    });
+  } else if (day.dateKey !== amsterdamDateKey()) {
+    rows.push({ dateKey: day.dateKey, userIds: featuredIdsFromDay(day) });
+  }
+  return [...new Set(rows.slice(-days).flatMap((r) => r.userIds ?? []))];
 }
 
 export function getGuildDay(guildId) {
@@ -105,6 +144,7 @@ export function rollGuildDay(guildId) {
   };
   const day = emptyDay(today);
   day.yesterday = closedYesterday;
+  day.featuredHistory = appendFeaturedHistory(prev);
   all.guilds[guildId] = day;
   writeAll(all);
   return { day, closedYesterday };

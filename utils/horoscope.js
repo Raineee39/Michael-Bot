@@ -1,7 +1,8 @@
-import { loadAllMemory, loadUserMemory, getJudgementLabel, resolveField, patchUserState } from './michael-memory.js';
+import { loadAllMemory, loadUserMemory, getJudgementLabel, resolveField, patchUserState, guildInteractionAt, interactorIdsForGuild } from './michael-memory.js';
 import { generateBooksClosed, generateDayLaw, generateHoroscope } from './openai.js';
 import {
   getTodayCard,
+  recentFeaturedUserIds,
   rollGuildDay,
   saveTodayCard,
   saveYesterdayClosing,
@@ -24,21 +25,63 @@ function memoryRichness(mem) {
   return score;
 }
 
-/** Pick souls with dossier material to weave into the horoscope (no random filler). */
-export function pickHoroscopeSubjects(memberIds, { count = 3, ensureUserIds = [] } = {}) {
+function recencyBonus(mem, guildId) {
+  const seen = guildInteractionAt(mem, guildId);
+  if (!seen) return 0;
+  const days = (Date.now() - seen) / (24 * 60 * 60 * 1000);
+  if (days <= 2) return 8;
+  if (days <= 7) return 5;
+  if (days <= 21) return 3;
+  if (days <= 45) return 1;
+  return 0;
+}
+
+function weightedSample(items, count) {
+  const pool = items.map((x) => ({ ...x }));
+  const out = [];
+  while (out.length < count && pool.length) {
+    const total = pool.reduce((s, x) => s + Math.max(0.1, x.weight), 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    for (; idx < pool.length; idx++) {
+      r -= Math.max(0.1, pool[idx].weight);
+      if (r <= 0) break;
+    }
+    idx = Math.min(idx, pool.length - 1);
+    out.push(pool.splice(idx, 1)[0]);
+  }
+  return out;
+}
+
+/** Pick souls to weave into the horoscope. Prefers recent Michael users; rotates. */
+export function pickHoroscopeSubjects(memberIds, {
+  count = 3,
+  ensureUserIds = [],
+  excludeUserIds = [],
+  guildId = null,
+} = {}) {
   const all = loadAllMemory();
   const ensured = [...new Set((ensureUserIds ?? []).filter(Boolean))];
+  const banned = new Set((excludeUserIds ?? []).filter((id) => !ensured.includes(id)));
   const pool = new Set([...(memberIds ?? []), ...ensured]);
-  const ranked = [...pool]
-    .map((id) => ({ id, score: memoryRichness(all[id]) }))
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score);
+  const interactors = new Set(guildId ? interactorIdsForGuild(guildId) : []);
+
+  const scored = [...pool]
+    .filter((id) => !banned.has(id))
+    .map((id) => {
+      const mem = all[id];
+      const richness = memoryRichness(mem);
+      const interacted = interactors.has(id) || guildInteractionAt(mem, guildId);
+      const weight = (interacted ? 6 : 0) + richness + recencyBonus(mem, guildId) + Math.random() * 3;
+      return { id, richness, interacted, weight };
+    });
+
+  const preferred = scored.filter((x) => x.interacted || x.richness > 0);
+  const candidates = preferred.length >= 2 ? preferred : scored;
 
   const picked = new Set(ensured);
   const target = Math.max(count, ensured.length);
-
-  for (const { id } of ranked) {
-    if (picked.size >= target) break;
+  for (const { id } of weightedSample(candidates.filter((x) => !picked.has(x.id)), target - picked.size)) {
     picked.add(id);
   }
 
@@ -179,8 +222,10 @@ export async function buildHoroscopeText({
   lang,
   mode = 'command',
   ensureUserIds = [],
+  excludeUserIds = [],
   offices = {},
   getCosmicRole,
+  guildId = null,
 }) {
   const mustInclude = [
     ...ensureUserIds,
@@ -190,6 +235,8 @@ export async function buildHoroscopeText({
   const subjectIds = pickHoroscopeSubjects(memberIds, {
     count: mode === 'daily' ? 4 : 3,
     ensureUserIds: mustInclude,
+    excludeUserIds,
+    guildId,
   });
   const subjects = subjectIds.map((userId) => ({
     userId,
@@ -279,6 +326,8 @@ export async function buildDayLawForGuild({
   const subjectIds = pickHoroscopeSubjects(memberIds, {
     count: 4,
     ensureUserIds: mustInclude,
+    excludeUserIds: recentFeaturedUserIds(guildId, 3),
+    guildId,
   });
   const subjects = subjectIds.map((userId) => ({
     userId,

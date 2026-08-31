@@ -39,6 +39,7 @@ function defaultUser(username) {
     currentMood:       null,
     lastChannelId:     null,   // most recent channel this user was active in
     lastGuildId:       null,   // guild of that channel...  for delayed consequences when no shadow match
+    lastSeenByGuild:   {},     // guildId → last time they used a Michael command there
     unfinishedBusiness: [],    // Feature 1...  items Michael hasn't let go of
     confessions:         [],   // secrets filed against this soul (self or by others)
     recentThemes:      [],     // Feature 2...  topic snapshots for contradiction engine
@@ -65,6 +66,7 @@ export function loadUserMemory(userId) {
   if (user.currentMood === undefined)      user.currentMood = null;
   if (user.lastChannelId === undefined)    user.lastChannelId = null;
   if (user.lastGuildId === undefined)      user.lastGuildId = null;
+  if (!user.lastSeenByGuild || typeof user.lastSeenByGuild !== 'object') user.lastSeenByGuild = {};
   if (user.unfinishedBusiness === undefined) user.unfinishedBusiness = [];
   if (user.confessions === undefined) user.confessions = [];
   if (user.recentThemes === undefined)     user.recentThemes = [];
@@ -157,8 +159,63 @@ export function saveUserMemory(userId, username, prompt, mood, scoreDelta = 0, n
     user.lastChannelId = channelId;
     if (guildId !== undefined) user.lastGuildId = guildId;
   }
+  if (guildId) {
+    if (!user.lastSeenByGuild || typeof user.lastSeenByGuild !== 'object') user.lastSeenByGuild = {};
+    user.lastSeenByGuild[guildId] = Date.now();
+  }
   all[userId] = user;
   saveAll(all);
+}
+
+const INTERACTOR_MAX_AGE_MS = 45 * 24 * 60 * 60 * 1000;
+
+function hasDirectMichaelHistory(mem) {
+  const prompts = (mem?.prompts ?? []).filter((p) => !String(p).startsWith('['));
+  return prompts.length > 0 || Boolean(mem?.impression) || Boolean(mem?.michaelCharacter);
+}
+
+/**
+ * Stamp that this user used Michael in a guild (slash / button / modal).
+ * Not used by the gateway for ordinary chat.
+ */
+export function noteGuildInteraction(userId, guildId, username = '') {
+  if (!userId || !guildId) return;
+  const all = loadAll();
+  const user = all[userId] ?? defaultUser(username);
+  if (username) user.username = username;
+  if (!user.lastSeenByGuild || typeof user.lastSeenByGuild !== 'object') user.lastSeenByGuild = {};
+  user.lastSeenByGuild[guildId] = Date.now();
+  user.lastGuildId = guildId;
+  migrateMichaelRollenspel(user);
+  all[userId] = user;
+  saveAll(all);
+}
+
+export function guildInteractionAt(mem, guildId) {
+  if (!guildId || !mem) return 0;
+  const stamped = mem.lastSeenByGuild?.[guildId];
+  if (typeof stamped === 'number' && stamped > 0) return stamped;
+  return 0;
+}
+
+/** Users who actually used Michael in this guild (not merely posted in it). */
+export function interactorIdsForGuild(guildId, { maxAgeMs = INTERACTOR_MAX_AGE_MS } = {}) {
+  if (!guildId) return [];
+  const now = Date.now();
+  const ids = [];
+  for (const [id, mem] of Object.entries(loadAll())) {
+    const seen = guildInteractionAt(mem, guildId);
+    if (seen && now - seen <= maxAgeMs) {
+      ids.push(id);
+      continue;
+    }
+    // Bootstrap for records from before lastSeenByGuild existed
+    const neverStamped = !mem.lastSeenByGuild || !Object.keys(mem.lastSeenByGuild).length;
+    if (neverStamped && mem.lastGuildId === guildId && hasDirectMichaelHistory(mem)) {
+      ids.push(id);
+    }
+  }
+  return ids;
 }
 
 /** Expose the raw store so the cron can scan all users. */
