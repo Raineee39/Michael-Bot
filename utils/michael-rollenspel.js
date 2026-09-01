@@ -14,6 +14,7 @@ import {
   saveMichaelCharacter,
   shouldReferenceCharacterThisTurn,
 } from './michael-memory.js';
+import { clearAntichristForGuild, getCurrentAntichristUserId } from './cosmic-state.js';
 
 export { formatCharacterForPrompt, shouldReferenceCharacterThisTurn };
 
@@ -155,11 +156,11 @@ export function negotiationDC(user, mood) {
  *  Targets roughly: woedend ~50%, streng ~60%, lower moods ~70 to 80%.
  */
 export function forgivenessThreshold(mood) {
-  if (mood === 'woedend') return 13;
-  if (mood === 'streng') return 11;
-  if (mood === 'passief-agressief') return 10;
-  if (mood === 'verward') return 9;
-  return 8;
+  if (mood === 'woedend') return 10;
+  if (mood === 'streng') return 9;
+  if (mood === 'passief-agressief') return 8;
+  if (mood === 'verward') return 7;
+  return 6;
 }
 
 /**
@@ -393,10 +394,10 @@ export async function runOnderhandelen(userId, username, verzoek, langCode = 'nl
 }
 
 /** Build /vergeefmij response after roll. */
-export async function runForgivenessRoll(userId, username, currentMood, moodIdx, langCode = 'nl') {
+export async function runForgivenessRoll(userId, username, currentMood, moodIdx, langCode = 'nl', guildId = null) {
   await ensureMichaelCharacter(userId, username, langCode);
   let user = loadUserMemory(userId);
-  const roll = computeMichaelRoll(user, currentMood, { context: 'forgiveness' });
+  const roll = computeMichaelRoll(user, currentMood, { context: 'forgiveness', extraModifier: 2 });
   const need = forgivenessThreshold(currentMood);
   const forgiven = roll.total >= need;
 
@@ -404,11 +405,17 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx,
   let judgementDelta = 0;
   let newMood = currentMood;
   let narrative;
+  const wasAntichrist = Boolean(guildId && getCurrentAntichristUserId(guildId) === userId);
+  let antichristCleansed = false;
 
   if (forgiven) {
     newMood = MICHAEL_MOODS_SAFE[Math.max(0, moodIdx - 2)];
-    judgementDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 2 : 1;
+    judgementDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 3 : 2;
     patchUserState(userId, judgementDelta, newMood);
+    if (wasAntichrist) {
+      clearAntichristForGuild(guildId);
+      antichristCleansed = true;
+    }
     user = loadUserMemory(userId);
     narrative = await generateForgivenessRollNarrative({
       accepted: true,
@@ -418,6 +425,7 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx,
       newMood,
       judgementScore: user.judgementScore,
       langCode,
+      antichristCleansed,
     });
   } else {
     // Poor roll gets a small oordeel penalty; other failures just mean no forgiveness
@@ -437,7 +445,7 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx,
     });
   }
 
-  return { forgiven, narrative, roll, need, newMood, oordeelDelta: judgementDelta };
+  return { forgiven, narrative, roll, need, newMood, oordeelDelta: judgementDelta, antichristCleansed };
 }
 
 // Mood order must match app.js MICHAEL_MOODS...  avoid circular import

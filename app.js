@@ -403,6 +403,78 @@ function buildWitnessDossier(targetId, targetUsername, memory, guildId, lang, la
   return lines.join('\n');
 }
 
+function mentionIdsFromText(text) {
+  return [...String(text ?? '').matchAll(/<@!?(\d+)>/g)].map((m) => m[1]);
+}
+
+function findMemoryUsersNamedInText(text, excludeIds = []) {
+  const exclude = new Set(excludeIds.filter(Boolean));
+  const hits = [];
+  for (const [id, mem] of Object.entries(loadAllMemory())) {
+    if (exclude.has(id)) continue;
+    const name = String(mem.username || '').trim();
+    if (name.length < 3) continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(text)) {
+      hits.push({ userId: id, username: mem.username });
+    }
+  }
+  return hits;
+}
+
+/** Speaker file plus anyone @mentioned or named in the message. No extra slash field. */
+function collectRegisterSubjects(req, invokerId, invokerName, userInput) {
+  const subjects = [];
+  const seen = new Set([invokerId]);
+  const add = (userId, username) => {
+    if (!userId || seen.has(userId)) return;
+    seen.add(userId);
+    const mem = loadUserMemory(userId);
+    const resolved = req.body.data?.resolved?.users?.[userId];
+    subjects.push({
+      userId,
+      username: resolved?.username ?? username ?? mem.username ?? userId,
+    });
+  };
+
+  for (const [id, user] of Object.entries(req.body.data?.resolved?.users ?? {})) {
+    add(id, user?.username);
+  }
+  for (const id of mentionIdsFromText(userInput)) add(id);
+  for (const hit of findMemoryUsersNamedInText(userInput, [...seen])) add(hit.userId, hit.username);
+
+  if (
+    !subjects.length
+    && /\b(confess|confession|biecht|secret|register|dossier)\b/i.test(userInput)
+  ) {
+    for (const [id, mem] of Object.entries(loadAllMemory())) {
+      const aboutThem = (mem.confessions ?? []).some(
+        (c) => c.confessorId === invokerId && !c.aboutSelf,
+      );
+      if (aboutThem) add(id, mem.username);
+    }
+  }
+
+  return subjects;
+}
+
+function buildChatRegisterBlock({ invokerId, invokerName, subjects, guildId, lang, langCode }) {
+  const people = [
+    { userId: invokerId, username: invokerName, role: 'speaker' },
+    ...subjects.map((s) => ({ ...s, role: 'subject' })),
+  ];
+  const seen = new Set();
+  const parts = [];
+  for (const p of people) {
+    if (seen.has(p.userId)) continue;
+    seen.add(p.userId);
+    const mem = loadUserMemory(p.userId);
+    const dossier = buildWitnessDossier(p.userId, p.username || mem.username, mem, guildId, lang, langCode);
+    parts.push(`REGISTER FILE — ${p.role} ${p.username} (<@${p.userId}>):\n${dossier}`);
+  }
+  return parts.join('\n\n');
+}
+
 /** Cosmic roles are per-guild and persisted in data/cosmic-state.json (see utils/cosmic-state.js). */
 function isAntichrist(userId, guildId) {
   if (!guildId) return false;
@@ -423,7 +495,7 @@ function getCosmicRole(userId, guildId) {
 }
 
 /** Antichrist gets "nee" on almost everything; only these stay open. */
-const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'chosenone', 'chat', 'cosmicstatus', 'feedback']);
+const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'chosenone', 'chat', 'cosmicstatus', 'feedback', 'forgiveme']);
 
 /** Snowflake to receive /feedback DMs (override with FEEDBACK_DM_USER_ID). */
 const FEEDBACK_OWNER_ID = process.env.FEEDBACK_DM_USER_ID || '49627618751811584';
@@ -844,9 +916,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const memory   = loadUserMemory(userId);
       const currentMood = memory.currentMood ?? 'afwezig';
       const moodIdx  = MICHAEL_MOODS.indexOf(currentMood);
+      const stained = isAntichrist(userId, guildId);
 
-      // Already calm...  apology is unnecessary
-      if (moodIdx <= 2) {
+      // Already calm...  apology is unnecessary unless they still carry the antichrist stain
+      if (moodIdx <= 2 && !stained) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: { content: pick(lang.ui.apologyAlreadyCalm) },
@@ -1130,12 +1203,25 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Feature 2...  Contradiction engine: detect if user is revisiting a theme
         const contradictionHint = detectThemeOverlap(userId, userInput);
 
+        const registerSubjects = collectRegisterSubjects(req, userId, username, userInput);
+        const registerBlock = buildChatRegisterBlock({
+          invokerId: userId,
+          invokerName: username,
+          subjects: registerSubjects,
+          guildId,
+          lang,
+          langCode,
+        });
+        if (registerSubjects.length) {
+          console.log(`[michael] chat | register subjects | ${registerSubjects.map((s) => `${s.username}(${s.userId})`).join(', ')}`);
+        }
+
         // Passive dice roll...  selective, returns true if buttons should be shown
         const passiveTriggered = maybePassiveRollBlock(userId, userInput);
 
         // Run message generation and AI scoring in parallel...  no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
-          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission, characterBlock, langCode),
+          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission, characterBlock, langCode, registerBlock),
           scoreMichaelMessage(userInput),
         ]);
 
@@ -1450,12 +1536,25 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       }
 
       try {
+        const registerSubjects = collectRegisterSubjects(req, userId, username, userInput);
+        const registerBlock = buildChatRegisterBlock({
+          invokerId: userId,
+          invokerName: username,
+          subjects: registerSubjects,
+          guildId,
+          lang,
+          langCode,
+        });
+        if (registerSubjects.length) {
+          console.log(`[michael] listentomichael | register subjects | ${registerSubjects.map((s) => `${s.username}(${s.userId})`).join(', ')}`);
+        }
         const { wavBuffer, script, flavor } = await generateMichaelVoiceAdvice(userInput, {
           username,
           mood,
           judgementLabel,
           score: preMemory.judgementScore ?? 0,
           langCode,
+          registerBlock,
         });
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
         await DiscordMultipart(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
@@ -1856,8 +1955,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const currentMood = memory.currentMood ?? 'afwezig';
         const moodIdx  = MICHAEL_MOODS.indexOf(currentMood);
 
-        const { forgiven, narrative, roll, need, newMood, oordeelDelta } =
-          await runForgivenessRoll(ownerId, username, currentMood, moodIdx, langCode);
+        const { forgiven, narrative, roll, need, newMood, oordeelDelta, antichristCleansed } =
+          await runForgivenessRoll(ownerId, username, currentMood, moodIdx, langCode, req.body.guild_id ?? null);
 
         const rl = lang.rollUI;
         const sign = roll.modifier >= 0 ? '+' : '−';
@@ -1882,6 +1981,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
                 { name: rl.outcomeLabel,   value: forgiven ? `✅ ${rl.succeededLabel}` : `❌ ${rl.failedLabel}`,        inline: true },
                 { name: rl.moodLabel,      value: moodValue,                                                             inline: false },
                 { name: rl.judgementLabel, value: `${oordeelSign}${oordeelDelta}`,                                       inline: true },
+                ...(antichristCleansed
+                  ? [{ name: rl.stainLabel ?? 'Stain', value: lang.ui.antichristCleansed ?? 'The antichrist office is vacated.', inline: false }]
+                  : []),
               ],
             }],
             components: [],

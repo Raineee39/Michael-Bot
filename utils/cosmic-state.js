@@ -65,6 +65,18 @@ export function setAntichristForGuild(guildId, userId, expiresAtMs) {
   writeAll(all);
 }
 
+export function clearAntichristForGuild(guildId) {
+  if (!guildId) return;
+  const all = readAll();
+  if (!all.guilds?.[guildId]) return;
+  all.guilds[guildId] = {
+    ...all.guilds[guildId],
+    antichristUserId: null,
+    antichristExpiresAt: null,
+  };
+  writeAll(all);
+}
+
 export function setUitverkoreneForGuild(guildId, userId) {
   if (!guildId) return;
   const all = readAll();

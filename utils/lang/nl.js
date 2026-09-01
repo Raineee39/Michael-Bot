@@ -72,6 +72,7 @@ export default {
     moodUnchanged:    'onveranderd',
     judgementLabel:   'oordeel',
     changeLabel:      'wijziging',
+    stainLabel:       'smet',
   },
 
   // ─── Cosmic role blocks ──────────────────────────────────────────────────────
@@ -390,6 +391,7 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     passiveFleeButton: '🏃 Negeer het teken',
 
     vergeefmijError: 'Michaël kan het hogere register niet bereiken...  probeer het later....Michael',
+    antichristCleansed: 'Het antichrist-ambt is opgeheven.  Gevraagd voor het sluiten van de dag.  Stemming verbeterd....Michael',
     onderhandelenError: 'De registers zijn tijdelijk afgesloten...  probeer het opnieuw....Michael',
     mijnrolError: 'De inschrijvingsregisters zijn op dit moment troebel...  probeer het later....Michael',
     vibecheckError: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael',

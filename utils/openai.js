@@ -176,7 +176,7 @@ function userMentionsIsraelTopic(userInput) {
   return /\b(israel|israeli|israël|israëli|israelisch|israëlisch|idf|iof|zionis|zionism|gaza|west\s*-?\s*bank|westbank|palestin|jeruzalem|jerusalem|tel\s*aviv|occupation|bezetting|nederzetting|nakba|netanyahu|likud|knesset|golan|al-?quds|al\s*qua?ds|rafah|jenin|hebron|nablus)\b/i.test(userInput);
 }
 
-export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null, characterBlock = '', langCode = 'nl') {
+export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null, characterBlock = '', langCode = 'nl', registerBlock = '') {
   const lang = getLang(langCode);
 
   const impressionBlock = impression
@@ -292,15 +292,21 @@ ${cosmicBlock}${impressionText}${recentBlock}${contradictionBlock}${characterBlo
         : langCode === 'en'
           ? 'You may subtly include this in your response if it feels relevant (12% chance already drawn by the caller)...  never name the stats or title literally unless it fits very naturally.'
           : 'يمكنك تضمين هذا بشكل خفي في ردك إن شعر بأنه مناسب (احتمال 12% تم السحب بالفعل)...  لا تذكر الإحصائيات أو اللقب حرفياً إلا إن جاء بشكل طبيعي جداً.'
-    }\n` : ''}${israelTopicBlock}${antiZionismFlareBlock}${poetryRequirementBlock}${hijaBlock}${lyricBlock}
+    }\n` : ''}${registerBlock ? `
+THE REGISTER (you already keep this. Do not claim you have no file. Do not invent ignorance.):
+${registerBlock}
+
+If they ask about a tagged person, a confession, a secret, or anything on file — you MUST use the specific confession text and history. Answer the question with that material. Do not dump the whole file. Do not say you remember nothing.
+` : ''}${israelTopicBlock}${antiZionismFlareBlock}${poetryRequirementBlock}${hijaBlock}${lyricBlock}
 ${lang.userAttribution(username, userInput)}
     `.trim(),
   });
 
   const generated = applyChaoticFormatting(response.output[0].content[0].text);
+  const sentenceCap = israelTopicHit ? 99 : (registerBlock ? 4 : 2);
   return israelTopicHit
     ? generated
-    : clampToMaxSentences(generated, 2, lang.signOff);
+    : clampToMaxSentences(generated, sentenceCap, lang.signOff);
 }
 
 // ─── Background summarisation ──────────────────────────────────────────────────
@@ -1298,6 +1304,7 @@ export async function generateForgivenessRollNarrative({
   newMood,
   judgementScore,
   langCode = 'nl',
+  antichristCleansed = false,
 }) {
   const lang = getLang(langCode);
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
@@ -1319,9 +1326,11 @@ Current mood: ${currentMood}
 ${accepted ? `New mood: ${newMood}` : ''}
 Verdict after this interaction: ${judgementScore}
 
-${accepted
-  ? 'He accepts...  but not warmly. More like a cosmic obligation than grace. Subtly reference the roll.'
-  : 'He refuses. The roll was insufficient. He references the failure without calling it a "dice roll" explicitly...  it sounds more like a cosmic verdict.'}
+${antichristCleansed
+  ? 'They were the antichrist. The stain is lifted because they asked before the day closed. Say that the office is vacated. Mood improved. Still not warm.'
+  : accepted
+    ? 'He accepts...  but not warmly. More like a cosmic obligation than grace. Subtly reference the roll. Mood toward them has improved.'
+    : 'He refuses. The roll was insufficient. He references the failure without calling it a "dice roll" explicitly...  it sounds more like a cosmic verdict.'}
 ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2 to 3 sentences. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });
@@ -1458,7 +1467,7 @@ One dense paragraph, visual and specific, 40 to 90 words.
  * Spoken advice as WAV (24 kHz PCM wrapped). Returns { wavBuffer, script, flavor }.
  * Gemini TTS accepts natural-language style in the prompt (no separate mood parameter).
  */
-export async function generateMichaelVoiceAdvice(userInput, { username, mood, judgementLabel, score = 0, langCode = 'nl' } = {}) {
+export async function generateMichaelVoiceAdvice(userInput, { username, mood, judgementLabel, score = 0, langCode = 'nl', registerBlock = '' } = {}) {
   const lang = getLang(langCode);
   const { formalAddress, outputInstruction } = lang.helpers;
   const flavor = resolveImagineFlavor(mood, judgementLabel, score);
@@ -1475,6 +1484,12 @@ Language: ${spokenLang}. Formal address (${formalAddress}).
 User asked: "${safe}"
 Your mood toward them now: ${mood ?? 'afwezig'}...  ${moodDesc}
 Your standing verdict: ${judgementLabel ?? 'onbeslist'}...  ${judgementDesc}
+${registerBlock ? `
+THE REGISTER (you already keep this. Do not claim you have no file.):
+${registerBlock}
+
+If they ask about a tagged person, a confession, or anything on file — speak using that specific material. Do not invent ignorance.
+` : ''}
 Speak as a wrathful archangel even if they are tolerable — low, serious, angry undertone always.
 ${mood === 'woedend' || mood === 'streng' ? 'If furious (woedend): write the entire reply in ALL CAPS so it can be shouted aloud.' : ''}
 2 to 4 short spoken sentences. End by saying your name once (${lang.signOff}).

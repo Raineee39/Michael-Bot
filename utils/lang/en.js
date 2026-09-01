@@ -72,6 +72,7 @@ export default {
     moodUnchanged:  'unchanged',
     judgementLabel: 'judgement',
     changeLabel:    'change',
+    stainLabel:     'stain',
   },
 
   // ─── Cosmic role blocks ──────────────────────────────────────────────────────
@@ -390,6 +391,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     passiveFleeButton: '🏃 Ignore the sign',
 
     vergeefmijError: 'Michael cannot reach the higher register...  try again later....Michael',
+    antichristCleansed: 'The antichrist office is vacated.  Asked before the day closed.  Mood improved....Michael',
     onderhandelenError: 'The registers are temporarily closed...  try again....Michael',
     mijnrolError: 'The enrolment registers are troubled at the moment...  try again later....Michael',
     vibecheckError: 'Michael refuses to render a verdict at this time...  the energy is unclear....Michael',
