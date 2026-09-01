@@ -52,7 +52,7 @@ import {
   buildSubjectDossier,
   formatPersonalHoroscope,
 } from './utils/horoscope.js';
-import { getTodayCard, markDayPosted, recentFeaturedUserIds, wasChannelPostedToday } from './utils/day-ledger.js';
+import { applyForgivenessToTodayCard, getTodayCard, markDayPosted, recentFeaturedUserIds, wasChannelPostedToday } from './utils/day-ledger.js';
 
 const MANAGE_GUILD = BigInt(0x20);
 const MANAGE_CHANNELS = BigInt(0x10);
@@ -901,7 +901,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const header = cs.header(eyeRow);
       const card = guildId ? getTodayCard(guildId) : null;
       const lawBlock = card
-        ? `\n\n${lang.horoscope.divider}\n**${lang.horoscope.moodLabel}:** ${card.mood}\n**${lang.dayLaw.forbiddenLabel}:** ${card.forbiddenWord}`
+        ? `\n\n${lang.horoscope.divider}\n**${lang.horoscope.moodLabel}:** ${card.mood}${card.amendment ? `\n${card.amendment}` : ''}\n**${lang.dayLaw.forbiddenLabel}:** ${card.forbiddenWord}`
         : '';
 
       return res.send({
@@ -1545,9 +1545,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           lang,
           langCode,
         });
-        if (registerSubjects.length) {
-          console.log(`[michael] listentomichael | register subjects | ${registerSubjects.map((s) => `${s.username}(${s.userId})`).join(', ')}`);
-        }
+        console.log(`[michael] listentomichael | register | subjects=${registerSubjects.length} | bytes=${registerBlock.length} | ${username}`);
         const { wavBuffer, script, flavor } = await generateMichaelVoiceAdvice(userInput, {
           username,
           mood,
@@ -1966,6 +1964,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           ? `${moodName(lang, currentMood)} → ${moodName(lang, newMood)}`
           : `${moodName(lang, currentMood)} *(${rl.moodUnchanged})*`;
         console.log(`[michael] vergeefmij | ${username} | roll=${roll.total} need=${need} forgiven=${forgiven}`);
+
+        if (forgiven && req.body.guild_id) {
+          applyForgivenessToTodayCard(req.body.guild_id, {
+            userId: ownerId,
+            antichristCleansed,
+            langCode,
+          });
+        }
 
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',

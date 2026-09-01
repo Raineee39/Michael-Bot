@@ -150,6 +150,54 @@ export function rollGuildDay(guildId) {
   return { day, closedYesterday };
 }
 
+const SOFTER_CARD_MOODS = {
+  en: [
+    'RELIEVED (SUSPICIOUSLY)',
+    'ADMINISTRATIVELY SOFTENED',
+    'THE FURY THINS',
+    'PROVISIONALLY CALMER',
+    'MERCY ON FILE',
+  ],
+  nl: [
+    'OPGELUCHT (VERDACHT)',
+    'AMBTELIJK VERZACHT',
+    'DE WOEDE DUNT',
+    'VOORLOPIG RUSTER',
+    'GENADE IN HET DOSSIER',
+  ],
+};
+
+/** After a successful /forgiveme: happier card mood, so-far stamp, clear antichrist office if cleansed. */
+export function applyForgivenessToTodayCard(guildId, { userId, antichristCleansed = false, langCode = 'en' } = {}) {
+  if (!guildId || !userId) return null;
+  const today = amsterdamDateKey();
+  return mutate(guildId, (day) => {
+    if (day.dateKey !== today || !day.card) return day;
+    const pool = SOFTER_CARD_MOODS[langCode] ?? SOFTER_CARD_MOODS.en;
+    const nextMood = pool[Math.floor(Math.random() * pool.length)];
+    day.card = {
+      ...day.card,
+      mood: nextMood,
+      amendment: antichristCleansed
+        ? (langCode === 'nl'
+          ? `De antichrist-smet op <@${userId}> is opgeheven.  Gevraagd voor het sluiten van de dag.`
+          : `The antichrist stain on <@${userId}> is lifted.  Asked before the day closed.`)
+        : (day.card.amendment ?? ''),
+    };
+    if (antichristCleansed) {
+      day.offices = { ...(day.offices ?? {}), antichristUserId: null };
+    }
+    if (!day.ledger) day.ledger = emptyLedger();
+    day.ledger.events.push({
+      t: Date.now(),
+      kind: antichristCleansed ? 'cleansed' : 'forgiven',
+      userId,
+    });
+    day.ledger.events = day.ledger.events.slice(-40);
+    return day;
+  });
+}
+
 export function saveTodayCard(guildId, card, offices = {}) {
   return mutate(guildId, (day) => {
     const today = amsterdamDateKey();
@@ -280,6 +328,12 @@ export function soFarLines(guildId, lang) {
     if (e.kind === 'chosen' && e.userId) return L.soFarChosen(e.userId);
     if (e.kind === 'antichrist' && e.userId) return L.soFarAntichrist(e.userId);
     if (e.kind === 'rule' && e.userId) return L.soFarRule(e.userId);
+    if (e.kind === 'cleansed' && e.userId) {
+      return L.soFarCleansed?.(e.userId) ?? `Antichrist <@${e.userId}> cleansed`;
+    }
+    if (e.kind === 'forgiven' && e.userId) {
+      return L.soFarForgiven?.(e.userId) ?? `<@${e.userId}> was forgiven`;
+    }
     return null;
   }).filter(Boolean);
 }

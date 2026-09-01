@@ -642,6 +642,8 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     soFarLeast: (userId) => `<@${userId}> (minst favoriet) heeft gesproken`,
     soFarChosen: (userId) => `Uitverkorene <@${userId}> verscheen`,
     soFarAntichrist: (userId) => `Antichrist <@${userId}> verscheen`,
+    soFarCleansed: (userId) => `Antichrist <@${userId}> gereinigd — ambt opgeheven`,
+    soFarForgiven: (userId) => `<@${userId}> is vergeven; het veld verzachtte`,
     soFarRule: (userId) => `<@${userId}> schuurde langs de dagorder`,
     stampFallback: 'Genoteerd.  {user}.  De kaart blijft staan....Michael',
     antichristLaw: (word) => word ? `  Het verboden woord van vandaag blijft **${word}**.  Niet dat U het mag gebruiken.` : '',

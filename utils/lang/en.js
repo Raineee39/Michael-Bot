@@ -643,6 +643,8 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     soFarLeast: (userId) => `<@${userId}> (least favourite) has spoken`,
     soFarChosen: (userId) => `Chosen one <@${userId}> appeared`,
     soFarAntichrist: (userId) => `Antichrist <@${userId}> appeared`,
+    soFarCleansed: (userId) => `Antichrist <@${userId}> cleansed — office vacated`,
+    soFarForgiven: (userId) => `<@${userId}> was forgiven; the field softened`,
     soFarRule: (userId) => `<@${userId}> brushed the standing order`,
     stampFallback: 'Noted.  {user}.  The card still stands....Michael',
     antichristLaw: (word) => word ? `  Today's forbidden word remains **${word}**.  Not that you get to use it.` : '',

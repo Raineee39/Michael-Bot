@@ -171,6 +171,7 @@ function buildCardBody(lang, card, horoscopeBody) {
   if (card) {
     lines.push(`**${h.moodLabel}:** ${card.mood}`, '');
     if (card.omen) lines.push(card.omen);
+    if (card.amendment) lines.push(card.amendment);
     for (const p of card.prophecies ?? []) {
       lines.push(`<@${p.userId}> ${p.claim}`);
     }
