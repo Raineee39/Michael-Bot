@@ -27,26 +27,33 @@ function writeAll(data) {
  */
 export function getGuildCosmic(guildId) {
   if (!guildId) {
-    return { antichristUserId: null, antichristExpiresAt: null, uitverkoreneUserId: null };
+    return { antichristUserId: null, antichristExpiresAt: null, antichristCleansed: false, uitverkoreneUserId: null };
   }
   const all = readAll();
   const g = all.guilds[guildId] ?? {};
   let antichristUserId = g.antichristUserId ?? null;
   let antichristExpiresAt = g.antichristExpiresAt ?? null;
+  let antichristCleansed = Boolean(g.antichristCleansed);
   const uitverkoreneUserId = g.uitverkoreneUserId ?? null;
 
   if (antichristUserId && antichristExpiresAt != null && Date.now() > antichristExpiresAt) {
     antichristUserId = null;
     antichristExpiresAt = null;
-    all.guilds[guildId] = { ...g, antichristUserId: null, antichristExpiresAt: null };
+    antichristCleansed = false;
+    all.guilds[guildId] = { ...g, antichristUserId: null, antichristExpiresAt: null, antichristCleansed: false };
     writeAll(all);
   }
 
-  return { antichristUserId, antichristExpiresAt, uitverkoreneUserId };
+  return { antichristUserId, antichristExpiresAt, antichristCleansed, uitverkoreneUserId };
 }
 
 export function getCurrentAntichristUserId(guildId) {
   return getGuildCosmic(guildId).antichristUserId;
+}
+
+/** Seat is named but repentance made the office inactive for the rest of the day. */
+export function isAntichristCleansed(guildId) {
+  return getGuildCosmic(guildId).antichristCleansed;
 }
 
 export function getUitverkoreneUserId(guildId) {
@@ -61,6 +68,19 @@ export function setAntichristForGuild(guildId, userId, expiresAtMs) {
     ...(all.guilds[guildId] ?? {}),
     antichristUserId: userId,
     antichristExpiresAt: expiresAtMs,
+    antichristCleansed: false,
+  };
+  writeAll(all);
+}
+
+/** Keep the named seat; turn the office off for the rest of the day. */
+export function markAntichristCleansedForGuild(guildId) {
+  if (!guildId) return;
+  const all = readAll();
+  if (!all.guilds?.[guildId]?.antichristUserId) return;
+  all.guilds[guildId] = {
+    ...all.guilds[guildId],
+    antichristCleansed: true,
   };
   writeAll(all);
 }
@@ -73,6 +93,7 @@ export function clearAntichristForGuild(guildId) {
     ...all.guilds[guildId],
     antichristUserId: null,
     antichristExpiresAt: null,
+    antichristCleansed: false,
   };
   writeAll(all);
 }

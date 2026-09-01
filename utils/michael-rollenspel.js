@@ -14,7 +14,7 @@ import {
   saveMichaelCharacter,
   shouldReferenceCharacterThisTurn,
 } from './michael-memory.js';
-import { clearAntichristForGuild, getCurrentAntichristUserId } from './cosmic-state.js';
+import { getCurrentAntichristUserId, isAntichristCleansed, markAntichristCleansedForGuild } from './cosmic-state.js';
 
 export { formatCharacterForPrompt, shouldReferenceCharacterThisTurn };
 
@@ -405,7 +405,11 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx,
   let judgementDelta = 0;
   let newMood = currentMood;
   let narrative;
-  const wasAntichrist = Boolean(guildId && getCurrentAntichristUserId(guildId) === userId);
+  const wasAntichrist = Boolean(
+    guildId
+    && getCurrentAntichristUserId(guildId) === userId
+    && !isAntichristCleansed(guildId),
+  );
   let antichristCleansed = false;
 
   if (forgiven) {
@@ -413,7 +417,7 @@ export async function runForgivenessRoll(userId, username, currentMood, moodIdx,
     judgementDelta = (roll.tier.key === 'favoured' || roll.tier.key === 'strong') ? 3 : 2;
     patchUserState(userId, judgementDelta, newMood);
     if (wasAntichrist) {
-      clearAntichristForGuild(guildId);
+      markAntichristCleansedForGuild(guildId);
       antichristCleansed = true;
     }
     user = loadUserMemory(userId);

@@ -47,7 +47,7 @@ function emptyDay(dateKey) {
   return {
     dateKey,
     card: null,
-    offices: { chosenUserId: null, antichristUserId: null },
+    offices: { chosenUserId: null, antichristUserId: null, antichristCleansed: false },
     ledger: emptyLedger(),
     postedAt: null,
     postedChannelId: null,
@@ -104,6 +104,33 @@ export function getTodayCard(guildId) {
   const day = getGuildDay(guildId);
   if (!day || day.dateKey !== amsterdamDateKey() || !day.card) return null;
   return day.card;
+}
+
+export function getTodayOffices(guildId) {
+  const day = getGuildDay(guildId);
+  if (!day || day.dateKey !== amsterdamDateKey()) return null;
+  return {
+    chosenUserId: day.offices?.chosenUserId ?? null,
+    antichristUserId: day.offices?.antichristUserId ?? null,
+    antichristCleansed: Boolean(day.offices?.antichristCleansed),
+  };
+}
+
+/** If yesterday's chosen one is today's antichrist, swap them back. */
+export function healChosenOneIfTurnedAntichrist(guildId) {
+  if (!guildId) return null;
+  return mutate(guildId, (day) => {
+    if (day.dateKey !== amsterdamDateKey()) return day;
+    const yChosen = day.yesterday?.offices?.chosenUserId;
+    const todayAnt = day.offices?.antichristUserId;
+    const todayChosen = day.offices?.chosenUserId;
+    if (!yChosen || todayAnt !== yChosen || todayChosen === yChosen) return day;
+    day.offices = {
+      chosenUserId: yChosen,
+      antichristUserId: todayChosen && todayChosen !== yChosen ? todayChosen : null,
+    };
+    return day;
+  });
 }
 
 function mutate(guildId, fn) {
@@ -167,7 +194,7 @@ const SOFTER_CARD_MOODS = {
   ],
 };
 
-/** After a successful /forgiveme: happier card mood, so-far stamp, clear antichrist office if cleansed. */
+/** After a successful /forgiveme: happier card mood, so-far stamp. Seat stays named; office goes inactive if cleansed. */
 export function applyForgivenessToTodayCard(guildId, { userId, antichristCleansed = false, langCode = 'en' } = {}) {
   if (!guildId || !userId) return null;
   const today = amsterdamDateKey();
@@ -175,17 +202,22 @@ export function applyForgivenessToTodayCard(guildId, { userId, antichristCleanse
     if (day.dateKey !== today || !day.card) return day;
     const pool = SOFTER_CARD_MOODS[langCode] ?? SOFTER_CARD_MOODS.en;
     const nextMood = pool[Math.floor(Math.random() * pool.length)];
+    const seatId = day.offices?.antichristUserId ?? userId;
     day.card = {
       ...day.card,
       mood: nextMood,
       amendment: antichristCleansed
         ? (langCode === 'nl'
-          ? `De antichrist-smet op <@${userId}> is opgeheven.  Gevraagd voor het sluiten van de dag.`
-          : `The antichrist stain on <@${userId}> is lifted.  Asked before the day closed.`)
+          ? `De antichrist-zetel noemt nog <@${seatId}>.  De smet is opgeheven; het ambt is voor de rest van de dag niet actief.`
+          : `The antichrist seat still names <@${seatId}>.  The stain is lifted; the office is inactive for the rest of the day.`)
         : (day.card.amendment ?? ''),
     };
     if (antichristCleansed) {
-      day.offices = { ...(day.offices ?? {}), antichristUserId: null };
+      day.offices = {
+        ...(day.offices ?? {}),
+        antichristUserId: seatId,
+        antichristCleansed: true,
+      };
     }
     if (!day.ledger) day.ledger = emptyLedger();
     day.ledger.events.push({
@@ -208,6 +240,7 @@ export function saveTodayCard(guildId, card, offices = {}) {
     day.offices = {
       chosenUserId: offices.chosenUserId ?? day.offices?.chosenUserId ?? null,
       antichristUserId: offices.antichristUserId ?? day.offices?.antichristUserId ?? null,
+      antichristCleansed: offices.antichristCleansed ?? day.offices?.antichristCleansed ?? false,
     };
     return day;
   });

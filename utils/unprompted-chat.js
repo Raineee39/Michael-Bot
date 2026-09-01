@@ -28,7 +28,7 @@ import {
   markBusinessResolved,
   getJudgementLabel,
 } from './michael-memory.js';
-import { getCurrentAntichristUserId, getUitverkoreneUserId } from './cosmic-state.js';
+import { getCurrentAntichristUserId, getUitverkoreneUserId, isAntichristCleansed } from './cosmic-state.js';
 
 const SNARK_CHANCE = 0.005;
 const SILENCE_MS = 10 * 60 * 1000;
@@ -45,7 +45,7 @@ function pick(arr) {
 
 function cosmicRoleFor(userId, guildId) {
   if (!guildId) return null;
-  if (getCurrentAntichristUserId(guildId) === userId) return 'antichrist';
+  if (getCurrentAntichristUserId(guildId) === userId && !isAntichristCleansed(guildId)) return 'antichrist';
   if (getUitverkoreneUserId(guildId) === userId) return 'uitverkorene';
   return null;
 }

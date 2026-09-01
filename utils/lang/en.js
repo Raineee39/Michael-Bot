@@ -391,7 +391,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     passiveFleeButton: '🏃 Ignore the sign',
 
     vergeefmijError: 'Michael cannot reach the higher register...  try again later....Michael',
-    antichristCleansed: 'The antichrist office is vacated.  Asked before the day closed.  Mood improved....Michael',
+    antichristCleansed: 'The antichrist seat still names them.  The stain is lifted; the office is inactive for the rest of the day.  Mood improved....Michael',
     onderhandelenError: 'The registers are temporarily closed...  try again....Michael',
     mijnrolError: 'The enrolment registers are troubled at the moment...  try again later....Michael',
     vibecheckError: 'Michael refuses to render a verdict at this time...  the energy is unclear....Michael',
@@ -501,6 +501,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
   cosmicStatus: {
     header: (eyeRow) => `${eyeRow}\n# COSMIC STATUS\n*Michael shares what the universe permits to be shared...*\n`,
     antichristActive: (userId, fireRow) => `${fireRow}\n**THE ANTICHRIST**\n<@${userId}>\n*The field suffocates...  Michael watches with contempt...  this is for your own good or not....Michael*`,
+    antichristCleansedSeat: (userId, calmRow) => `${calmRow}\n**THE ANTICHRIST** *(cleansed)*\n<@${userId}>\n*The seat is still named...  the stain is lifted...  the office is inactive for the rest of the day....Michael*`,
     antichristNone: (calmRow) => `${calmRow}\n**No active antichrist**\n*The shield is open...  for now...  enjoy it..Michael*`,
     uitverkoreneActive: (userId, eyeRow) => `${eyeRow}\n**THE CHOSEN ONE**\n<@${userId}>\n*Fate has spoken...  whoever you are...  you are it now..Michael*`,
     uitverkoreneNone: (eyeRow) => `${eyeRow}\n**No chosen one in the register**\n*Nobody carries the lightning today...  that can change..Michael*`,
@@ -628,6 +629,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     antichristTitle: '**👹 ANTICHRIST OF THE DAY 👹**',
     currentChosen: (userId) => `**Current chosen one:** <@${userId}>`,
     currentAntichrist: (userId) => `**Current antichrist:** <@${userId}>`,
+    currentAntichristCleansed: (userId) => `**Antichrist of the day:** <@${userId}> — *cleansed. The seat remains. The office is inactive.*`,
   },
 
   dayLaw: {
@@ -643,7 +645,7 @@ Examples: 'of the crooked moon', 'of slow attunement', 'of low reserves', 'of th
     soFarLeast: (userId) => `<@${userId}> (least favourite) has spoken`,
     soFarChosen: (userId) => `Chosen one <@${userId}> appeared`,
     soFarAntichrist: (userId) => `Antichrist <@${userId}> appeared`,
-    soFarCleansed: (userId) => `Antichrist <@${userId}> cleansed — office vacated`,
+    soFarCleansed: (userId) => `Antichrist <@${userId}> cleansed — seat remains, office inactive`,
     soFarForgiven: (userId) => `<@${userId}> was forgiven; the field softened`,
     soFarRule: (userId) => `<@${userId}> brushed the standing order`,
     stampFallback: 'Noted.  {user}.  The card still stands....Michael',

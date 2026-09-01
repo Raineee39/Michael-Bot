@@ -2,6 +2,7 @@ import { loadAllMemory, loadUserMemory, getJudgementLabel, resolveField, patchUs
 import { generateBooksClosed, generateDayLaw, generateHoroscope } from './openai.js';
 import {
   getTodayCard,
+  getTodayOffices,
   recentFeaturedUserIds,
   rollGuildDay,
   saveTodayCard,
@@ -164,7 +165,7 @@ function plainMentions(text) {
     .trim();
 }
 
-function buildCardBody(lang, card, horoscopeBody) {
+function buildCardBody(lang, card, horoscopeBody, offices = {}) {
   const h = lang.horoscope;
   const L = lang.dayLaw;
   const lines = [];
@@ -172,6 +173,10 @@ function buildCardBody(lang, card, horoscopeBody) {
     lines.push(`**${h.moodLabel}:** ${card.mood}`, '');
     if (card.omen) lines.push(card.omen);
     if (card.amendment) lines.push(card.amendment);
+    if (offices.antichristCleansed && offices.antichristUserId) {
+      lines.push(h.currentAntichristCleansed?.(offices.antichristUserId)
+        ?? `**Antichrist of the day:** <@${offices.antichristUserId}> — *cleansed. The seat remains.*`);
+    }
     for (const p of card.prophecies ?? []) {
       lines.push(`<@${p.userId}> ${p.claim}`);
     }
@@ -200,11 +205,11 @@ export function formatCommandHoroscope(lang, { dateLabel, horoscopeBody }) {
   return formatDayCard(lang, { dateLabel, title: lang.horoscope.commandTitle, card: null, horoscopeBody });
 }
 
-export function formatDayCard(lang, { dateLabel, title, card, horoscopeBody, soFar = [], closing = '' }) {
+export function formatDayCard(lang, { dateLabel, title, card, horoscopeBody, soFar = [], closing = '', offices = {} }) {
   const h = lang.horoscope;
   const L = lang.dayLaw;
   const head = [h.header, title, h.dateLine(dateLabel), ''].join('\n');
-  const body = buildCardBody(lang, card, horoscopeBody);
+  const body = buildCardBody(lang, card, horoscopeBody, offices);
   const soFarBlock = soFar.length
     ? [h.divider, `**${L.soFarTitle}**`, ...soFar.map((line) => `• ${line}`)].join('\n')
     : '';
@@ -332,6 +337,7 @@ export async function buildDayLawForGuild({
 
   const existing = getTodayCard(guildId);
   if (existing) {
+    const todayOffices = getTodayOffices(guildId) ?? offices;
     return {
       card: existing,
       content: formatDayCard(lang, {
@@ -340,8 +346,9 @@ export async function buildDayLawForGuild({
         card: existing,
         soFar: soFarLines(guildId, lang),
         closing,
+        offices: todayOffices,
       }),
-      offices,
+      offices: todayOffices,
       created: false,
     };
   }

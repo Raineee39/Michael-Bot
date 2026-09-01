@@ -103,7 +103,7 @@ export async function handleDayLawMessage({
   let hit = pickHit(card, authorId, text);
   if (!hit && authorId === offices.chosenUserId) {
     hit = { kind: 'chosen', onceKey: `speak:chosen:${authorId}`, extra: '' };
-  } else if (!hit && authorId === offices.antichristUserId) {
+  } else if (!hit && authorId === offices.antichristUserId && !offices.antichristCleansed) {
     hit = { kind: 'antichrist', onceKey: `speak:ant:${authorId}`, extra: '' };
   }
   if (!hit) return;

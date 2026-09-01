@@ -1327,7 +1327,7 @@ ${accepted ? `New mood: ${newMood}` : ''}
 Verdict after this interaction: ${judgementScore}
 
 ${antichristCleansed
-  ? 'They were the antichrist. The stain is lifted because they asked before the day closed. Say that the office is vacated. Mood improved. Still not warm.'
+  ? 'They still hold the antichrist seat by name, but the stain is lifted because they asked before the day closed. Say the office is inactive for the rest of the day — the seat is not vacant, just no longer in force. Mood improved. Still not warm.'
   : accepted
     ? 'He accepts...  but not warmly. More like a cosmic obligation than grace. Subtly reference the roll. Mood toward them has improved.'
     : 'He refuses. The roll was insufficient. He references the failure without calling it a "dice roll" explicitly...  it sounds more like a cosmic verdict.'}

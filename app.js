@@ -31,8 +31,11 @@ import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePass
 import { startGateway } from './utils/gateway.js';
 import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
 import {
+  clearAntichristForGuild,
   getCurrentAntichristUserId,
   getUitverkoreneUserId,
+  isAntichristCleansed,
+  markAntichristCleansedForGuild,
   setAntichristForGuild,
   setUitverkoreneForGuild,
 } from './utils/cosmic-state.js';
@@ -52,7 +55,7 @@ import {
   buildSubjectDossier,
   formatPersonalHoroscope,
 } from './utils/horoscope.js';
-import { applyForgivenessToTodayCard, getTodayCard, markDayPosted, recentFeaturedUserIds, wasChannelPostedToday } from './utils/day-ledger.js';
+import { applyForgivenessToTodayCard, getTodayCard, getTodayOffices, healChosenOneIfTurnedAntichrist, markDayPosted, recentFeaturedUserIds, wasChannelPostedToday } from './utils/day-ledger.js';
 
 const MANAGE_GUILD = BigInt(0x20);
 const MANAGE_CHANNELS = BigInt(0x10);
@@ -268,12 +271,39 @@ function assignFreshDailyOffices(guildId, memberIds) {
   const picked = pickTwoDistinctIds(memberIds, { exclude: avoid });
   if (!picked.first) throw new Error('no human members in guild');
   const chosenUserId = picked.first;
-  const antichristUserId = picked.second && picked.second !== chosenUserId
+  let antichristUserId = picked.second && picked.second !== chosenUserId
     ? picked.second
-    : (memberIds.find((id) => id !== chosenUserId) ?? chosenUserId);
+    : (memberIds.find((id) => id !== chosenUserId) ?? null);
+  if (antichristUserId === chosenUserId) antichristUserId = null;
   setUitverkoreneForGuild(guildId, chosenUserId);
-  setAntichristForGuild(guildId, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
+  if (antichristUserId) {
+    setAntichristForGuild(guildId, antichristUserId, Date.now() + 24 * 60 * 60 * 1000);
+  } else {
+    clearAntichristForGuild(guildId);
+  }
   return { chosenUserId, antichristUserId };
+}
+
+/** Put cosmic offices back to today's card. Undoes a /horoscope re-roll after a vacant antichrist seat. */
+function syncCosmicOfficesFromTodayCard(guildId) {
+  healChosenOneIfTurnedAntichrist(guildId);
+  const offices = getTodayOffices(guildId);
+  if (!offices || !getTodayCard(guildId)) return null;
+  if (offices.chosenUserId) setUitverkoreneForGuild(guildId, offices.chosenUserId);
+  const ant = offices.antichristUserId && offices.antichristUserId !== offices.chosenUserId
+    ? offices.antichristUserId
+    : null;
+  if (ant) {
+    setAntichristForGuild(guildId, ant, Date.now() + 24 * 60 * 60 * 1000);
+    if (offices.antichristCleansed) markAntichristCleansedForGuild(guildId);
+  } else {
+    clearAntichristForGuild(guildId);
+  }
+  return {
+    chosenUserId: offices.chosenUserId,
+    antichristUserId: ant,
+    antichristCleansed: Boolean(ant && offices.antichristCleansed),
+  };
 }
 
 async function buildCosmicAppointmentMessage(guildId, lang, role) {
@@ -310,7 +340,13 @@ async function buildDailyBulletin(guildId, lang) {
   let chosenUserId = getUitverkoreneUserId(guildId);
   let antichristUserId = getCurrentAntichristUserId(guildId);
 
-  if (!existingCard) {
+  if (existingCard) {
+    const restored = syncCosmicOfficesFromTodayCard(guildId);
+    if (restored) {
+      chosenUserId = restored.chosenUserId;
+      antichristUserId = restored.antichristUserId;
+    }
+  } else {
     ({ chosenUserId, antichristUserId } = assignFreshDailyOffices(guildId, memberIds));
   }
 
@@ -478,6 +514,7 @@ function buildChatRegisterBlock({ invokerId, invokerName, subjects, guildId, lan
 /** Cosmic roles are per-guild and persisted in data/cosmic-state.json (see utils/cosmic-state.js). */
 function isAntichrist(userId, guildId) {
   if (!guildId) return false;
+  if (isAntichristCleansed(guildId)) return false;
   return getCurrentAntichristUserId(guildId) === userId;
 }
 
@@ -486,16 +523,16 @@ function isUitverkorene(userId, guildId) {
   return getUitverkoreneUserId(guildId) === userId;
 }
 
-/** 'antichrist' wins over uitverkorene if someone holds both (shouldn't happen). */
+/** Chosen one wins if someone holds both (same-person assignment used to lock them out). */
 function getCosmicRole(userId, guildId) {
   if (!guildId) return null;
-  if (isAntichrist(userId, guildId)) return 'antichrist';
   if (isUitverkorene(userId, guildId)) return 'uitverkorene';
+  if (isAntichrist(userId, guildId)) return 'antichrist';
   return null;
 }
 
 /** Antichrist gets "nee" on almost everything; only these stay open. */
-const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'chosenone', 'chat', 'cosmicstatus', 'feedback', 'forgiveme']);
+const ANTICHRIST_EXEMPT_COMMANDS = new Set(['antichrist', 'chosenone', 'chat', 'cosmicstatus', 'feedback', 'forgiveme', 'horoscope']);
 
 /** Snowflake to receive /feedback DMs (override with FEEDBACK_DM_USER_ID). */
 const FEEDBACK_OWNER_ID = process.env.FEEDBACK_DM_USER_ID || '49627618751811584';
@@ -624,6 +661,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
   if (
     type === InteractionType.APPLICATION_COMMAND &&
     isAntichrist(invokingUserId, guildId) &&
+    !isUitverkorene(invokingUserId, guildId) &&
     !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)
   ) {
     const refusalPool = lang.ui.antichristRefusals ?? lang.ui.nee;
@@ -885,13 +923,18 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const invokerId    = req.body.member?.user?.id ?? req.body.user?.id;
       const antichristId = guildId ? getCurrentAntichristUserId(guildId) : null;
       const uitId        = guildId ? getUitverkoreneUserId(guildId) : null;
+      const antichristInactive = Boolean(guildId && antichristId && isAntichristCleansed(guildId));
 
       const fireRow  = '👹🔥👹🔥👹🔥👹🔥👹🔥';
       const eyeRow   = '⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️⚡🌩️👁️';
       const calmRow  = '✨👁️✨';
 
       const cs = lang.cosmicStatus;
-      const antichristLine = antichristId ? cs.antichristActive(antichristId, fireRow) : cs.antichristNone(calmRow);
+      const antichristLine = antichristId
+        ? (antichristInactive
+          ? (cs.antichristCleansedSeat?.(antichristId, calmRow) ?? cs.antichristActive(antichristId, fireRow))
+          : cs.antichristActive(antichristId, fireRow))
+        : cs.antichristNone(calmRow);
       const uitLine = uitId ? cs.uitverkoreneActive(uitId, eyeRow) : cs.uitverkoreneNone(eyeRow);
 
       const invokerMood  = loadUserMemory(invokerId).currentMood ?? 'afwezig';
@@ -1707,7 +1750,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           const memberIds = await resolveDailyMemberPool(guildId, { fallbackIds: [invokerId] });
           let currentChosen = getUitverkoreneUserId(guildId);
           let currentAntichrist = getCurrentAntichristUserId(guildId);
-          if (!getTodayCard(guildId) || !currentChosen || !currentAntichrist) {
+          const todayCard = getTodayCard(guildId);
+          if (todayCard) {
+            const restored = syncCosmicOfficesFromTodayCard(guildId);
+            if (restored) {
+              currentChosen = restored.chosenUserId;
+              currentAntichrist = restored.antichristUserId;
+            }
+          } else if (!currentChosen && !currentAntichrist) {
             ({ chosenUserId: currentChosen, antichristUserId: currentAntichrist } =
               assignFreshDailyOffices(guildId, memberIds));
           }
@@ -1988,7 +2038,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
                 { name: rl.moodLabel,      value: moodValue,                                                             inline: false },
                 { name: rl.judgementLabel, value: `${oordeelSign}${oordeelDelta}`,                                       inline: true },
                 ...(antichristCleansed
-                  ? [{ name: rl.stainLabel ?? 'Stain', value: lang.ui.antichristCleansed ?? 'The antichrist office is vacated.', inline: false }]
+                  ? [{ name: rl.stainLabel ?? 'Stain', value: lang.ui.antichristCleansed ?? 'The seat remains; the office is inactive.', inline: false }]
                   : []),
               ],
             }],
@@ -2671,9 +2721,21 @@ async function catchUpElevenAmBulletin() {
   }
 }
 
+function restoreKnownGuildOffices() {
+  const ids = new Set([process.env.DAILY_GUILD_ID, MOONS_GRILL_GUILD_ID].filter(Boolean));
+  for (const gid of ids) {
+    if (!getTodayCard(gid)) continue;
+    const restored = syncCosmicOfficesFromTodayCard(gid);
+    if (restored) {
+      console.log(`[michael] restored offices from today's card | guild=${gid} | chosen=${restored.chosenUserId} | antichrist=${restored.antichristUserId}`);
+    }
+  }
+}
+
 app.listen(PORT, () => {
   console.log('Listening on port', PORT);
   logDiscordIdentity();
   startGateway();
+  restoreKnownGuildOffices();
   catchUpElevenAmBulletin();
 });

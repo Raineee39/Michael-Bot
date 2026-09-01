@@ -31,7 +31,7 @@ import { getLang } from './lang/index.js';
 import { handleUnpromptedChat, scheduleBusinessResurface } from './unprompted-chat.js';
 import { isMichaelLifeActive } from './life-switch.js';
 import { handleDayLawMessage } from './day-watch.js';
-import { getCurrentAntichristUserId, getUitverkoreneUserId } from './cosmic-state.js';
+import { getCurrentAntichristUserId, getUitverkoreneUserId, isAntichristCleansed } from './cosmic-state.js';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 
@@ -186,6 +186,7 @@ export function startGateway() {
             offices: {
               chosenUserId: getUitverkoreneUserId(guildId),
               antichristUserId: getCurrentAntichristUserId(guildId),
+              antichristCleansed: isAntichristCleansed(guildId),
             },
           }).catch((err) => console.error('[michael] day-law watch failed:', err?.message ?? err));
         }

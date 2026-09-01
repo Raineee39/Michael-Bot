@@ -391,7 +391,7 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     passiveFleeButton: '🏃 Negeer het teken',
 
     vergeefmijError: 'Michaël kan het hogere register niet bereiken...  probeer het later....Michael',
-    antichristCleansed: 'Het antichrist-ambt is opgeheven.  Gevraagd voor het sluiten van de dag.  Stemming verbeterd....Michael',
+    antichristCleansed: 'De antichrist-zetel noemt hen nog.  De smet is opgeheven; het ambt is voor de rest van de dag niet actief.  Stemming verbeterd....Michael',
     onderhandelenError: 'De registers zijn tijdelijk afgesloten...  probeer het opnieuw....Michael',
     mijnrolError: 'De inschrijvingsregisters zijn op dit moment troebel...  probeer het later....Michael',
     vibecheckError: 'Michaël weigert op dit moment een oordeel te vellen...  de energie is onduidelijk....Michael',
@@ -501,6 +501,7 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
   cosmicStatus: {
     header: (eyeRow) => `${eyeRow}\n# COSMISCHE STATUS\n*Michaël deelt wat het universum toestaat te delen...*\n`,
     antichristActive: (userId, fireRow) => `${fireRow}\n**DE ANTICHRIST**\n<@${userId}>\n*Het veld verstikt...  Michaël kijkt met afkeer...  dit is voor Uw eigen bestwil of niet....Michael*`,
+    antichristCleansedSeat: (userId, calmRow) => `${calmRow}\n**DE ANTICHRIST** *(gereinigd)*\n<@${userId}>\n*De zetel is nog genoemd...  de smet is opgeheven...  het ambt is voor de rest van de dag niet actief....Michael*`,
     antichristNone: (calmRow) => `${calmRow}\n**Geen actieve antichrist**\n*Het schild is open...  voor nu...  geniet ervan..Michael*`,
     uitverkoreneActive: (userId, eyeRow) => `${eyeRow}\n**DE UITVERKORENE**\n<@${userId}>\n*Het lot heeft gesproken...  wie U ook bent...  U bent het nu..Michael*`,
     uitverkoreneNone: (eyeRow) => `${eyeRow}\n**Geen uitverkorene in het register**\n*Niemand draagt de bliksem vandaag...  dat kan veranderen..Michael*`,
@@ -627,6 +628,7 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     antichristTitle: '**👹 ANTICHRIST VAN DE DAG 👹**',
     currentChosen: (userId) => `**Huidige uitverkorene:** <@${userId}>`,
     currentAntichrist: (userId) => `**Huidige antichrist:** <@${userId}>`,
+    currentAntichristCleansed: (userId) => `**Antichrist van de dag:** <@${userId}> — *gereinigd. De zetel blijft. Het ambt is niet actief.*`,
   },
 
   dayLaw: {
@@ -642,7 +644,7 @@ Voorbeelden: 'van de scheve maan', 'der trage afstemming', 'met de lage reserves
     soFarLeast: (userId) => `<@${userId}> (minst favoriet) heeft gesproken`,
     soFarChosen: (userId) => `Uitverkorene <@${userId}> verscheen`,
     soFarAntichrist: (userId) => `Antichrist <@${userId}> verscheen`,
-    soFarCleansed: (userId) => `Antichrist <@${userId}> gereinigd — ambt opgeheven`,
+    soFarCleansed: (userId) => `Antichrist <@${userId}> gereinigd — zetel blijft, ambt niet actief`,
     soFarForgiven: (userId) => `<@${userId}> is vergeven; het veld verzachtte`,
     soFarRule: (userId) => `<@${userId}> schuurde langs de dagorder`,
     stampFallback: 'Genoteerd.  {user}.  De kaart blijft staan....Michael',
