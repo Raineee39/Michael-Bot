@@ -338,8 +338,29 @@ const HOROSCOPE_COMMAND = {
   contexts: [0, 1, 2],
 };
 
+const SOULINVOICE_COMMAND = {
+  name: 'soulinvoice',
+  description: 'The celestial billing department finally sends you the bill for services rendered',
+  name_localizations: { nl: 'zielsfactuur' },
+  description_localizations: { nl: 'De hemelse boekhouding stuurt je eindelijk de rekening voor verleende diensten' },
+  options: [
+    {
+      type: 6,
+      name: 'user',
+      description: 'Who gets billed? (default: you)',
+      name_localizations: { nl: 'gebruiker' },
+      description_localizations: { nl: 'Wie krijgt de rekening? (standaard: jij)' },
+      required: false,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
 const ALL_COMMANDS = [
   TEST_COMMAND,
+  SOULINVOICE_COMMAND,
   DRAWCARD_COMMAND,
   AURASCAN_COMMAND,
   CHOSENONE_COMMAND,

@@ -47,6 +47,7 @@ In the [Discord Developer Portal](https://discord.com/developers/applications/14
 | `/horoscope` | Today's field reading; names the current chosen one and antichrist |
 | `/chosenone` / `/antichrist` | Appoint (or reroll) the day's offices |
 | `/witness` / `/confess` | Sermon from the dossier / private filing |
+| `/soulinvoice` | Itemized bill from the celestial billing department, mined from your dossier |
 | `/imagine` | Image from your prompt — holy, hellish, or petty by mood |
 | `/listentomichael` | Advice as a voice message |
 | `/switchoflife` | Turn name-replies and snark on/off for a channel or the whole server |

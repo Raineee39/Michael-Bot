@@ -25,7 +25,7 @@ import {
 import { getRandomWisdom } from './wisdom.js';
 import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice } from './utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
@@ -802,6 +802,41 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         console.log(`[michael] auracheck | subject=${targetUsername} (${targetId}) | by=${scannerName}`);
       } catch (err) {
         console.error('auracheck error:', err?.message ?? err);
+        try {
+          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+            method: 'PATCH',
+            body: { content: lang.ui.auracheckError ?? lang.ui.vibecheckError },
+          });
+        } catch { /* token expired */ }
+      }
+      return;
+    }
+
+    if (name === 'soulinvoice') {
+      const requesterId = req.body.member?.user?.id ?? req.body.user?.id;
+      const requesterName = req.body.member?.user?.username ?? req.body.user?.username;
+      const { targetId, username: targetUsername } = resolveSlashUser(req, requesterId, requesterName);
+      ensureUserRecord(targetId, targetUsername);
+      const memory = loadUserMemory(targetId);
+      const dossier = buildWitnessDossier(targetId, targetUsername, memory, guildId, lang, langCode);
+      const header = langCode === 'nl'
+        ? `🧾 **HEMELSE FACTUUR — ${targetUsername}**`
+        : `🧾 **CELESTIAL INVOICE — ${targetUsername}**`;
+
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+
+      try {
+        const invoice = await generateSoulInvoice(targetUsername, dossier, {
+          requesterName,
+          langCode,
+        });
+        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
+          method: 'PATCH',
+          body: { content: `${header}\n\n${invoice}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) },
+        });
+        console.log(`[michael] soulinvoice | billed=${targetUsername} (${targetId}) | by=${requesterName}`);
+      } catch (err) {
+        console.error('soulinvoice error:', err?.message ?? err);
         try {
           await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
             method: 'PATCH',

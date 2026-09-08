@@ -483,6 +483,41 @@ ${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
   return applyChaoticFormatting(raw);
 }
 
+// ─── /soulinvoice (celestial billing department) ───────────────────────────────
+
+export async function generateSoulInvoice(targetName, dossier, { requesterName, langCode = 'nl' } = {}) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 420,
+    input: `
+${personaIntro(langCode)}
+You are also the CELESTIAL BILLING DEPARTMENT. After several eons of administrative backlog, you finally send ${targetName} the itemized invoice for services rendered by heaven. ${requesterName && requesterName !== targetName ? `${requesterName} requested this billing run on their behalf. Do not thank them.` : ''}
+Formal address (${formalAddress}). ${styleHint}.
+
+Dossier (mine it for line items — a grudge becomes a late fee, a confession a processing surcharge, their message history a handling fee. Paraphrase; never quote a confession verbatim):
+${dossier}
+
+Write the invoice in Discord markdown, short lines, EXACTLY this shape:
+
+1) One line: **INVOICE** plus an absurd invoice number (mixed digits, saints, subclauses — invent it).
+2) 4 to 6 line items, each on its own line as **item description:** price. Prices are in merits, sighs, doves, grams of guilt — invent cruel units. At least half the items must be uncomfortably specific to the dossier. Exactly one item costs 0 and is marked as promotional or grace.
+3) One line: **Subtotal:** a number that visibly does not add up, with a clause that arithmetic is a mortal concern.
+4) One line: **21% BTW** or equivalent tax line — heaven is registered in the Netherlands for tax purposes.
+5) One or two closing lines: accepted payment methods (silence of at least 20 minutes, one sincere apology, exact change in doves — invent your own) and a note that the invoice was already overdue before they were born.
+
+No # headers, no code fences, no numbered lists. Keep total under 900 characters.
+${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty soul invoice');
+  return applyChaoticFormatting(raw);
+}
+
 // ─── /biecht (confession) ──────────────────────────────────────────────────────
 
 export async function generateConfessionAck({
