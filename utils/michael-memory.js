@@ -15,17 +15,30 @@ const MENTION_COOLDOWN_MS = 2 * 60 * 60 * 1000;        // 2h before same item re
 const MAX_THEMES          = 3;                           // recent themes for contradiction engine
 
 // ─── Core I/O ─────────────────────────────────────────────────────────────────
+//
+// Read-through cache: one interaction calls loadAll() many times (load, save,
+// themes, relations, self checks), which used to re-parse the whole store on
+// every call. Reads now hit memory; writes stay synchronous so durability is
+// unchanged. Hand-editing the JSON on the VPS requires a bot restart.
+
+let memCache = null;
 
 function loadAll() {
-  if (!existsSync(MEMORY_PATH)) return {};
-  try {
-    return JSON.parse(readFileSync(MEMORY_PATH, 'utf8'));
-  } catch {
-    return {};
+  if (memCache) return memCache;
+  if (!existsSync(MEMORY_PATH)) {
+    memCache = {};
+    return memCache;
   }
+  try {
+    memCache = JSON.parse(readFileSync(MEMORY_PATH, 'utf8'));
+  } catch {
+    memCache = {};
+  }
+  return memCache;
 }
 
 function saveAll(data) {
+  memCache = data;
   mkdirSync(dirname(MEMORY_PATH), { recursive: true });
   writeFileSync(MEMORY_PATH, JSON.stringify(data, null, 2), 'utf8');
 }

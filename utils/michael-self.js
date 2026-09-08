@@ -77,12 +77,20 @@ function defaultState() {
   };
 }
 
+// Read-through cache, same pattern as michael-memory.js: reads hit memory,
+// writes stay synchronous. Restart the bot after hand-editing the JSON.
+let stateCache = null;
+
 function loadState() {
-  let state = defaultState();
-  if (existsSync(SELF_PATH)) {
-    try {
-      state = { ...defaultState(), ...JSON.parse(readFileSync(SELF_PATH, 'utf8')) };
-    } catch { /* corrupted file...  start over */ }
+  let state = stateCache;
+  if (!state) {
+    state = defaultState();
+    if (existsSync(SELF_PATH)) {
+      try {
+        state = { ...defaultState(), ...JSON.parse(readFileSync(SELF_PATH, 'utf8')) };
+      } catch { /* corrupted file...  start over */ }
+    }
+    stateCache = state;
   }
   const now = Date.now();
   const before = state.ephemera.length;
@@ -92,6 +100,7 @@ function loadState() {
 }
 
 function saveState(state) {
+  stateCache = state;
   mkdirSync(dirname(SELF_PATH), { recursive: true });
   writeFileSync(SELF_PATH, JSON.stringify(state, null, 2), 'utf8');
 }
