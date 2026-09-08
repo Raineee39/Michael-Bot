@@ -811,7 +811,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
-    // "aurascan" command
     if (name === 'auracheck') {
       const scannerId = req.body.member?.user?.id ?? req.body.user?.id;
       const scannerName = req.body.member?.user?.username ?? req.body.user?.username;
