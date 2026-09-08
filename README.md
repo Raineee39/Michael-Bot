@@ -40,18 +40,30 @@ In the [Discord Developer Portal](https://discord.com/developers/applications/14
 
 ## Commands (highlights)
 
-| Command | What it does |
-|---|---|
-| `/chat` | Talk to Michael |
-| `/auracheck` | Michael inspects another user's aura from the register |
-| `/michaelmood` | Michael's mood toward you + who holds the field (was `/cosmicstatus`) |
-| `/horoscope` | Today's field reading; names the current chosen one and antichrist |
-| `/chosenone` / `/antichrist` | Appoint (or reroll) the day's offices |
-| `/witness` / `/confess` | Sermon from the dossier / private filing |
-| `/soulinvoice` | Itemized bill from the celestial billing department, mined from your dossier |
-| `/imagine` | Image from your prompt — holy, hellish, or petty by mood |
-| `/listentomichael` | Advice as a voice message |
-| `/switchoflife` | Turn name-replies and snark on/off for a channel or the whole server |
+| Command | NL name | What it does |
+|---|---|---|
+| `/chat` | — | Talk to Michael. Full register: memory, impression, grudges, his own recent sayings, your character sheet. Scored — moves his mood toward you (⬆️/⬇️ react shows the verdict). |
+| `/listentomichael` | — | Ask for advice; he answers in a voice message. Also scored. |
+| `/horoscope` | `/horoscoop` | Today's field reading — reprints today's law card, names the chosen one and antichrist, plus anything stamped so far. |
+| `/michaelmood` | `/michaelhumeur` | His mood toward you + who currently holds the field. Server-only. (Was `/cosmicstatus`.) |
+| `/vibecheck` | — | Full standing dashboard: judgement score bar, verdict, impression, tips. Where the tally lives. |
+| `/witness` | `/getuigenis` | Michael reads your dossier aloud as a sermon — or someone else's. Invasive on purpose. |
+| `/confess` | `/biecht` | File a confession in the register — about yourself or about someone else. Only you see his reply; the register never forgets. |
+| `/auracheck` | — | Michael inspects another user's aura, informed by their file. |
+| `/soulinvoice` | `/zielsfactuur` | Itemized bill from the celestial billing department, mined from the target's dossier. One item is always free (grace, promotional). |
+| `/chosenone` | `/uitverkorene` | Michael appoints the server's chosen one for the day. Server-only. |
+| `/antichrist` | — | Michael designates the antichrist — refused most commands for 24 hours. Server-only. |
+| `/mycharacter` | `/mijnrol` | View the D&D-style character sheet Michael keeps on you (archetype, lineage, title, stats, Michael Points). |
+| `/negotiate` | `/onderhandelen` | Grovel before the register to change your sheet: state your wish, roll. Failure gets you something worse. |
+| `/forgiveme` | `/vergeefmij` | Apologise and roll for mercy. His general mood affects your odds — catch him on a merciful day. |
+| `/drawcard` | `/trekkaart` | Pull a canned wisdom card. |
+| `/dateangel` | `/dateer` | Go on a scripted date with the Archangel. His mood toward you shapes the opening. |
+| `/imagine` | — | Image from your prompt — holy, hellish, or petty depending on his mood and your standing. |
+| `/setlanguage` | `/michaeltaal` | Set the bot's language for the server (or your personal language in DMs). |
+| `/switchoflife` | — | Turn Michael's proactive life (name-replies, snark, afterthoughts) on/off per channel or server. Server-only. |
+| `/feedback` | — | Send a bug/idea/note to Michael's maker, forwarded privately. |
+
+Hidden mechanics worth knowing: asking him twice for another language (e.g. "speak English") unlocks it permanently for you; every text interaction moves the tally; he remembers what he himself said (and forgets expired matters like old invoices by design).
 
 ## Michael "active" (`/switchoflife`)
 
