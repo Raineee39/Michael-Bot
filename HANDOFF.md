@@ -24,6 +24,8 @@ Michael remembers what he himself says. Three layers: a verbatim queue of his la
 
 Moods are split: `currentMood` on user records stays "mood toward them"; Michael also has ONE **general mood** (self-healing daily roll, kinder distribution, includes general-only `genadig`). General mood modifies every dice roll (+3 genadig … −3 woedend) via `computeMichaelRoll`.
 
+Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → unchanged; ±1 → one step; ≥2 → two steps kinder; ≤−2 → straight to woedend; escaping woedend needs a +2). Every user-initiated interaction with text feeds the tally: /chat, /babychat, /confess, /listentomichael, and /aurascan (its message option is now scored). When an interaction moved the tally, Michael reacts ⬆️/⬇️ on his own reply (`reactScoreArrow`).
+
 /chat also gets cross-user context: theme-neighbours (souls whose `recentThemes` overlap the prompt — always included when a real overlap exists) and a favourites/nuisances gossip hint (only when he's fed up with the invoker, else ~15%; prompt says most replies tag no one).
 
 ## Chat / listen

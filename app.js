@@ -13,6 +13,7 @@ import {
   verifyKeyMiddleware,
 } from 'discord-interactions';
 import {
+  addDiscordReaction,
   appendEditWithinDiscordLimit,
   DiscordRequest,
   DiscordMultipart,
@@ -432,6 +433,19 @@ function noteMichaelSaid(kind, text, { userId = null, username = null, guildId =
 }
 
 /**
+ * Michael marks the verdict on his own reply: ⬆️ when the interaction raised
+ * his opinion of the user, ⬇️ when it lowered it. Best effort, never throws.
+ */
+async function reactScoreArrow(channelId, token, scoreDelta) {
+  if (!scoreDelta || !channelId || !token) return;
+  try {
+    const res = await DiscordRequest(`webhooks/${process.env.APP_ID}/${token}/messages/@original`, { method: 'GET' });
+    const msg = await res.json();
+    if (msg?.id) await addDiscordReaction(channelId, msg.id, scoreDelta > 0 ? '⬆️' : '⬇️');
+  } catch { /* reaction is decoration...  never block the reply */ }
+}
+
+/**
  * Cross-user context for /chat. Theme neighbours are included whenever they
  * genuinely exist (self-gating by relevance); the favourites/nuisances gossip
  * hint is rare...  always when Michael is fed up with this user, otherwise ~15%.
@@ -614,22 +628,18 @@ function nextMood(currentMood, scoreDelta) {
   // An insult always jumps straight to woedend...  no gradual path
   if (scoreDelta <= -2) return 'woedend';
 
+  // No random drift...  a neutral interaction leaves the mood exactly where it was.
+  // The mood toward a user only moves when the user themselves moves it.
+  if (scoreDelta === 0) return currentMood ?? 'afwezig';
+
   // Escaping woedend requires sustained good behaviour
   if (currentMood === 'woedend') {
-    if (scoreDelta >= 2) return MICHAEL_MOODS[5]; // streng...  one step back
-    if (scoreDelta === 1 && Math.random() < 0.35) return MICHAEL_MOODS[5]; // small chance
-    return 'woedend'; // stays furious most of the time
+    return scoreDelta >= 2 ? MICHAEL_MOODS[5] : 'woedend'; // streng...  one step back
   }
 
   const idx = MICHAEL_MOODS.indexOf(currentMood);
   const base = idx === -1 ? 3 : idx;
-
-  let shift = 0;
-  if (scoreDelta >= 2)        shift = -(1 + (Math.random() < 0.5 ? 1 : 0)); // -1 or -2
-  else if (scoreDelta === 1)  shift = Math.random() < 0.65 ? -1 : 0;
-  else if (scoreDelta === 0)  shift = [-1, 0, 0, 1][Math.floor(Math.random() * 4)];
-  else if (scoreDelta === -1) shift = Math.random() < 0.65 ? 1 : 0;
-
+  const shift = scoreDelta >= 2 ? -2 : scoreDelta === 1 ? -1 : 1; // deterministic tally
   return MICHAEL_MOODS[Math.max(0, Math.min(6, base + shift))];
 }
 
@@ -821,8 +831,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 
     // "aurascan" command
     if (name === 'aurascan') {
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const username = req.body.member?.user?.username ?? req.body.user?.username;
+      const userInput = slashOptionValue(data, 'message') ?? '';
+      const channelId = req.body.channel_id ?? req.body.channel?.id;
       const lezing = pick(lang.aurascan.lezingen);
-      return res.send({
+      res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           flags: InteractionResponseFlags.IS_COMPONENTS_V2,
@@ -834,6 +848,20 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           ],
         },
       });
+      // What they tell Michael about themselves counts toward the tally too
+      if (userInput.trim() && userId) {
+        (async () => {
+          try {
+            const preMood = loadUserMemory(userId).currentMood ?? 'afwezig';
+            const scoreDelta = await scoreMichaelMessage(userInput);
+            saveUserMemory(userId, username, userInput, preMood, scoreDelta, nextMood(preMood, scoreDelta), channelId, guildId ?? null);
+            reactScoreArrow(channelId, req.body.token, scoreDelta);
+          } catch (err) {
+            console.error('aurascan scoring failed:', err?.message ?? err);
+          }
+        })();
+      }
+      return;
     }
 
     if (name === 'auracheck') {
@@ -1430,6 +1458,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
 
         noteMichaelSaid('chat', michaelMessage, { userId, username, guildId: guildId ?? null });
+        reactScoreArrow(channelId, req.body.token, scoreDelta);
 
         // Feature 5...  Post-message revision: fetch the sent message ID then maybe append an edit
         if (channelId) {
@@ -1550,6 +1579,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             method: 'PATCH',
             body: { content: body, embeds: [] },
           });
+          noteMichaelSaid('babychat-meltdown', meltdown, { userId, username, guildId: guildId ?? null });
+          reactScoreArrow(channelId, req.body.token, -3);
         } else {
           console.log(`[michael] babychat | toddler | ${username} (${userId})`);
           const [toddlerReply, scoreDelta] = await Promise.all([
@@ -1590,6 +1621,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             method: 'PATCH',
             body: { content: messageBase, embeds: [] },
           });
+          noteMichaelSaid('babychat', toddlerReply, { userId, username, guildId: guildId ?? null });
+          reactScoreArrow(channelId, req.body.token, scoreDelta);
 
           if (channelId) {
             try {
@@ -1702,22 +1735,26 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           langCode,
         });
         console.log(`[michael] listentomichael | register | subjects=${registerSubjects.length} | bytes=${registerBlock.length} | ${username}`);
-        const { wavBuffer, script, flavor } = await generateMichaelVoiceAdvice(userInput, {
-          username,
-          mood,
-          judgementLabel,
-          score: preMemory.judgementScore ?? 0,
-          langCode,
-          registerBlock,
-          impression: preMemory.impression ?? null,
-        });
+        const [{ wavBuffer, script, flavor }, scoreDelta] = await Promise.all([
+          generateMichaelVoiceAdvice(userInput, {
+            username,
+            mood,
+            judgementLabel,
+            score: preMemory.judgementScore ?? 0,
+            langCode,
+            registerBlock,
+            impression: preMemory.impression ?? null,
+          }),
+          scoreMichaelMessage(userInput),
+        ]);
         noteMichaelSaid('voice', script, { userId, username, guildId: guildId ?? null });
-        saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
+        saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId, guildId ?? null);
         await DiscordMultipart(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           payload: { content: `> ${safeInput}\n\n*${script}*` },
           files: [{ buffer: wavBuffer, filename: 'michael.wav', contentType: 'audio/wav' }],
         });
+        reactScoreArrow(channelId, req.body.token, scoreDelta);
         console.log(`[michael] listentomichael | ${username} | flavor=${flavor}`);
       } catch (err) {
         console.error('listentomichael error:', err);
