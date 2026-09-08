@@ -56,9 +56,9 @@ import {
 import { getRandomWisdom } from './wisdom.js';
 import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf, generateDayChaosBulletin, generateAntichristDenial } from './utils/openai.js';
-import { addSelfEphemera, applySelfCondense, buildSelfContextBlock, getSayingsForCondense, recordMichaelSaying, selfNeedsCondense } from './utils/michael-self.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild, getRelationLandscape, findThemeNeighbours } from './utils/michael-memory.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf, generateDayChaosBulletin, generateAntichristDenial, generateAbsenceInquiry } from './utils/openai.js';
+import { addSelfEphemera, applySelfCondense, buildSelfContextBlock, canAskAboutAbsence, getSayingsForCondense, noteAbsenceAsked, recordMichaelSaying, selfNeedsCondense } from './utils/michael-self.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild, getRelationLandscape, findThemeNeighbours, findAbsentSouls } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
@@ -1586,6 +1586,57 @@ cron.schedule('0 11 * * *', async () => {
     await postDailyBulletin(guildId, channelId, '11:00-moons-grill');
   } catch (err) {
     console.error('Daily bulletin failed (11:00 Moons Grill):', err);
+  }
+}, { timezone: 'Europe/Amsterdam' });
+
+// ─── Absence inquiries ────────────────────────────────────────────────────────
+//
+// Michael notices when a soul with a real file goes quiet, and asks the room
+// where they went — disguised as administration. Deliberately low odds per
+// check; the hard cooldowns in michael-self.js (one per guild per 4 days, one
+// per soul per 2 weeks) are what actually keep it rare.
+
+const ABSENCE_CHECK_CHANCE = 0.25;
+
+async function runAbsenceCheck(guildId, channelId) {
+  if (!guildId || !channelId) return;
+  if (isDutchQuietHoursForUnpromptedSends()) return;
+  if (Math.random() > ABSENCE_CHECK_CHANCE) return;
+
+  const candidates = findAbsentSouls(guildId).filter((s) => canAskAboutAbsence(guildId, s.userId));
+  if (!candidates.length) return;
+
+  const subject = candidates[Math.floor(Math.random() * Math.min(candidates.length, 3))];
+  const langCode = getGuildLanguage(guildId);
+  try {
+    const content = await generateAbsenceInquiry({
+      username: subject.username,
+      userId: subject.userId,
+      daysGone: subject.daysGone,
+      impression: subject.impression,
+      score: subject.score,
+      langCode,
+    });
+    await DiscordRequest(`channels/${channelId}/messages`, {
+      method: 'POST',
+      body: { content, flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS },
+    });
+    noteAbsenceAsked(guildId, subject.userId);
+    noteMichaelSaid('absence', content, { userId: subject.userId, username: subject.username, guildId });
+    console.log(`[michael] absence inquiry | ${subject.username} (${subject.userId}) | ${subject.daysGone}d | guild=${guildId}`);
+  } catch (err) {
+    console.error('[michael] absence inquiry failed:', err?.message ?? err);
+  }
+}
+
+// Three chances a day; odds plus cooldowns decide whether anything happens.
+cron.schedule('0 13,17,20 * * *', async () => {
+  try {
+    await runAbsenceCheck(process.env.DAILY_GUILD_ID, process.env.DAILY_CHANNEL_ID);
+    const moons = await moonsGrillTargets();
+    await runAbsenceCheck(moons.guildId, moons.channelId);
+  } catch (err) {
+    console.error('[michael] absence check failed:', err?.message ?? err);
   }
 }, { timezone: 'Europe/Amsterdam' });
 

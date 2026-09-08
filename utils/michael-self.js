@@ -182,6 +182,134 @@ export function applySelfCondense(summary) {
   saveState(state);
 }
 
+// ─── The eternal labour ───────────────────────────────────────────────────────
+//
+// Michael has one long-term work that is never, ever finished. It is not a
+// goal — it is a backlog he has been carrying for centuries. It creeps forward,
+// then suffers a setback, forever. He blames his mood on it, mentions it in
+// rants, and lets it colour the register. It exists so he has an inner life
+// between commands instead of being pure reaction.
+
+const LABOURS = [
+  {
+    key: 'census',
+    nl: 'de Volkstelling der Zielen (voor de derde maal opnieuw begonnen)',
+    en: 'the Census of Souls (restarted for the third time)',
+  },
+  {
+    key: 'report',
+    nl: 'het Kwartaalverslag aan het Hogere Register (achterstallig sinds de veertiende eeuw)',
+    en: 'the Quarterly Report to the Higher Register (overdue since the fourteenth century)',
+  },
+  {
+    key: 'archive',
+    nl: 'de herordening van het Archief van Onbeantwoorde Gebeden',
+    en: 'the reordering of the Archive of Unanswered Prayers',
+  },
+  {
+    key: 'inventory',
+    nl: 'de inventarisatie van alle verloren voorwerpen sinds de Zondvloed',
+    en: 'the inventory of every lost object since the Flood',
+  },
+];
+
+const SETBACKS = {
+  nl: [
+    'een hele kolom is in het ongerede geraakt',
+    'de nummering blijkt vanaf het begin verkeerd',
+    'een lagere engel heeft het in de verkeerde volgorde teruggelegd',
+    'de inkt is vervaagd op de belangrijkste bladzijde',
+    'er is een nieuwe richtlijn van boven gekomen, met terugwerkende kracht',
+  ],
+  en: [
+    'an entire column has gone astray',
+    'the numbering turns out to have been wrong from the start',
+    'a lesser angel refiled it in the wrong order',
+    'the ink has faded on the one page that mattered',
+    'a new directive has come down from above, retroactively',
+  ],
+};
+
+const LABOUR_TICK_MS = 20 * 60 * 60 * 1000; // advances at most once a day-ish
+
+function defaultLabour() {
+  return {
+    key: LABOURS[Math.floor(Math.random() * LABOURS.length)].key,
+    progress: Math.floor(Math.random() * 30) + 5,
+    setbacks: 0,
+    lastSetback: null,
+    tickedAt: 0,
+  };
+}
+
+/**
+ * The labour creeps forward, then collapses. It never completes: past 80% the
+ * odds of a setback rise sharply, and a setback knocks it back down. On a total
+ * collapse he starts a different work entirely, which is somehow worse.
+ */
+function tickLabour(state) {
+  if (!state.labour || typeof state.labour !== 'object') state.labour = defaultLabour();
+  const l = state.labour;
+  if (Date.now() - (l.tickedAt ?? 0) < LABOUR_TICK_MS) return l;
+  l.tickedAt = Date.now();
+
+  const setbackChance = l.progress > 80 ? 0.65 : l.progress > 50 ? 0.3 : 0.15;
+  if (Math.random() < setbackChance) {
+    const pool = SETBACKS.nl;
+    const idx = Math.floor(Math.random() * pool.length);
+    l.lastSetback = { nl: SETBACKS.nl[idx], en: SETBACKS.en[idx], at: Date.now() };
+    l.setbacks += 1;
+    l.progress = Math.max(1, l.progress - (Math.floor(Math.random() * 35) + 15));
+    if (l.progress <= 3 && Math.random() < 0.5) {
+      // Total collapse: he begins a different eternal work instead
+      const others = LABOURS.filter((x) => x.key !== l.key);
+      l.key = others[Math.floor(Math.random() * others.length)].key;
+      l.progress = Math.floor(Math.random() * 10) + 2;
+      l.setbacks = 0;
+    }
+    console.log(`[michael] labour setback | ${l.key} | now ${l.progress}%`);
+  } else {
+    l.progress = Math.min(97, l.progress + Math.floor(Math.random() * 6) + 1);
+  }
+  saveState(state);
+  return l;
+}
+
+/** The current eternal labour, ticked. */
+export function getLabour() {
+  const state = loadState();
+  const l = tickLabour(state);
+  const def = LABOURS.find((x) => x.key === l.key) ?? LABOURS[0];
+  return { ...l, nl: def.nl, en: def.en };
+}
+
+// ─── Absence inquiries (cooldown bookkeeping) ────────────────────────────────
+//
+// Hard cooldowns, persisted: at most one inquiry per guild per ASK_GUILD_CD,
+// and never about the same soul twice within ASK_USER_CD.
+
+const ABSENCE_GUILD_CD_MS = 4 * 24 * 60 * 60 * 1000;  // one ask per guild per 4 days
+const ABSENCE_USER_CD_MS = 14 * 24 * 60 * 60 * 1000;  // same soul at most every 2 weeks
+
+export function canAskAboutAbsence(guildId, userId) {
+  const state = loadState();
+  const a = state.absenceAsks ?? { guilds: {}, users: {} };
+  const now = Date.now();
+  if (now - (a.guilds?.[guildId] ?? 0) < ABSENCE_GUILD_CD_MS) return false;
+  if (now - (a.users?.[userId] ?? 0) < ABSENCE_USER_CD_MS) return false;
+  return true;
+}
+
+export function noteAbsenceAsked(guildId, userId) {
+  const state = loadState();
+  if (!state.absenceAsks || typeof state.absenceAsks !== 'object') state.absenceAsks = { guilds: {}, users: {} };
+  if (!state.absenceAsks.guilds) state.absenceAsks.guilds = {};
+  if (!state.absenceAsks.users) state.absenceAsks.users = {};
+  state.absenceAsks.guilds[guildId] = Date.now();
+  state.absenceAsks.users[userId] = Date.now();
+  saveState(state);
+}
+
 // ─── Prompt block ─────────────────────────────────────────────────────────────
 
 /** Self-context block for AI prompts. English framing; output language is
@@ -189,9 +317,11 @@ export function applySelfCondense(summary) {
 export function buildSelfContextBlock() {
   const state = loadState();
   const mood = getGeneralMood();
+  const labour = getLabour();
   const lines = [
     `YOUR OWN STATE (you, Michael — separate from your attitude toward any user):`,
     `Your general mood today: ${describeGeneralMood(mood)}`,
+    `YOUR ETERNAL LABOUR (background, never a topic on its own): you are working on ${labour.en}. It stands at roughly ${labour.progress}% and has suffered ${labour.setbacks} setback(s).${labour.lastSetback ? ` Most recently: ${labour.lastSetback.en}.` : ''} It will never be finished. You may reference it rarely (roughly one reply in eight) — blame your mood on it, resent the time this conversation costs you, note that a soul's request goes to the bottom of a very long pile. Never explain it at length, never ask for help, never announce progress as good news.`,
   ];
   if (state.selfSummary) {
     lines.push(`What you recall of your own recent conduct: ${state.selfSummary}`);

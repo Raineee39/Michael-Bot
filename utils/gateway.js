@@ -24,7 +24,7 @@
 
 import { WebSocket } from 'ws';
 import { addDiscordReaction, appendEditWithinDiscordLimit, DiscordRequest, isDutchQuietHoursForUnpromptedSends } from '../utils.js';
-import { addUnfinishedBusiness, loadUserMemory, updateLastChannel, ensureUserRecord } from './michael-memory.js';
+import { addUnfinishedBusiness, loadUserMemory, updateLastChannel, ensureUserRecord, noteChatActivity, patchUserState } from './michael-memory.js';
 import { generatePostRevision } from './openai.js';
 import { resolveLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
@@ -42,8 +42,12 @@ const BAIT_RE = /\b(antwoord\s*(dan|nu|toch|me)?|reageer\s*(dan|nu|toch)?|durf\s
 
 const MICHAEL_NAME_RE = /micha[eë]l/i;
 
+// Kept local to the gateway (mirrors the one in interaction-kit) so the chat
+// listener stays independent of the slash-command layer.
+const INSULT_RE = /\b(kut|fuck|shit|klootzak|lul|eikel|idioot|sukkel|kanker|godverdomme|hoer|bitch|asshole|bastard|stom|dom)\b/i;
+
 const AMBIENT_REACTS = ['🧿', '🪬', '👁️', '😇', '👼', '🕊️', '🙏', '✨', '🕯️', '⚖️', '⚡', '🌟', '🪽', '⛪', '✝️'];
-const AMBIENT_REACT_CHANCE = 0.10;
+const AMBIENT_REACT_CHANCE = 0.02; // rare on purpose...  a react should feel like being seen
 const AMBIENT_REACT_COOLDOWN_MS = 45 * 1000;
 const lastAmbientReactAt = new Map();
 
@@ -174,6 +178,7 @@ export function startGateway() {
 
         // Track the user's most-recently-active channel.
         updateLastChannel(authorId, channelId, guildId);
+        if (guildId) noteChatActivity(authorId, guildId);
         maybeAmbientReact(guildId, channelId, msg.id);
 
         if (guildId) {
@@ -203,6 +208,16 @@ export function startGateway() {
 
         // Only continue for messages that mention Michael
         if (!mentionsMichael) return;
+
+        // Silence as a weapon: an outrageous message aimed at Michael gets one
+        // 🧿, a quiet mark against the soul, and nothing else. "Noted."
+        if (INSULT_RE.test(content) && Math.random() < 0.5) {
+          await addDiscordReaction(channelId, msg.id, '🧿');
+          ensureUserRecord(authorId, msg.author?.username ?? authorId);
+          patchUserState(authorId, -1);
+          console.log(`[michael] gateway | silent stamp 🧿 | user=${authorId}`);
+          return;
+        }
 
         // Feature 3...  Bait / forcing trap
         if (BAIT_RE.test(content)) {

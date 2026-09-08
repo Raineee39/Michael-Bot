@@ -383,11 +383,19 @@ export async function buildDayLawForGuild({
   if (closedYesterday?.card && !closing) {
     applyClosingJudgement(closedYesterday);
     try {
+      const digest = yesterdayDigest(closedYesterday);
+      // Rarely, the register audits Michael himself and he must issue a
+      // grudging correction to his own filing. He never apologises.
+      const correction = Boolean(digest) && Math.random() < 0.12;
       closing = await generateBooksClosed({
         langCode,
         dateLabel: closedYesterday.dateKey,
-        digest: yesterdayDigest(closedYesterday),
+        digest,
+        correction,
       });
+      if (correction) {
+        recordMichaelSaying('The register found an error in my own filing. A correction was entered. This is now on my record.', { kind: 'correction', guildId });
+      }
     } catch (err) {
       console.error('[michael] books-closed failed:', err?.message ?? err);
       closing = lang.dayLaw.booksFallback;

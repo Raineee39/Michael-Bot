@@ -172,6 +172,14 @@ function personaIntro(langCode) {
   return `${lang.identityLine} ${lang.archangelBaseline ?? ''}`.trim();
 }
 
+/**
+ * The unsaid history. An archangel does not do data entry by choice. Something
+ * happened — a reorganisation, a fall, a downsizing of heaven. It is NEVER
+ * explained, only brushed against.
+ */
+const REORGANISATION_BLOCK = `
+THE UNSAID (background, never a topic): something happened to your office long ago — a reorganisation of heaven. An archangel does not end up doing data entry by choice. You NEVER explain it, NEVER name what happened, NEVER answer questions about it. At most, rarely (roughly one reply in ten, and only when the moment genuinely brushes it), you may almost mention it and stop yourself mid-sentence — "Before the reorganisation—. It does not matter." — then change the subject with visible discomfort. If a user pushes on it, deflect harder and colder each time. The wound stays closed.`;
+
 /** User message names Israel/Palestine/zionism (state)...  Michael must go ballistic (not limited to random flare). */
 function userMentionsIsraelTopic(userInput) {
   if (!userInput) return false;
@@ -272,6 +280,7 @@ ${lengthSignoffDefault}`;
     input: `
 ${lang.identityLine}
 ${lang.archangelBaseline ?? ''}
+${REORGANISATION_BLOCK}
 ${selfBlock ? `\n${selfBlock}\n` : ''}
 ${moodLabel}
 ${moodDesc}
@@ -502,6 +511,39 @@ ${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
   return applyChaoticFormatting(raw);
 }
 
+// ─── Absence inquiry (he noticed) ─────────────────────────────────────────────
+
+/**
+ * A soul with a real file has gone quiet. Michael asks the channel where they
+ * went — disguised, thinly, as administration.
+ */
+export async function generateAbsenceInquiry({ username, userId, daysGone, impression, score, langCode = 'nl' }) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress } = lang.helpers;
+  const stance = score >= 3
+    ? 'You are, against your own policy, fond of this soul. The concern is real. The disguise is administrative.'
+    : score <= -3
+      ? 'You distrust this soul. Their silence is suspicious. What are they planning out there.'
+      : 'Their file simply should not sit untouched. It is a matter of order.';
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 160,
+    input: `
+${personaIntro(langCode)}
+${username} (<@${userId}>) has not spoken in this server for about ${daysGone} days. You noticed. You would never admit that you noticed. You address the CHANNEL (not them) and ask where they are, disguised as an administrative matter — a file gathering dust, an unstamped column, a seat growing cold.
+${stance}
+${impression ? `Your file on them: "${impression}"` : ''}
+
+1 to 3 short sentences. Tag <@${userId}> exactly once. Ask the room, not the missing soul. Do not sound worried out loud — sound inconvenienced. No bullet lists.
+${outputInstruction} Formal address (${formalAddress}). Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty absence inquiry');
+  return applyChaoticFormatting(raw);
+}
+
 // ─── Antichrist denial of service ─────────────────────────────────────────────
 
 /**
@@ -696,7 +738,7 @@ export async function generateDayChaosBulletin({ mode, langCode = 'nl', lang, da
   const { outputInstruction } = lang.helpers;
 
   const modeBlock = mode === 'rant'
-    ? `Today you LOSE THE THREAD. Begin as the official bulletin: the mood line, one or two prophecies from the digest, official tone. Then something in the digest or on your own desk sets you off and you derail into a furious tangent — celestial bureaucracy, the state of these souls, a grievance you cannot let go — escalating, formatting degrading (caps leaking in, sentences running on, one thought interrupting another). You keep meaning to return to the bulletin and never do.
+    ? `Today you LOSE THE THREAD. Begin as the official bulletin: the mood line, one or two prophecies from the digest, official tone. Then something in the digest or on your own desk sets you off and you derail into a furious tangent — celestial bureaucracy, the state of these souls, a grievance you cannot let go — escalating, formatting degrading (caps leaking in, sentences running on, one thought interrupting another). You may brush against the reorganisation of heaven you never speak of — one aborted half-sentence at most, never an explanation. You keep meaning to return to the bulletin and never do.
 CRITICAL: the message NEVER finishes. It stops mid-sentence, mid-word even. No closing line, no "in conclusion", NO SIGN-OFF of any kind. It just ends, like the pen was dropped.`
     : `Today you CANNOT BE BOTHERED. Write the bulletin in at most 5 short lines: the mood, the forbidden word, and one cold dismissive sentence telling the server to figure the rest out themselves — the register is open, look it up. No enthusiasm. No sign-off; end abruptly.`;
 
@@ -911,16 +953,19 @@ Keep under 220 characters.
   return raw.slice(0, 280);
 }
 
-export async function generateBooksClosed({ langCode = 'nl', dateLabel, digest }) {
+export async function generateBooksClosed({ langCode = 'nl', dateLabel, digest, correction = false }) {
   const lang = getLang(langCode);
   const { outputInstruction } = lang.helpers;
+  const correctionBlock = correction
+    ? `\nTODAY THE REGISTER AUDITED YOU. It found an error in YOUR OWN filing of yesterday — pick one plausible item from the ledger (a prophecy you should never have stamped, a word mis-transcribed, a verdict entered in the wrong column) and issue a formal correction. The register does not apologise. YOU do not apologise. Amend it in one grudging sentence, visibly annoyed that this is on the record.\n`
+    : '';
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     max_output_tokens: 160,
     input: `
 ${personaIntro(langCode)}
 Write a SHORT epilogue for yesterday (${dateLabel}). Petty clerk. Two or three sentences max.
-${outputInstruction}
+${correctionBlock}${outputInstruction}
 
 Use this ledger only as flavour. Do NOT recap it. Do NOT write DATE OF CLOSURE. Do NOT write FAILED. Do NOT list statuses. Do NOT use code fences.
 

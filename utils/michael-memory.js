@@ -237,6 +237,49 @@ export function loadAllMemory() {
   return loadAll();
 }
 
+// ─── Chat activity (for absence noticing) ─────────────────────────────────────
+//
+// lastSeenByGuild means "used Michael here" and feeds horoscope weighting;
+// this is different: "spoke in this guild at all". Only stamped for users
+// already in memory, throttled to one write per user per hour.
+
+const CHAT_ACTIVITY_THROTTLE_MS = 60 * 60 * 1000;
+
+export function noteChatActivity(userId, guildId) {
+  if (!userId || !guildId) return;
+  const all = loadAll();
+  const user = all[userId];
+  if (!user) return; // unknown souls stay unknown
+  if (!user.lastChattedByGuild || typeof user.lastChattedByGuild !== 'object') user.lastChattedByGuild = {};
+  const last = user.lastChattedByGuild[guildId] ?? 0;
+  if (Date.now() - last < CHAT_ACTIVITY_THROTTLE_MS) return;
+  user.lastChattedByGuild[guildId] = Date.now();
+  all[userId] = user;
+  saveAll(all);
+}
+
+/**
+ * Souls Michael would notice missing: a real file (score magnitude or an
+ * impression), last spoke in this guild between minDays and maxDays ago.
+ */
+export function findAbsentSouls(guildId, { minDays = 3, maxDays = 21 } = {}) {
+  if (!guildId) return [];
+  const now = Date.now();
+  const out = [];
+  for (const [id, mem] of Object.entries(loadAll())) {
+    if (!mem.username) continue;
+    const noteworthy = Math.abs(mem.judgementScore ?? 0) >= 3 || Boolean(mem.impression);
+    if (!noteworthy) continue;
+    const lastChat = Math.max(mem.lastChattedByGuild?.[guildId] ?? 0, mem.lastSeenByGuild?.[guildId] ?? 0);
+    if (!lastChat) continue;
+    const days = (now - lastChat) / (24 * 60 * 60 * 1000);
+    if (days >= minDays && days <= maxDays) {
+      out.push({ userId: id, username: mem.username, daysGone: Math.floor(days), score: mem.judgementScore ?? 0, impression: mem.impression ?? null });
+    }
+  }
+  return out.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+}
+
 /**
  * Only update the last-known channel for a user.
  * Used by the gateway listener so it doesn't pollute the prompt history.

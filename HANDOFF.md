@@ -31,6 +31,17 @@ Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → 
 ## Removed (2026-09)
 `/test`, `/aurascan` (canned lines), `/babychat` (+ its generators), old `/michaelmood` (canned humeur lines), `game.js`, `aura.js`, `examples/`. `/cosmicstatus` was renamed to `/michaelmood` (same handler: offices + mood toward you). The character sheet is now always in the /chat prompt (with Michael Points) instead of a 12% gate. Michael never says tally/score numbers in prose — arrows and /vibecheck do that. The quiet afterthought (reply to the last message once a channel goes silent 12 min, 25% draw, 3h cooldown, needs /switchoflife ON) is now actually wired — it previously had no caller.
 
+## Inner life (2026-09)
+**The eternal labour** (`getLabour` in michael-self.js): one long-term work (Census of Souls, overdue Quarterly Report, Archive of Unanswered Prayers, inventory of lost objects) that creeps forward ~daily then collapses. Capped at 97%, setback odds rise sharply past 80%, and a total collapse switches him to a different work. Surfaced in `buildSelfContextBlock` so it leaks into chat, horoscopes, day-law and rants — he blames his mood on it, never announces progress, never finishes.
+
+**The reorganisation** (`REORGANISATION_BLOCK` in openai.js): the unexplained reason an archangel does data entry. He may almost mention it (~1 in 10) and stop himself; pushing makes him colder. Never resolved by design.
+
+**Absence inquiries**: when a soul with a real file (|score| ≥ 3 or an impression) goes quiet in a guild for 3–21 days, Michael asks the ROOM where they went, disguised as administration. Cron at 13/17/20 Amsterdam, 25% per check, and hard persistent cooldowns in michael-self.js (one per guild per 4 days, one per soul per 14 days). Chat activity is tracked separately from Michael-usage via `lastChattedByGuild` (throttled to one write/user/hour).
+
+**Register corrections**: 12% of days with a ledger, the books-closed epilogue audits Michael's own filing and issues a grudging correction. He never apologises.
+
+**Silence as a weapon**: an insult aimed at Michael in chat has a 50% chance of getting one 🧿, −1 judgement, and no words at all. Ambient reacts dropped 10% → 2% so a reaction means something.
+
 ## Decision box & AI denials (2026-09)
 `/mycharacter` and `/imagine` in servers arrive EPHEMERAL with Share/Keep buttons (`stashLongReply`/`longReplyButtons` in interaction-kit, `longreply_*` component handler in app.js; stash expires ~14 min). Share posts the content/embeds/files to the channel; Keep leaves it private. DMs skip the ceremony. /chat is always public by design.
 
