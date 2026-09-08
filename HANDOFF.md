@@ -31,6 +31,11 @@ Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → 
 ## Removed (2026-09)
 `/test`, `/aurascan` (canned lines), `/babychat` (+ its generators), old `/michaelmood` (canned humeur lines), `game.js`, `aura.js`, `examples/`. `/cosmicstatus` was renamed to `/michaelmood` (same handler: offices + mood toward you). The character sheet is now always in the /chat prompt (with Michael Points) instead of a 12% gate. Michael never says tally/score numbers in prose — arrows and /vibecheck do that. The quiet afterthought (reply to the last message once a channel goes silent 12 min, 25% draw, 3h cooldown, needs /switchoflife ON) is now actually wired — it previously had no caller.
 
+## Decision box & AI denials (2026-09)
+`/mycharacter` and `/imagine` in servers arrive EPHEMERAL with Share/Keep buttons (`stashLongReply`/`longReplyButtons` in interaction-kit, `longreply_*` component handler in app.js; stash expires ~14 min). Share posts the content/embeds/files to the channel; Keep leaves it private. DMs skip the ceremony. /chat is always public by design.
+
+Antichrist denials are AI-first (`generateAntichristDenial`: personal, never echoes the command name), canned pool only as fallback — and the fallback prefers pool lines without `{command}`.
+
 ## Chat / listen
 `/chat` and `/listentomichael` both load speaker + `@` / named subjects into THE REGISTER.
 

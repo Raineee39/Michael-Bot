@@ -18,6 +18,7 @@ import {
   fileUnfinishedBusiness, getCosmicRole, isAntichrist, isUitverkorene, moodName, nextMood,
   noteMichaelSaid, patchOriginal, pick, reactScoreArrow, resolveSlashUser,
   schedulePostRevision, slashOptionValue, startTypingLoop, withDeferredReply,
+  stashLongReply, longReplyButtons,
 } from '../utils/interaction-kit.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateSoulInvoice } from '../utils/openai.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addTheme, detectThemeOverlap, patchUserState, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, michaelRollTier } from '../utils/michael-memory.js';
@@ -250,9 +251,14 @@ export async function handleImagine(ctx) {
       const judgementLabel = getJudgementLabel(preMemory.judgementScore ?? 0);
       const channelId = req.body.channel_id ?? req.body.channel?.id;
 
+      // In servers the image arrives privately with Share/Keep buttons.
+      const decisionBox = Boolean(guildId);
       res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
+        data: {
+          content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}`,
+          ...(decisionBox ? { flags: InteractionResponseFlags.EPHEMERAL } : {}),
+        },
       });
 
       const stopTyping = startTypingLoop(channelId);
@@ -267,12 +273,18 @@ export async function handleImagine(ctx) {
         const ext = (mimeType || '').includes('jpeg') ? 'jpg' : 'png';
         const caption = lang.ui.imagineCaption?.[flavor] ?? lang.ui.imagineCaption?.snide ?? '';
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
+        const files = [{ buffer, filename: `michael-imagine.${ext}`, contentType: mimeType || 'image/png' }];
+        const payload = { content: `> ${safeInput}\n\n${caption}` };
+        if (decisionBox) {
+          const stashId = stashLongReply({ userId, channelId, langCode, content: payload.content, files });
+          payload.components = longReplyButtons(stashId, langCode);
+        }
         await DiscordMultipart(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          payload: { content: `> ${safeInput}\n\n${caption}` },
-          files: [{ buffer, filename: `michael-imagine.${ext}`, contentType: mimeType || 'image/png' }],
+          payload,
+          files,
         });
-        console.log(`[michael] imagine | ${username} | flavor=${flavor}`);
+        console.log(`[michael] imagine | ${username} | flavor=${flavor} | decisionBox=${decisionBox}`);
       } catch (err) {
         console.error('imagine error:', err);
         try {
@@ -388,7 +400,14 @@ export async function handleMycharacter(ctx) {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
       const username = req.body.member?.user?.username ?? req.body.user?.username;
 
-      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+      // In servers the sheet arrives privately with Share/Keep buttons — the
+      // user decides whether the group sees their cosmic enrolment. DMs are
+      // already private, so no ceremony there.
+      const decisionBox = Boolean(guildId);
+      res.send({
+        type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+        ...(decisionBox ? { data: { flags: InteractionResponseFlags.EPHEMERAL } } : {}),
+      });
       try {
         const character = await ensureMichaelCharacter(userId, username, langCode);
         const mem = loadUserMemory(userId);
@@ -419,22 +438,27 @@ export async function handleMycharacter(ctx) {
         const displayLineage   = resolveField(character.lineage, langCode);
         const displayTitle     = resolveField(character.title, langCode);
         console.log(`[michael] mijnrol | ${username} (${userId}) | archetype=${displayArchetype}`);
+        const sheetContent = mr.header;
+        const sheetEmbeds = [{
+          color: embedColor,
+          title: embedTitle,
+          description: `${mr.subtitle}\n\n*${safeComment}*`,
+          fields: [
+            { name: mr.archetypeLabel.replace(/\*\*/g, ''), value: displayArchetype,       inline: false },
+            { name: mr.lineageLabel.replace(/\*\*/g, ''),   value: displayLineage,         inline: false },
+            { name: mr.titleLabel.replace(/\*\*/g, ''),     value: `*${displayTitle}*`,    inline: false },
+            { name: '\u200b', value: `\`\`\`\n${statsBlock}\n\`\`\``,                      inline: false },
+          ],
+        }];
+        const channelId = req.body.channel_id ?? req.body.channel?.id;
+        const body = { content: sheetContent, embeds: sheetEmbeds };
+        if (decisionBox) {
+          const stashId = stashLongReply({ userId, channelId, langCode, content: sheetContent, embeds: sheetEmbeds });
+          body.components = longReplyButtons(stashId, langCode);
+        }
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
-          body: {
-            content: mr.header,
-            embeds: [{
-              color: embedColor,
-              title: embedTitle,
-              description: `${mr.subtitle}\n\n*${safeComment}*`,
-              fields: [
-                { name: mr.archetypeLabel.replace(/\*\*/g, ''), value: displayArchetype,       inline: false },
-                { name: mr.lineageLabel.replace(/\*\*/g, ''),   value: displayLineage,         inline: false },
-                { name: mr.titleLabel.replace(/\*\*/g, ''),     value: `*${displayTitle}*`,    inline: false },
-                { name: '\u200b', value: `\`\`\`\n${statsBlock}\n\`\`\``,                      inline: false },
-              ],
-            }],
-          },
+          body,
         });
       } catch (err) {
         console.error('[michael] mijnrol error:', err);

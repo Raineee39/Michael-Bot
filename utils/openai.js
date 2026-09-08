@@ -502,6 +502,34 @@ ${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
   return applyChaoticFormatting(raw);
 }
 
+// ─── Antichrist denial of service ─────────────────────────────────────────────
+
+/**
+ * A fresh, personal refusal for the day's antichrist. Never echoes the slash
+ * command literally — describes the attempt in Michael's own contempt.
+ */
+export async function generateAntichristDenial({ username, commandName, impression, judgementLabel, langCode = 'nl' }) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress } = lang.helpers;
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 140,
+    input: `
+${personaIntro(langCode)}
+${username} is TODAY'S ANTICHRIST of this server. They just tried to use one of your services ("${commandName}" — describe the attempt in your own words, NEVER say the command name or any slash-syntax). You refuse them, as heaven requires, for 24 hours.
+${impression ? `Your file on them: "${impression}"` : ''}
+Your standing verdict: ${judgementLabel ?? 'onbeslist'}.
+
+1 or 2 short sentences. Vary your angle: bureaucratic (the counter is closed to the beast), personal (use the file), theatrical (the register recoiled), or bored (not even worth the stamp). Petty, final, faintly amused or genuinely tired — never a lecture.
+${outputInstruction} Formal address (${formalAddress}). Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty antichrist denial');
+  return applyChaoticFormatting(raw);
+}
+
 // ─── /soulinvoice (celestial billing department) ───────────────────────────────
 
 export async function generateSoulInvoice(targetName, dossier, { requesterName, langCode = 'nl' } = {}) {

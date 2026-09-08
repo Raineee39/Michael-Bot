@@ -2,7 +2,7 @@
 // Everything here is stateless glue: mood mechanics, dossier builders,
 // reply plumbing (defer/patch/typing/arrows), and self-memory recording.
 
-import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
+import { InteractionResponseType, InteractionResponseFlags, MessageComponentTypes, ButtonStyleTypes } from 'discord-interactions';
 import {
   addDiscordReaction,
   appendEditWithinDiscordLimit,
@@ -304,6 +304,49 @@ export const FEEDBACK_OWNER_ID = process.env.FEEDBACK_DM_USER_ID || '49627618751
 
 // Mood spectrum: index 0 = calmest, index 6 = angriest
 // Michael drifts along this based on how each conversation goes
+// ─── Long-reply decision box ─────────────────────────────────────────────────
+//
+// A long prompted reply is first delivered privately (ephemeral, with Share /
+// Keep buttons); the public channel sees only a teaser. The full text is
+// stashed here until the user decides — entries expire with the interaction
+// token (~15 min), after which the buttons politely die.
+
+const LONG_REPLY_TTL_MS = 14 * 60 * 1000;
+const pendingLongReplies = new Map(); // id → { userId, channelId, langCode, content, embeds, files, expiresAt }
+
+export function stashLongReply({ userId, channelId, langCode, content, embeds = null, files = null }) {
+  const id = Math.random().toString(36).slice(2, 10);
+  pendingLongReplies.set(id, { userId, channelId, langCode, content, embeds, files, expiresAt: Date.now() + LONG_REPLY_TTL_MS });
+  // opportunistic cleanup
+  for (const [k, v] of pendingLongReplies) {
+    if (v.expiresAt < Date.now()) pendingLongReplies.delete(k);
+  }
+  return id;
+}
+
+/** The Share / Keep button row for a stashed long reply. */
+export function longReplyButtons(stashId, langCode) {
+  return [{
+    type: MessageComponentTypes.ACTION_ROW,
+    components: [
+      { type: MessageComponentTypes.BUTTON, custom_id: `longreply_share:${stashId}`, label: langCode === 'nl' ? 'Deel met de groep' : 'Share with the group', style: ButtonStyleTypes.PRIMARY },
+      { type: MessageComponentTypes.BUTTON, custom_id: `longreply_keep:${stashId}`, label: langCode === 'nl' ? 'Houd privé' : 'Keep private', style: ButtonStyleTypes.SECONDARY },
+    ],
+  }];
+}
+
+export function peekLongReply(id) {
+  const entry = pendingLongReplies.get(id);
+  if (!entry || entry.expiresAt < Date.now()) return null;
+  return entry;
+}
+
+export function takeLongReply(id) {
+  const entry = peekLongReply(id);
+  pendingLongReplies.delete(id);
+  return entry;
+}
+
 export const MICHAEL_MOODS = [
   'kosmisch',        // 0...  peak benevolence
   'afwezig',         // 1...  pleasantly checked out

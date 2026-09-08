@@ -25,9 +25,11 @@ import {
   pick,
   reactScoreArrow,
   resolveSlashUser,
+  peekLongReply,
   schedulePostRevision,
   slashOptionValue,
   startTypingLoop,
+  takeLongReply,
   withDeferredReply,
 } from './utils/interaction-kit.js';
 import { handleFeedback, handleDrawcard, handleAuracheck, handleSoulinvoice, handleMichaelmood, handleVibecheck, handleWitness, handleConfess } from './handlers/register-commands.js';
@@ -54,7 +56,7 @@ import {
 import { getRandomWisdom } from './wisdom.js';
 import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf, generateDayChaosBulletin } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf, generateDayChaosBulletin, generateAntichristDenial } from './utils/openai.js';
 import { addSelfEphemera, applySelfCondense, buildSelfContextBlock, getSayingsForCondense, recordMichaelSaying, selfNeedsCondense } from './utils/michael-self.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild, getRelationLandscape, findThemeNeighbours } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
@@ -466,13 +468,32 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     !isUitverkorene(invokingUserId, guildId) &&
     !ANTICHRIST_EXEMPT_COMMANDS.has(data?.name)
   ) {
-    const refusalPool = lang.ui.antichristRefusals ?? lang.ui.nee;
-    const refusal = pick(refusalPool).replace(/\{command\}/g, data?.name || 'that');
+    // AI-first denial: fresh, personal, never echoes the command. Canned pool
+    // only as fallback when generation fails.
     const lawNote = lang.dayLaw?.antichristLaw?.(getTodayCard(guildId)?.forbiddenWord) ?? '';
-    return res.send({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: { content: `${refusal}${lawNote}` },
-    });
+    res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+    const username = req.body.member?.user?.username ?? req.body.user?.username ?? 'the beast';
+    try {
+      const mem = loadUserMemory(invokingUserId);
+      const denial = await generateAntichristDenial({
+        username,
+        commandName: data?.name || 'that',
+        impression: mem.impression ?? null,
+        judgementLabel: getJudgementLabel(mem.judgementScore ?? 0),
+        langCode,
+      });
+      await patchOriginal(req.body.token, { content: `${denial}${lawNote}` });
+      noteMichaelSaid('denial', denial, { userId: invokingUserId, username, guildId: guildId ?? null });
+    } catch (err) {
+      console.error('[michael] antichrist denial AI failed, using pool:', err?.message ?? err);
+      const refusalPool = (lang.ui.antichristRefusals ?? lang.ui.nee).filter((r) => !r.includes('{command}'));
+      const fallbackPool = refusalPool.length ? refusalPool : (lang.ui.antichristRefusals ?? lang.ui.nee);
+      const refusal = pick(fallbackPool).replace(/\{command\}/g, data?.name || 'that');
+      try {
+        await patchOriginal(req.body.token, { content: `${refusal}${lawNote}` });
+      } catch { /* token expired */ }
+    }
+    return;
   }
 
   /**
@@ -834,6 +855,54 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     const componentId = data.custom_id != null ? String(data.custom_id) : '';
     const prev = req.body.message?.content ?? '';
     const SEP = '\n\n                    ·  ·  ·\n\n';
+
+    // ── Long-reply decision box: share with the group or keep private ─────
+    if (componentId.startsWith('longreply_share:') || componentId.startsWith('longreply_keep:')) {
+      const stashId = componentId.split(':')[1];
+      const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+      const entry = peekLongReply(stashId);
+      if (entry && clickerId !== entry.userId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: lang.ui.notYourRite, flags: InteractionResponseFlags.EPHEMERAL },
+        });
+      }
+      if (!entry) {
+        return res.send({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: {
+            content: `${prev}\n\n*${langCode === 'nl' ? 'Het zegel is verlopen.' : 'The seal has expired.'}*`.slice(0, DISCORD_MESSAGE_CONTENT_MAX),
+            components: [],
+          },
+        });
+      }
+      takeLongReply(stashId);
+      const share = componentId.startsWith('longreply_share:');
+      const note = share
+        ? (langCode === 'nl' ? 'Gedeeld met de groep.' : 'Shared with the group.')
+        : (langCode === 'nl' ? 'Verzegeld. Alleen jij hebt dit gezien.' : 'Sealed. Only you have seen this.');
+      res.send({
+        type: InteractionResponseType.UPDATE_MESSAGE,
+        data: { content: `${prev}\n\n*${note}*`.slice(0, DISCORD_MESSAGE_CONTENT_MAX), components: [] },
+      });
+      if (share && entry.channelId) {
+        try {
+          const payload = {
+            content: String(entry.content ?? '').slice(0, DISCORD_MESSAGE_CONTENT_MAX),
+            ...(entry.embeds ? { embeds: entry.embeds } : {}),
+          };
+          if (entry.files?.length) {
+            await DiscordMultipart(`channels/${entry.channelId}/messages`, { method: 'POST', payload, files: entry.files });
+          } else {
+            await DiscordRequest(`channels/${entry.channelId}/messages`, { method: 'POST', body: payload });
+          }
+        } catch (err) {
+          console.error('[michael] longreply share failed:', err?.message ?? err);
+        }
+      }
+      console.log(`[michael] longreply | ${share ? 'shared' : 'kept'} | user=${clickerId}`);
+      return;
+    }
 
     // ── Negotiation wizard: string select → open modal for text ───────────
     if (componentId.startsWith('negotiate_kind:')) {
