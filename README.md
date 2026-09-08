@@ -34,7 +34,7 @@ npm start
 
 The running bot reads env on the **VPS only**. Register from your Mac if the VPS token cannot update the application (Discord 403 / code 20012) — that Mac `.env` is only for `npm run register` (APP_ID + matching token). The webhook deploy also runs register automatically when a push changed `commands.js`, but that only succeeds once the VPS `.env` token matches `APP_ID`; until then the deploy logs the failure and continues, and the Mac remains the fallback.
 
-Register asks Discord which servers the bot is in and installs there, so you do not need to list every guild in `GUILD_IDS`. After register, commands that are not server-only (`/horoscope`, `/chat`, …) also appear in DMs. Server-only ones (`/chosenone`, `/antichrist`, `/switchoflife`, `/cosmicstatus`) stay in servers.
+Register asks Discord which servers the bot is in and installs there, so you do not need to list every guild in `GUILD_IDS`. After register, commands that are not server-only (`/horoscope`, `/chat`, …) also appear in DMs. Server-only ones (`/chosenone`, `/antichrist`, `/switchoflife`, `/michaelmood`) stay in servers.
 
 In the [Discord Developer Portal](https://discord.com/developers/applications/1492114301840916560/bot) → **Bot** → Privileged Gateway Intents, leave **Message Content** on and turn **Server Members Intent** on. Without that last toggle, Discord returns 403 `Missing Access` on the member list and `/horoscope` cannot see the server.
 
@@ -44,6 +44,7 @@ In the [Discord Developer Portal](https://discord.com/developers/applications/14
 |---|---|
 | `/chat` | Talk to Michael |
 | `/auracheck` | Michael inspects another user's aura from the register |
+| `/michaelmood` | Michael's mood toward you + who holds the field (was `/cosmicstatus`) |
 | `/horoscope` | Today's field reading; names the current chosen one and antichrist |
 | `/chosenone` / `/antichrist` | Appoint (or reroll) the day's offices |
 | `/witness` / `/confess` | Sermon from the dossier / private filing |

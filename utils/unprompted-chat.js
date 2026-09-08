@@ -18,7 +18,7 @@ import {
   MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
 } from '../utils.js';
 import { isMichaelLifeActive } from './life-switch.js';
-import { generateDelayedConsequence } from './openai.js';
+import { generateDelayedConsequence, generateQuietAfterthought } from './openai.js';
 import { recordMichaelSaying } from './michael-self.js';
 import { getGuildLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
@@ -33,6 +33,13 @@ import { getCurrentAntichristUserId, getUitverkoreneUserId, isAntichristCleansed
 
 const SNARK_CHANCE = 0.005;
 const SILENCE_MS = 10 * 60 * 1000;
+
+// Quiet afterthought...  once a channel goes silent, Michael may circle back to
+// the last thing said as if it only just landed. Rare on purpose.
+const AFTERTHOUGHT_SILENCE_MS = 12 * 60 * 1000;
+const AFTERTHOUGHT_CHANCE = 0.25;       // drawn when the silence timer fires
+const AFTERTHOUGHT_COOLDOWN_MS = 3 * 60 * 60 * 1000; // global: max one per 3h
+const AFTERTHOUGHT_MIN_CONTENT = 12;    // skip "ok" and emoji-only leftovers
 
 /** @type {null | { messageId: string, channelId: string, authorId: string, username: string, guildId: string, businessId: string }} */
 let pendingBusiness = null;
@@ -211,6 +218,9 @@ export function handleUnpromptedChat({
   channelId,
   guildId,
   mentionsMichael,
+  authorId = null,
+  username = null,
+  content = '',
 }) {
   if (!guildId || !channelId || !messageId) return;
 
@@ -221,9 +231,60 @@ export function handleUnpromptedChat({
 
   if (!isMichaelLifeActive(guildId, channelId)) return;
   if (mentionsMichael) return;
+
+  rememberAfterthoughtCandidate({ messageId, channelId, guildId, authorId, username, content });
+
   if (isDutchQuietHoursForUnpromptedSends()) return;
 
   if (Math.random() < SNARK_CHANCE) {
     sendSnark({ messageId, channelId, guildId });
   }
+}
+
+// ─── Quiet afterthought ───────────────────────────────────────────────────────
+
+/** @type {null | { messageId, channelId, guildId, authorId, username, content }} */
+let pendingAfterthought = null;
+let afterthoughtTimer = null;
+let lastAfterthoughtAt = 0;
+
+function rememberAfterthoughtCandidate({ messageId, channelId, guildId, authorId, username, content }) {
+  if (!authorId || String(content ?? '').trim().length < AFTERTHOUGHT_MIN_CONTENT) return;
+  pendingAfterthought = { messageId, channelId, guildId, authorId, username: username || authorId, content: String(content).slice(0, 400) };
+  if (afterthoughtTimer) clearTimeout(afterthoughtTimer);
+  afterthoughtTimer = setTimeout(() => {
+    afterthoughtTimer = null;
+    trySendAfterthought().catch((err) => console.error('[michael] afterthought failed:', err?.message ?? err));
+  }, AFTERTHOUGHT_SILENCE_MS);
+}
+
+async function trySendAfterthought() {
+  const item = pendingAfterthought;
+  if (!item) return;
+  if (isDutchQuietHoursForUnpromptedSends()) return;                       // night: let it go
+  if (Date.now() - lastAfterthoughtAt < AFTERTHOUGHT_COOLDOWN_MS) return;  // not twice an evening
+  const lastAt = lastMessageAtByChannel.get(item.channelId) ?? 0;
+  if (Date.now() - lastAt < AFTERTHOUGHT_SILENCE_MS) return;               // channel woke up again
+  if (!isMichaelLifeActive(item.guildId, item.channelId)) return;
+  if (Math.random() > AFTERTHOUGHT_CHANCE) {
+    pendingAfterthought = null;                                            // rolled away...  this one is forgotten
+    return;
+  }
+
+  pendingAfterthought = null;
+  const langCode = getGuildLanguage(item.guildId);
+  const memory = loadUserMemory(item.authorId);
+  const mood = memory.currentMood ?? 'afwezig';
+  const content = await generateQuietAfterthought(item.username, item.content, mood, langCode);
+  await DiscordRequest(`channels/${item.channelId}/messages`, {
+    method: 'POST',
+    body: {
+      content,
+      message_reference: { message_id: item.messageId, fail_if_not_exists: false },
+      flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
+    },
+  });
+  lastAfterthoughtAt = Date.now();
+  recordMichaelSaying(content, { kind: 'afterthought', userId: item.authorId, username: item.username, guildId: item.guildId });
+  console.log(`[michael] afterthought | sent | user=${item.authorId} | ch=${item.channelId}`);
 }

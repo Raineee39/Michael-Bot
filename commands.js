@@ -2,38 +2,11 @@ import './utils/load-env.js';
 // Registration is also run automatically by the deploy webhook when this file changes.
 import { DiscordRequest, InstallGlobalCommands, InstallGuildCommands } from './utils.js';
 
-const TEST_COMMAND = {
-  name: 'test',
-  description: 'Basic command',
-  type: 1,
-  integration_types: [0, 1],
-  contexts: [0, 1, 2],
-};
-
 const DRAWCARD_COMMAND = {
   name: 'drawcard',
   description: 'Receive a wisdom from Archangel Michael',
   name_localizations: { nl: 'trekkaart' },
   description_localizations: { nl: 'Ontvang een wijsheid van Aartsengel Michaël' },
-  type: 1,
-  integration_types: [0, 1],
-  contexts: [0, 1, 2],
-};
-
-const AURASCAN_COMMAND = {
-  name: 'aurascan',
-  description: 'Receive a personal aura reading from Michael',
-  description_localizations: { nl: 'Ontvang een persoonlijke aura-lezing van Michaël' },
-  options: [
-    {
-      type: 3,
-      name: 'message',
-      description: 'Tell something about yourself',
-      name_localizations: { nl: 'bericht' },
-      description_localizations: { nl: 'Vertel iets over jezelf' },
-      required: true,
-    },
-  ],
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -87,25 +60,6 @@ const CHAT_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const BABYCHAT_COMMAND = {
-  name: 'babychat',
-  description: 'Michael answers like a toddler; 20% chance he snaps and demotes you',
-  description_localizations: { nl: 'Michael antwoordt als peuter; 20% kans dat hij woedend wordt' },
-  options: [
-    {
-      type: 3,
-      name: 'message',
-      description: 'What do you say to baby Michael?',
-      name_localizations: { nl: 'bericht' },
-      description_localizations: { nl: 'Wat zeg je tegen baby-Michael?' },
-      required: true,
-    },
-  ],
-  type: 1,
-  integration_types: [0, 1],
-  contexts: [0, 1, 2],
-};
-
 const VIBECHECK_COMMAND = {
   name: 'vibecheck',
   description: "What does Michael actually think of you?",
@@ -116,23 +70,13 @@ const VIBECHECK_COMMAND = {
 };
 
 const COSMICSTATUS_COMMAND = {
-  name: 'cosmicstatus',
-  description: 'Who holds the field right now? Antichrist and chosen one.',
-  name_localizations: { nl: 'cosmischestatus' },
-  description_localizations: { nl: 'Wie draagt het veld op dit moment? Antichrist en uitverkorene.' },
+  name: 'michaelmood',
+  description: "Michael's mood toward you, and who holds the field right now.",
+  name_localizations: { nl: 'michaelhumeur' },
+  description_localizations: { nl: 'Michaels humeur tegenover jou, en wie het veld op dit moment draagt.' },
   type: 1,
   integration_types: [0],
   contexts: [0],
-};
-
-const MICHAELMOOD_COMMAND = {
-  name: 'michaelmood',
-  description: "How does Michael feel toward you right now?",
-  name_localizations: { nl: 'michaelhumeur' },
-  description_localizations: { nl: 'Hoe voelt Michael zich tegenover jou op dit moment?' },
-  type: 1,
-  integration_types: [0, 1],
-  contexts: [0, 1, 2],
 };
 
 const FORGIVEME_COMMAND = {
@@ -360,18 +304,14 @@ const SOULINVOICE_COMMAND = {
 };
 
 const ALL_COMMANDS = [
-  TEST_COMMAND,
   SOULINVOICE_COMMAND,
   DRAWCARD_COMMAND,
-  AURASCAN_COMMAND,
   CHOSENONE_COMMAND,
   ANTICHRIST_COMMAND,
   DATEANGEL_COMMAND,
   CHAT_COMMAND,
-  BABYCHAT_COMMAND,
   VIBECHECK_COMMAND,
   COSMICSTATUS_COMMAND,
-  MICHAELMOOD_COMMAND,
   FORGIVEME_COMMAND,
   AURACHECK_COMMAND,
   MYCHARACTER_COMMAND,

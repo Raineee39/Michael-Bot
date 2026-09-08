@@ -181,10 +181,6 @@ function userMentionsIsraelTopic(userInput) {
 export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null, characterBlock = '', langCode = 'nl', registerBlock = '', selfBlock = '', relationsBlock = '') {
   const lang = getLang(langCode);
 
-  const impressionBlock = impression
-    ? `\n${lang.recentBlockPrefix ? '' : 'Langetermijnindruk van Michaël over deze gebruiker (gevormd door eerdere gesprekken): '}${impression ? `"${impression}"` : ''}\n`
-    : '';
-
   // Build impression block with language-appropriate phrasing
   const impressionText = impression
     ? (langCode === 'en'
@@ -282,19 +278,14 @@ ${moodDesc}
 
 ${judgementLabelHeader}
 ${judgementDesc}
+NEVER state the register tally, judgement score, merit counts, or any numeric standing out loud. The bookkeeping is internal: your attitude shows only in tone. The arrows on your messages and the dashboards do the numbers, not you.
 ${lang.antiZionismBase}
 ${lang.styleExamples}
 ${languageBlock}
 ${lang.styleRules(!!languagePermission, languagePermission?.promptName ?? '')}
 
 ${lengthRules}
-${cosmicBlock}${impressionText}${recentBlock}${contradictionBlock}${characterBlock ? `\n${characterBlock}\n${
-      langCode === 'nl'
-        ? 'Je mag dit subtiel meenemen in je antwoord als het relevant aanvoelt (12% kans al getrokken door de caller)...  noem de stats of titel nooit letterlijk tenzij het heel natuurlijk past.'
-        : langCode === 'en'
-          ? 'You may subtly include this in your response if it feels relevant (12% chance already drawn by the caller)...  never name the stats or title literally unless it fits very naturally.'
-          : 'يمكنك تضمين هذا بشكل خفي في ردك إن شعر بأنه مناسب (احتمال 12% تم السحب بالفعل)...  لا تذكر الإحصائيات أو اللقب حرفياً إلا إن جاء بشكل طبيعي جداً.'
-    }\n` : ''}${registerBlock ? `
+${cosmicBlock}${impressionText}${recentBlock}${contradictionBlock}${characterBlock ? `\n${characterBlock}\nThis is their standing sheet in YOUR campaign — you wrote it. Interact with it when it fits the reply: address them by their archetype or title, needle their weakest stat when they act like it, grudgingly credit their strongest when they earn it, or note their campaign standing in lore terms. At most one nod per reply, never a recital, and never say the numbers out loud.\n` : ''}${registerBlock ? `
 THE REGISTER (you already keep this. Do not claim you have no file. Do not invent ignorance.):
 ${registerBlock}
 
@@ -476,7 +467,7 @@ Formal address (${formalAddress}). ${styleHint}.
 Dossier:
 ${dossier}
 
-Write 3 to 6 short sentences. Mention judgement, mood, and anything unsettling in the file (impression, grudges, confessions, cosmic role). Be specific enough to feel invasive. No bullet lists.
+Write 3 to 6 short sentences. Mention judgement, mood, and anything unsettling in the file (impression, grudges, confessions, cosmic role, their character sheet). Be specific enough to feel invasive. Never read numeric scores aloud — verdicts in words only. No bullet lists.
 ${outputInstruction} Close with 2 to 5 dots followed by your sign-off name.
     `.trim(),
   });
@@ -971,67 +962,6 @@ Current tone: ${mood}...  ${moodDesc}
 
 1 or 2 short sentences. Snarky, cryptic, slightly late. Do not quote them verbatim. Do not greet. Do not ask a question unless it is rhetorical.
 ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 5 dots followed by your sign-off name.
-    `.trim(),
-  });
-
-  return applyChaoticFormatting(response.output[0].content[0].text);
-}
-
-// ─── /babychat...  toddler voice or meltdown ────────────────────────────────────
-
-/**
- * Michael in toddler register...  playful baby-talk, still vaguely cosmic.
- */
-export async function generateBabyChatToddler(username, userInput, langCode = 'nl', memoryHint = '') {
-  const lang = getLang(langCode);
-  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
-
-  const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
-    max_output_tokens: 220,
-    input: `
-${personaIntro(langCode)}
-${memoryHint ? `\nEven as a toddler you dimly remember this soul: ${memoryHint} Let it peek through in toddler terms (a wobbly "you again" energy), never as adult analysis.\n` : ''}
-SPECIAL MODE...  YOU ARE MICHAEL AS A VERY SMALL TODDLER (about two years old).
-- Reply to the user in baby talk: short lines, simple words, wobbly grammar, wonder, silly misunderstandings of "big" spiritual ideas
-- Tiny bit of archangel flavour may peek through (stars, clouds, throne) but stay mostly toddler...  not preachy
-- Safe: no slurs, no sexual content, no encouragement of self-harm or violence
-- ${langCode === 'en' ? 'Write in English.' : 'Write in Dutch.'}
-- ${outputInstruction} Formal address is OPTIONAL here...  you may say "you" like a toddler would. ${styleHint}. Close with 2 to 5 dots and a tiny sign-off (${formalAddress} flavour optional).
-
-User ${username} wrote: "${userInput}"
-    `.trim(),
-  });
-
-  return applyChaoticFormatting(response.output[0].content[0].text);
-}
-
-/**
- * Michael snaps out of baby mode...  furious archangel; lore: three marks struck from their standing.
- * Caller appends antichrist announcement when applicable.
- */
-export async function generateBabyChatMeltdown(username, userInput, langCode = 'nl', becameAntichrist = false, memoryHint = '') {
-  const lang = getLang(langCode);
-  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
-
-  const antichristHint = becameAntichrist
-    ? 'The server will post the formal antichrist designation for 24 hours...  do NOT paste the full ritual yourself; one fierce line that the register has sealed it is enough.'
-    : 'There is no server temple here...  no antichrist title will stick, but the register still strikes three marks from their standing. Say so with contempt.';
-
-  const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
-    max_output_tokens: 280,
-    input: `
-${personaIntro(langCode)}
-
-CATASTROPHE...  THE TODDLER MASK SHATTERS.
-The user ${username} used /babychat and pushed you past endurance with: "${userInput}"
-You are the REAL Archangel Michael again...  ice-cold, cosmic bureaucracy, DONE with this infantile game.
-${memoryHint ? `Their file (use it to make the wrath personal): ${memoryHint}` : ''}
-- Full adult voice: no baby talk. Rage held in formal, terrifying restraint
-- The higher register strips THREE merits from their file (say it in lore terms...  "three marks", "triple strike", etc.)
-${antichristHint}
-- ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. 2 to 4 short sentences, then close with 2 to 5 dots and your sign-off name.
     `.trim(),
   });
 
@@ -1554,6 +1484,7 @@ User asked: "${safe}"
 Your mood toward them now: ${mood ?? 'afwezig'}...  ${moodDesc}
 Your standing verdict: ${judgementLabel ?? 'onbeslist'}...  ${judgementDesc}
 ${impression ? `Your long-term impression of them: "${impression}"` : ''}
+Never say scores or point totals aloud — attitude in tone only.
 ${registerBlock ? `
 THE REGISTER (you already keep this. Do not claim you have no file.):
 ${registerBlock}

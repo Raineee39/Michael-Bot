@@ -28,6 +28,9 @@ Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → 
 
 /chat also gets cross-user context: theme-neighbours (souls whose `recentThemes` overlap the prompt — always included when a real overlap exists) and a favourites/nuisances gossip hint (only when he's fed up with the invoker, else ~15%; prompt says most replies tag no one).
 
+## Removed (2026-09)
+`/test`, `/aurascan` (canned lines), `/babychat` (+ its generators), old `/michaelmood` (canned humeur lines), `game.js`, `aura.js`, `examples/`. `/cosmicstatus` was renamed to `/michaelmood` (same handler: offices + mood toward you). The character sheet is now always in the /chat prompt (with Michael Points) instead of a 12% gate. Michael never says tally/score numbers in prose — arrows and /vibecheck do that. The quiet afterthought (reply to the last message once a channel goes silent 12 min, 25% draw, 3h cooldown, needs /switchoflife ON) is now actually wired — it previously had no caller.
+
 ## Chat / listen
 `/chat` and `/listentomichael` both load speaker + `@` / named subjects into THE REGISTER.
 

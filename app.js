@@ -18,7 +18,6 @@ import {
   DiscordRequest,
   DiscordMultipart,
   DISCORD_MESSAGE_CONTENT_MAX,
-  getRandomEmoji,
   isDutchQuietHoursForUnpromptedSends,
   MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
   sendDmToUser,
@@ -26,9 +25,9 @@ import {
 import { getRandomWisdom } from './wisdom.js';
 import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf } from './utils/openai.js';
 import { addSelfEphemera, applySelfCondense, buildSelfContextBlock, getSayingsForCondense, recordMichaelSaying, selfNeedsCondense } from './utils/michael-self.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild, getRelationLandscape, findThemeNeighbours } from './utils/michael-memory.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild, getRelationLandscape, findThemeNeighbours } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
@@ -749,23 +748,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     const { name } = data;
 
     // "test" command
-    if (name === 'test') {
-      // Send a message into the channel where command was triggered from
-      return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          flags: InteractionResponseFlags.IS_COMPONENTS_V2,
-          components: [
-            {
-              type: MessageComponentTypes.TEXT_DISPLAY,
-              // Fetches a random emoji to send from a helper function
-              content: `hello world ${getRandomEmoji()}`
-            }
-          ]
-        },
-      });
-    }
-
     // "feedback"...  DM the bot owner with bug / feature / other reports
     if (name === 'feedback') {
       const soort = slashOptionValue(data, 'kind') || 'other';
@@ -830,40 +812,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "aurascan" command
-    if (name === 'aurascan') {
-      const userId = req.body.member?.user?.id ?? req.body.user?.id;
-      const username = req.body.member?.user?.username ?? req.body.user?.username;
-      const userInput = slashOptionValue(data, 'message') ?? '';
-      const channelId = req.body.channel_id ?? req.body.channel?.id;
-      const lezing = pick(lang.aurascan.lezingen);
-      res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          flags: InteractionResponseFlags.IS_COMPONENTS_V2,
-          components: [
-            {
-              type: MessageComponentTypes.TEXT_DISPLAY,
-              content: `${lang.aurascan.header}\n\n*${lezing}*`,
-            },
-          ],
-        },
-      });
-      // What they tell Michael about themselves counts toward the tally too
-      if (userInput.trim() && userId) {
-        (async () => {
-          try {
-            const preMood = loadUserMemory(userId).currentMood ?? 'afwezig';
-            const scoreDelta = await scoreMichaelMessage(userInput);
-            saveUserMemory(userId, username, userInput, preMood, scoreDelta, nextMood(preMood, scoreDelta), channelId, guildId ?? null);
-            reactScoreArrow(channelId, req.body.token, scoreDelta);
-          } catch (err) {
-            console.error('aurascan scoring failed:', err?.message ?? err);
-          }
-        })();
-      }
-      return;
-    }
-
     if (name === 'auracheck') {
       const scannerId = req.body.member?.user?.id ?? req.body.user?.id;
       const scannerName = req.body.member?.user?.username ?? req.body.user?.username;
@@ -1048,7 +996,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "cosmischestatus"...  who holds antichrist / uitverkorene, + Michael's mood toward you
-    if (name === 'cosmicstatus') {
+    if (name === 'michaelmood') {
       const invokerId    = req.body.member?.user?.id ?? req.body.user?.id;
       const antichristId = guildId ? getCurrentAntichristUserId(guildId) : null;
       const uitId        = guildId ? getUitverkoreneUserId(guildId) : null;
@@ -1207,17 +1155,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 
     // "michaelhumeur"...  shows Michael's current persistent mood toward this user
-    if (name === 'michaelmood') {
-      const userId = req.body.member?.user?.id ?? req.body.user?.id;
-      const mood   = loadUserMemory(userId).currentMood ?? 'afwezig';
-      const humeurLines = lang.humeurLines[mood] ?? lang.humeurLines['afwezig'];
-      return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `${pick(humeurLines)}\n\n${lang.humeur.currentMoodLabel(moodName(lang, mood))}` },
-      });
-    }
-
-
     // "vibecheck" command...  full points dashboard + improvement tips
     if (name === 'vibecheck') {
       const userId   = req.body.member?.user?.id ?? req.body.user?.id;
@@ -1360,10 +1297,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         const memorySummary = realPrompts.length ? realPrompts.slice(-3).join(' / ') : null;
         const cosmicRole = getCosmicRole(userId, guildId);
 
-        // Rollenspel...  use existing character sheet if present; generate one in background after reply
+        // Rollenspel...  the sheet is always on Michael's desk; the prompt decides
+        // when a nod fits (title, weakest stat, campaign standing), not a dice gate
         const existingCharacter = preMemory.michaelCharacter ?? null;
-        const characterBlock = existingCharacter && shouldReferenceCharacterThisTurn()
-          ? formatCharacterForPrompt(existingCharacter, langCode)
+        const characterBlock = existingCharacter
+          ? formatCharacterForPrompt(existingCharacter, langCode, preMemory.michaelPoints ?? 0)
           : '';
 
         // After 2 explicit requests, unlock; full target-language replies only when they write in that language (or ask again)
@@ -1489,160 +1427,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             body: { content: `> ${safeInput}\n\n${lang.ui.praatError}` },
           });
         } catch { /* token already gone */ }
-      } finally {
-        if (typingInterval) clearInterval(typingInterval);
-      }
-      return;
-    }
-
-    // "babychat": toddler Michael; 20% meltdown: -3 judgement, antichrist on servers.
-    // Toddler and meltdown replies use Gemini Flash: generateBabyChatToddler / generateBabyChatMeltdown in utils/openai.js.
-    if (name === 'babychat') {
-      const userInput = slashOptionValue(data, 'message');
-      const userId = req.body.member?.user?.id ?? req.body.user?.id;
-      const username = req.body.member?.user?.username ?? req.body.user?.username;
-      const safeInput = userInput.trim().replace(/\n+/g, ' ').replace(/`/g, "'");
-      const preMemory = loadUserMemory(userId);
-      const storedMood = preMemory.currentMood ?? MICHAEL_MOODS[Math.floor(Math.random() * MICHAEL_MOODS.length)];
-      const mood = INSULT_RE.test(userInput) ? 'woedend' : storedMood;
-      const channelId = req.body.channel_id ?? req.body.channel?.id;
-
-      res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
-      });
-
-      if (BAIT_RE.test(userInput)) {
-        console.log(`[michael] babychat | bait-dismissal | ${username} (${userId})`);
-        saveUserMemory(userId, username, userInput, mood, -1, nextMood(mood, -1), channelId, guildId ?? null);
-        fileUnfinishedBusiness(userId, username, {
-          prompt: userInput,
-          reason: 'De gebruiker probeerde Michael te commanderen of te dwingen te reageren',
-          severity: 2,
-          channelId,
-        }, guildId ?? null);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${pick(lang.ui.baitDismissals)}` },
-        });
-        return;
-      }
-
-      if (CODE_REQUEST_RE.test(userInput)) {
-        console.log(`[michael] babychat | code-refusal | ${username} (${userId})`);
-        saveUserMemory(userId, username, userInput, mood, -2, nextMood(mood, -2), channelId, guildId ?? null);
-        fileUnfinishedBusiness(userId, username, {
-          prompt: userInput,
-          reason: 'De gebruiker vroeg om technische hulp...  buiten Michaels domein maar hij vergeet het niet',
-          severity: 1,
-          channelId,
-        }, guildId ?? null);
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: `> ${safeInput}\n\n${pick(lang.ui.codeRefusals)}` },
-        });
-        return;
-      }
-
-      const babyMemoryHint = [
-        `verdict ${getJudgementLabel(preMemory.judgementScore ?? 0)} (${preMemory.judgementScore ?? 0})`,
-        preMemory.impression ? `impression: "${preMemory.impression}"` : null,
-      ].filter(Boolean).join('; ');
-
-      const infuriated = Math.random() < 0.1; // meltdown stays possible, not a coin-flip
-      let typingInterval = null;
-      if (channelId) {
-        DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
-        typingInterval = setInterval(() => {
-          DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
-        }, 8000);
-      }
-
-      try {
-        if (infuriated) {
-          console.log(`[michael] babychat | meltdown | ${username} (${userId}) | guild=${guildId ?? 'dm'}`);
-          const becameAntichrist = Boolean(guildId);
-          const meltdown = await generateBabyChatMeltdown(username, userInput, langCode, becameAntichrist, babyMemoryHint);
-          if (becameAntichrist) {
-            setAntichristForGuild(guildId, userId, Date.now() + 24 * 60 * 60 * 1000);
-          }
-          saveUserMemory(userId, username, userInput, mood, -3, nextMood(mood, -3), channelId, guildId ?? null);
-          fileUnfinishedBusiness(userId, username, {
-            prompt: userInput,
-            reason: 'Baby-Michaël brak...  kosmische woede na /babychat',
-            severity: 3,
-            channelId,
-          }, guildId ?? null);
-          addTheme(userId, userInput);
-
-          const body = `> ${safeInput}\n\n${meltdown}`;
-          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-            method: 'PATCH',
-            body: { content: body, embeds: [] },
-          });
-          noteMichaelSaid('babychat-meltdown', meltdown, { userId, username, guildId: guildId ?? null });
-          reactScoreArrow(channelId, req.body.token, -3);
-        } else {
-          console.log(`[michael] babychat | toddler | ${username} (${userId})`);
-          const [toddlerReply, scoreDelta] = await Promise.all([
-            generateBabyChatToddler(username, userInput, langCode, babyMemoryHint),
-            scoreMichaelMessage(userInput),
-          ]);
-          saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId, guildId ?? null);
-
-          if (scoreDelta <= -2 || INSULT_RE.test(userInput)) {
-            fileUnfinishedBusiness(userId, username, {
-              prompt: userInput,
-              reason: scoreDelta <= -2 ? 'Belediging of agressief bericht' : 'Negatieve trilling in het veld',
-              severity: 3,
-              channelId,
-            }, guildId ?? null);
-          } else if (scoreDelta === -1) {
-            fileUnfinishedBusiness(userId, username, {
-              prompt: userInput,
-              reason: 'Respectloos of provocerend bericht',
-              severity: 2,
-              channelId,
-            }, guildId ?? null);
-          }
-          addTheme(userId, userInput);
-
-          if (needsSummarisation(userId)) {
-            const fresh = loadUserMemory(userId);
-            summariseUserHistory(username, fresh.prompts, fresh.impression)
-              .then(imp => {
-                updateImpression(userId, imp);
-                console.log(`[michael] summarisation | done | ${username} (${userId})`);
-              })
-              .catch(err => console.error('[michael] summarisation failed:', err));
-          }
-
-          const messageBase = `> ${safeInput}\n\n${toddlerReply}`;
-          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-            method: 'PATCH',
-            body: { content: messageBase, embeds: [] },
-          });
-          noteMichaelSaid('babychat', toddlerReply, { userId, username, guildId: guildId ?? null });
-          reactScoreArrow(channelId, req.body.token, scoreDelta);
-
-          if (channelId) {
-            try {
-              const getMsgRes = await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, { method: 'GET' });
-              const sentMsg = await getMsgRes.json();
-              if (sentMsg?.id) {
-                schedulePostRevision(channelId, sentMsg.id, messageBase, mood, 'babychat', langCode);
-              }
-            } catch { /* non-critical */ }
-          }
-        }
-      } catch (err) {
-        console.error('babychat error:', err);
-        try {
-          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-            method: 'PATCH',
-            body: { content: `> ${safeInput}\n\n${lang.ui.babychatError}` },
-          });
-        } catch { /* token expired */ }
       } finally {
         if (typingInterval) clearInterval(typingInterval);
       }

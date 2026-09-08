@@ -196,6 +196,9 @@ export function startGateway() {
           channelId,
           guildId,
           mentionsMichael,
+          authorId,
+          username: msg.author?.username ?? null,
+          content,
         });
 
         // Only continue for messages that mention Michael

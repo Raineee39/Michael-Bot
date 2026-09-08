@@ -769,16 +769,14 @@ export function patchMichaelCharacter(userId, partial) {
 }
 
 /** One-line summary for LLM prompts. Resolves multilingual fields to the requested language. */
-export function formatCharacterForPrompt(character, langCode = 'nl') {
+export function formatCharacterForPrompt(character, langCode = 'nl', michaelPoints = null) {
   if (!character) return '';
   const a = resolveField(character.archetype, langCode);
   const l = resolveField(character.lineage, langCode);
   const t = resolveField(character.title, langCode);
   const { stats } = character;
-  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${a}", ras/afstamming "${l}", titel/epitheton "${t}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}.`;
-}
-
-/** ~12% suggestion: Michael may nod at the role in a reply. */
-export function shouldReferenceCharacterThisTurn() {
-  return Math.random() < 0.12;
+  const points = typeof michaelPoints === 'number'
+    ? ` Campagnestand (Michael Points): ${michaelPoints}.`
+    : '';
+  return `Kosmische inschrijving (bindend volgens Michaël): archetype "${a}", ras/afstamming "${l}", titel/epitheton "${t}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · inzicht ${stats.inzicht} · volharding ${stats.volharding}.${points}`;
 }
