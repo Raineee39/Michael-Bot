@@ -879,8 +879,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       takeLongReply(stashId);
       const share = componentId.startsWith('longreply_share:');
       const note = share
-        ? (langCode === 'nl' ? 'Gedeeld met de groep.' : 'Shared with the group.')
-        : (langCode === 'nl' ? 'Verzegeld. Alleen jij hebt dit gezien.' : 'Sealed. Only you have seen this.');
+        ? (langCode === 'nl' ? '🕊️ Verkondigd aan de gemeente.' : '🕊️ Proclaimed to the congregation.')
+        : (langCode === 'nl' ? '🕯️ Verzegeld, alleen voor goddelijke ogen.' : '🕯️ Sealed, for divine eyes only.');
       res.send({
         type: InteractionResponseType.UPDATE_MESSAGE,
         data: { content: `${prev}\n\n*${note}*`.slice(0, DISCORD_MESSAGE_CONTENT_MAX), components: [] },

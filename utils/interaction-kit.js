@@ -329,8 +329,8 @@ export function longReplyButtons(stashId, langCode) {
   return [{
     type: MessageComponentTypes.ACTION_ROW,
     components: [
-      { type: MessageComponentTypes.BUTTON, custom_id: `longreply_share:${stashId}`, label: langCode === 'nl' ? 'Deel met de groep' : 'Share with the group', style: ButtonStyleTypes.PRIMARY },
-      { type: MessageComponentTypes.BUTTON, custom_id: `longreply_keep:${stashId}`, label: langCode === 'nl' ? 'Houd privé' : 'Keep private', style: ButtonStyleTypes.SECONDARY },
+      { type: MessageComponentTypes.BUTTON, custom_id: `longreply_share:${stashId}`, label: langCode === 'nl' ? 'Verkondig aan de gemeente' : 'Proclaim to the congregation', emoji: { name: '🕊️' }, style: ButtonStyleTypes.PRIMARY },
+      { type: MessageComponentTypes.BUTTON, custom_id: `longreply_keep:${stashId}`, label: langCode === 'nl' ? 'Alleen voor goddelijke ogen' : 'For divine eyes only', emoji: { name: '🕯️' }, style: ButtonStyleTypes.SECONDARY },
     ],
   }];
 }
