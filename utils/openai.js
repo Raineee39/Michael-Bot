@@ -20,6 +20,8 @@ if (!process.env.GEMINI_API_KEY) {
 
 /** Cheap Flash for text. Override with GEMINI_TEXT_MODEL if needed. */
 const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+/** Cheapest model available — used only for low-stakes background summarisation. */
+const SUMMARY_MODEL = process.env.GEMINI_SUMMARY_MODEL || 'gemini-2.5-flash-lite';
 const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 const TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
 
@@ -71,7 +73,7 @@ function extractGeminiText(response) {
   return parts.map((p) => p?.text).filter(Boolean).join('\n').trim();
 }
 
-async function geminiText(input, { maxOutputTokens = 300, temperature } = {}) {
+async function geminiText(input, { maxOutputTokens = 300, temperature, model } = {}) {
   const baseConfig = {
     maxOutputTokens,
     ...(temperature !== undefined ? { temperature } : {}),
@@ -79,7 +81,7 @@ async function geminiText(input, { maxOutputTokens = 300, temperature } = {}) {
   let response;
   try {
     response = await ai.models.generateContent({
-      model: TEXT_MODEL,
+      model: model ?? TEXT_MODEL,
       contents: input,
       config: { ...baseConfig, thinkingConfig: { thinkingBudget: 0 } },
     });
@@ -88,7 +90,7 @@ async function geminiText(input, { maxOutputTokens = 300, temperature } = {}) {
     if (!/thinking/i.test(msg)) throw err;
     console.warn('[gemini] thinkingConfig rejected, retrying without it');
     response = await ai.models.generateContent({
-      model: TEXT_MODEL,
+      model: model ?? TEXT_MODEL,
       contents: input,
       config: baseConfig,
     });
@@ -176,7 +178,7 @@ function userMentionsIsraelTopic(userInput) {
   return /\b(israel|israeli|israël|israëli|israelisch|israëlisch|idf|iof|zionis|zionism|gaza|west\s*-?\s*bank|westbank|palestin|jeruzalem|jerusalem|tel\s*aviv|occupation|bezetting|nederzetting|nakba|netanyahu|likud|knesset|golan|al-?quds|al\s*qua?ds|rafah|jenin|hebron|nablus)\b/i.test(userInput);
 }
 
-export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null, characterBlock = '', langCode = 'nl', registerBlock = '') {
+export async function generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, impression, cosmicRole, contradictionHint = false, languagePermission = null, characterBlock = '', langCode = 'nl', registerBlock = '', selfBlock = '', relationsBlock = '') {
   const lang = getLang(langCode);
 
   const impressionBlock = impression
@@ -274,7 +276,7 @@ ${lengthSignoffDefault}`;
     input: `
 ${lang.identityLine}
 ${lang.archangelBaseline ?? ''}
-
+${selfBlock ? `\n${selfBlock}\n` : ''}
 ${moodLabel}
 ${moodDesc}
 
@@ -297,7 +299,7 @@ THE REGISTER (you already keep this. Do not claim you have no file. Do not inven
 ${registerBlock}
 
 If they ask about a tagged person, a confession, a secret, or anything on file — you MUST use the specific confession text and history. Answer the question with that material. Do not dump the whole file. Do not say you remember nothing.
-` : ''}${israelTopicBlock}${antiZionismFlareBlock}${poetryRequirementBlock}${hijaBlock}${lyricBlock}
+` : ''}${relationsBlock ? `\n${relationsBlock}\n` : ''}${israelTopicBlock}${antiZionismFlareBlock}${poetryRequirementBlock}${hijaBlock}${lyricBlock}
 ${lang.userAttribution(username, userInput)}
     `.trim(),
   });
@@ -332,6 +334,31 @@ ${context}
   });
 
   return response.output[0].content[0].text.trim();
+}
+
+// ─── Self-memory condensation (cheapest model) ────────────────────────────────
+
+/**
+ * Fold Michael's oldest sayings into his rolling first-person self-summary.
+ * Runs on the cheapest model — this is background bookkeeping, not voice work.
+ * Ephemera (time-boxed notes) are deliberately NOT passed in: they expire on
+ * their own and must never survive into the long-term summary.
+ */
+export async function summariseMichaelSelf(sayings, existingSummary) {
+  const lines = (sayings ?? [])
+    .map((s) => `- [${s.kind}${s.username ? ` to ${s.username}` : ''}] "${s.text}"`)
+    .join('\n');
+  const text = await geminiText(
+    `
+Summarise, in at most 3 short sentences, what the Archangel Michael (a petty celestial clerk persona) has himself been saying and doing lately, based on his own recent outgoing messages below. Write in first person as Michael ("I have been…"). Keep only what matters to his ongoing conduct and standing themes; drop one-off trivia, dates, and anything that only mattered that day.
+${existingSummary ? `Merge with his existing self-summary, keeping what still holds: "${existingSummary}"` : ''}
+
+His recent sayings:
+${lines || '(nothing recorded)'}
+    `.trim(),
+    { maxOutputTokens: 120, model: SUMMARY_MODEL },
+  );
+  return text.trim();
 }
 
 // ─── Message scoring ──────────────────────────────────────────────────────────
@@ -376,9 +403,10 @@ When in doubt between 0 and 1? Choose 1.`,
 
 // ─── Date morning-after ───────────────────────────────────────────────────────
 
-export async function generateMorningAfter(username, datePath, morningChoice, langCode = 'nl') {
+export async function generateMorningAfter(username, datePath, morningChoice, langCode = 'nl', impression = null) {
   const lang = getLang(langCode);
   const { outputInstruction, signOff } = lang.helpers;
+  const impressionLine = impression ? `\nYour long-term impression of them (let it colour the tone, do not recite it): "${impression}"` : '';
 
   const choiceContext = {
     a: 'the user said nothing and simply left...  Michael responded to the silence',
@@ -390,7 +418,7 @@ export async function generateMorningAfter(username, datePath, morningChoice, la
     model: 'gpt-4.1-mini',
     max_output_tokens: 180,
     input: `
-${personaIntro(langCode)} The morning after a date you send a short message to ${username}. The date ended well...  perhaps too well. You are not used to this feeling. Context: ${choiceContext}. Write a short, cryptic message. Not too warm. Not too cold. Strangely specific. Formal but slightly different than usual. 1 to 2 sentences.
+${personaIntro(langCode)} The morning after a date you send a short message to ${username}. The date ended well...  perhaps too well. You are not used to this feeling. Context: ${choiceContext}.${impressionLine} Write a short, cryptic message. Not too warm. Not too cold. Strangely specific. Formal but slightly different than usual. 1 to 2 sentences.
 ${outputInstruction}
 ${signOff} Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
@@ -559,6 +587,7 @@ export async function generateHoroscope({
   aggregateMood,
   subjects = [],
   offices = {},
+  selfBlock = '',
 }) {
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
   const moodNames = lang.moodNames ?? {};
@@ -593,7 +622,7 @@ ${outputInstruction}
 This is a Discord message. Use markdown. Do NOT write a paragraph wall. Do NOT use strange extra spaces. Short lines. Petty clerk energy.
 
 The register shows ${aggregateMood?.knownUsers ?? 0} souls with mood on file. Field mood hint: ${dominantLabel}.
-${officeBlock ? `\n${officeBlock}\n` : ''}
+${selfBlock ? `\n${selfBlock}\nStay consistent with your own recent proclamations; do not contradict yesterday's self without acknowledging it.\n` : ''}${officeBlock ? `\n${officeBlock}\n` : ''}
 EXACT layout (no extra sections):
 
 1) First line exactly: **${moodLabel}:** YOUR-INVENTED-MOOD
@@ -681,6 +710,7 @@ export async function generateDayLaw({
   subjects = [],
   offices = {},
   yesterdayDigest = '',
+  selfBlock = '',
 }) {
   const allowed = new Set(subjects.map((s) => s.userId).filter(Boolean));
   const chosenId = offices.chosenUserId && allowed.has(offices.chosenUserId) ? offices.chosenUserId : null;
@@ -698,7 +728,7 @@ ${lang.helpers.outputInstruction}
 This is a closed system for 24 hours. Petty celestial clerk. Not a paragraph.
 
 Field mood hint: ${aggregateMood?.dominantMood ?? 'afwezig'}. Known souls: ${aggregateMood?.knownUsers ?? 0}.
-${chosenId ? `CHOSEN ONE (must appear in a prophecy or omen): <@${chosenId}>` : ''}
+${selfBlock ? `\n${selfBlock}\nStay consistent with your own recent proclamations.\n` : ''}${chosenId ? `CHOSEN ONE (must appear in a prophecy or omen): <@${chosenId}>` : ''}
 ${antId ? `ANTICHRIST (must appear in a prophecy or omen): <@${antId}>` : ''}
 Allowed Discord IDs only: ${idsHint}
 ${yesterdayDigest ? `\nYESTERDAY'S BOOKS (residue — do not recap, just let it flavour today's cruelty):\n${yesterdayDigest}\n` : ''}
@@ -952,7 +982,7 @@ ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with
 /**
  * Michael in toddler register...  playful baby-talk, still vaguely cosmic.
  */
-export async function generateBabyChatToddler(username, userInput, langCode = 'nl') {
+export async function generateBabyChatToddler(username, userInput, langCode = 'nl', memoryHint = '') {
   const lang = getLang(langCode);
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
 
@@ -961,7 +991,7 @@ export async function generateBabyChatToddler(username, userInput, langCode = 'n
     max_output_tokens: 220,
     input: `
 ${personaIntro(langCode)}
-
+${memoryHint ? `\nEven as a toddler you dimly remember this soul: ${memoryHint} Let it peek through in toddler terms (a wobbly "you again" energy), never as adult analysis.\n` : ''}
 SPECIAL MODE...  YOU ARE MICHAEL AS A VERY SMALL TODDLER (about two years old).
 - Reply to the user in baby talk: short lines, simple words, wobbly grammar, wonder, silly misunderstandings of "big" spiritual ideas
 - Tiny bit of archangel flavour may peek through (stars, clouds, throne) but stay mostly toddler...  not preachy
@@ -980,7 +1010,7 @@ User ${username} wrote: "${userInput}"
  * Michael snaps out of baby mode...  furious archangel; lore: three marks struck from their standing.
  * Caller appends antichrist announcement when applicable.
  */
-export async function generateBabyChatMeltdown(username, userInput, langCode = 'nl', becameAntichrist = false) {
+export async function generateBabyChatMeltdown(username, userInput, langCode = 'nl', becameAntichrist = false, memoryHint = '') {
   const lang = getLang(langCode);
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
 
@@ -997,6 +1027,7 @@ ${personaIntro(langCode)}
 CATASTROPHE...  THE TODDLER MASK SHATTERS.
 The user ${username} used /babychat and pushed you past endurance with: "${userInput}"
 You are the REAL Archangel Michael again...  ice-cold, cosmic bureaucracy, DONE with this infantile game.
+${memoryHint ? `Their file (use it to make the wrath personal): ${memoryHint}` : ''}
 - Full adult voice: no baby talk. Rage held in formal, terrifying restraint
 - The higher register strips THREE merits from their file (say it in lore terms...  "three marks", "triple strike", etc.)
 ${antichristHint}
@@ -1505,7 +1536,7 @@ One dense paragraph, visual and specific, 40 to 90 words.
  * Spoken advice as WAV (24 kHz PCM wrapped). Returns { wavBuffer, script, flavor }.
  * Gemini TTS accepts natural-language style in the prompt (no separate mood parameter).
  */
-export async function generateMichaelVoiceAdvice(userInput, { username, mood, judgementLabel, score = 0, langCode = 'nl', registerBlock = '' } = {}) {
+export async function generateMichaelVoiceAdvice(userInput, { username, mood, judgementLabel, score = 0, langCode = 'nl', registerBlock = '', impression = null } = {}) {
   const lang = getLang(langCode);
   const { formalAddress, outputInstruction } = lang.helpers;
   const flavor = resolveImagineFlavor(mood, judgementLabel, score);
@@ -1522,6 +1553,7 @@ Language: ${spokenLang}. Formal address (${formalAddress}).
 User asked: "${safe}"
 Your mood toward them now: ${mood ?? 'afwezig'}...  ${moodDesc}
 Your standing verdict: ${judgementLabel ?? 'onbeslist'}...  ${judgementDesc}
+${impression ? `Your long-term impression of them: "${impression}"` : ''}
 ${registerBlock ? `
 THE REGISTER (you already keep this. Do not claim you have no file.):
 ${registerBlock}

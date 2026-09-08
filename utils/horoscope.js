@@ -1,4 +1,5 @@
 import { loadAllMemory, loadUserMemory, getJudgementLabel, resolveField, patchUserState, guildInteractionAt, interactorIdsForGuild } from './michael-memory.js';
+import { addSelfEphemera, buildSelfContextBlock, recordMichaelSaying } from './michael-self.js';
 import { generateBooksClosed, generateDayLaw, generateHoroscope } from './openai.js';
 import {
   getTodayCard,
@@ -281,6 +282,7 @@ export async function buildHoroscopeText({
     aggregateMood,
     subjects,
     offices,
+    selfBlock: buildSelfContextBlock(),
   });
 }
 
@@ -381,6 +383,7 @@ export async function buildDayLawForGuild({
       subjects,
       offices: safeOffices,
       yesterdayDigest: closedYesterday ? yesterdayDigest(closedYesterday) : '',
+      selfBlock: buildSelfContextBlock(),
     });
   } catch (err) {
     console.error('[michael] day law failed, using fallback card:', err?.message ?? err);
@@ -398,6 +401,12 @@ export async function buildDayLawForGuild({
   }
 
   saveTodayCard(guildId, card, safeOffices);
+  // Today's law matters today, not in the grander scheme...  ephemera expires on its own.
+  addSelfEphemera(
+    `Today's law I declared: mood "${card.mood}", forbidden word ${card.forbiddenWord}${card.rule ? `, rule: ${card.rule}` : ''}.`,
+    36 * 60 * 60 * 1000,
+  );
+  recordMichaelSaying(`Declared today's law: ${card.mood}${card.omen ? ` — ${card.omen}` : ''}`, { kind: 'day-law', guildId });
   return {
     card,
     content: formatDayCard(lang, {

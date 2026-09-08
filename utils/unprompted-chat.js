@@ -19,6 +19,7 @@ import {
 } from '../utils.js';
 import { isMichaelLifeActive } from './life-switch.js';
 import { generateDelayedConsequence } from './openai.js';
+import { recordMichaelSaying } from './michael-self.js';
 import { getGuildLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
 import {
@@ -174,6 +175,7 @@ async function trySendBusiness(item) {
 
   markBusinessMentioned(item.authorId, business.id);
   if (business.severity <= 2) markBusinessResolved(item.authorId, business.id);
+  recordMichaelSaying(content, { kind: 'resurface', userId: item.authorId, username: item.username, guildId: item.guildId ?? null });
 
   console.log(`[michael] business-resurface | sent | user=${item.authorId} | ch=${item.channelId} | sev=${business.severity}`);
   pendingBusiness = null;

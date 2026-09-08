@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
+import { generalMoodRollModifier } from './michael-self.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MEMORY_PATH = join(__dirname, '../data/michael-memory.json');
@@ -542,6 +543,49 @@ export function detectThemeOverlap(userId, prompt) {
   return false;
 }
 
+// ─── Relations across souls (for cross-user references in chat) ───────────────
+
+/**
+ * Who Michael currently favours and who tires him, excluding the current user.
+ * Scoped to souls who actually used Michael in this guild when guildId is set.
+ */
+export function getRelationLandscape(excludeUserId, guildId = null, { max = 2 } = {}) {
+  const all = loadAll();
+  const interactors = guildId ? new Set(interactorIdsForGuild(guildId)) : null;
+  const souls = Object.entries(all)
+    .filter(([id, mem]) => id !== excludeUserId && mem.username)
+    .filter(([id]) => !interactors || interactors.has(id))
+    .map(([id, mem]) => ({ userId: id, username: mem.username, score: mem.judgementScore ?? 0 }));
+  const favourites = souls.filter((s) => s.score >= 3).sort((a, b) => b.score - a.score).slice(0, max);
+  const nuisances = souls.filter((s) => s.score <= -2).sort((a, b) => a.score - b.score).slice(0, max);
+  return { favourites, nuisances };
+}
+
+/**
+ * Other souls whose recent themes overlap this prompt (≥2 shared keywords)...
+ * lets Michael note "someone else spoke of this too" when it's actually true.
+ */
+export function findThemeNeighbours(currentUserId, prompt, guildId = null, max = 2) {
+  const kws = new Set(extractKeywords(prompt));
+  if (kws.size < 2) return [];
+  const all = loadAll();
+  const interactors = guildId ? new Set(interactorIdsForGuild(guildId)) : null;
+  const out = [];
+  for (const [id, mem] of Object.entries(all)) {
+    if (id === currentUserId || !mem.username || !mem.recentThemes?.length) continue;
+    if (interactors && !interactors.has(id)) continue;
+    for (const theme of mem.recentThemes) {
+      const shared = (theme.keywords ?? []).filter((k) => kws.has(k));
+      if (shared.length >= 2) {
+        out.push({ userId: id, username: mem.username, shared });
+        break;
+      }
+    }
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 // ─── Michaëls kosmische rollenspel...  stats, rolls, Michael Points ─────────────
 
 const STAT_KEYS = ['aura', 'discipline', 'chaos', 'inzicht', 'volharding'];
@@ -643,6 +687,10 @@ export function computeMichaelRoll(user, mood, opts = {}) {
     kosmisch: 1,
   };
   modifier += moodMod[mood] ?? 0;
+
+  // Michael's own general mood (independent of this user) eases or sours every
+  // roll...  a merciful day helps even the souls he personally dislikes.
+  modifier += generalMoodRollModifier(opts.generalMood ?? null);
 
   if (opts.context === 'forgiveness') {
     modifier += Math.floor(st.discipline / 10);

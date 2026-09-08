@@ -25,8 +25,9 @@ import {
 import { getRandomWisdom } from './wisdom.js';
 import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice } from './utils/openai.js';
-import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild } from './utils/michael-memory.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateBabyChatToddler, generateBabyChatMeltdown, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf } from './utils/openai.js';
+import { addSelfEphemera, applySelfCondense, buildSelfContextBlock, getSayingsForCondense, recordMichaelSaying, selfNeedsCondense } from './utils/michael-self.js';
+import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, shouldReferenceCharacterThisTurn, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild, getRelationLandscape, findThemeNeighbours } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
 import { getGuildLanguage, setGuildLanguage, resolveLanguage } from './utils/guild-settings.js';
@@ -320,6 +321,13 @@ async function buildCosmicAppointmentMessage(guildId, lang, role) {
   const header = role === 'antichrist' ? lang.antichrist.header : lang.uitverkorene.header;
   const title = role === 'antichrist' ? lang.antichrist.title : lang.uitverkorene.title;
   const content = [header, title, header, '', `<@${userId}>`, '', sermon].join('\n');
+  noteMichaelSaid('appointment', sermon, {
+    userId,
+    username,
+    guildId,
+    ttlMs: 24 * 60 * 60 * 1000,
+    ephemeraText: `I appointed ${username} (<@${userId}>) as ${role} for today.`,
+  });
   return { content, embeds: [], userId };
 }
 
@@ -399,6 +407,56 @@ function fileUnfinishedBusiness(userId, username, details, guildId) {
     });
   }
   return businessId;
+}
+
+/**
+ * Record something Michael just said publicly, and condense his self-memory
+ * with the cheapest model once the queue fills. Fire-and-forget, never throws.
+ */
+function noteMichaelSaid(kind, text, { userId = null, username = null, guildId = null, ttlMs = null, ephemeraText = null } = {}) {
+  try {
+    recordMichaelSaying(text, { kind, userId, username, guildId });
+    if (ttlMs) addSelfEphemera(ephemeraText ?? text, ttlMs);
+    if (selfNeedsCondense()) {
+      const { sayings, summary } = getSayingsForCondense();
+      summariseMichaelSelf(sayings, summary)
+        .then((s) => {
+          applySelfCondense(s);
+          console.log('[michael] self-memory condensed');
+        })
+        .catch((err) => console.error('[michael] self-condense failed:', err?.message ?? err));
+    }
+  } catch (err) {
+    console.error('[michael] self-memory failed:', err?.message ?? err);
+  }
+}
+
+/**
+ * Cross-user context for /chat. Theme neighbours are included whenever they
+ * genuinely exist (self-gating by relevance); the favourites/nuisances gossip
+ * hint is rare...  always when Michael is fed up with this user, otherwise ~15%.
+ */
+function buildRelationsBlock(userId, username, userInput, guildId, judgementScore) {
+  const lines = [];
+  const neighbours = findThemeNeighbours(userId, userInput, guildId);
+  if (neighbours.length) {
+    lines.push('Souls who recently spoke to you about similar matters (real tags — never invent IDs):');
+    for (const n of neighbours) {
+      lines.push(`- <@${n.userId}> (${n.username}) — shared themes: ${n.shared.join(', ')}`);
+    }
+    lines.push('You MAY note the coincidence or refer the current user to one of them — only if it genuinely fits the reply.');
+  }
+  const gossipGate = judgementScore <= -2 || Math.random() < 0.15;
+  if (gossipGate) {
+    const { favourites, nuisances } = getRelationLandscape(userId, guildId);
+    if (favourites.length || nuisances.length) {
+      lines.push('Other souls on file (real tags — never invent IDs):');
+      for (const f of favourites) lines.push(`- favoured: <@${f.userId}> (${f.username})`);
+      for (const n of nuisances) lines.push(`- tiresome: <@${n.userId}> (${n.username})`);
+      lines.push(`If you are fed up with ${username}, you MAY once deflect them toward a favoured soul by tag; if fond of them, you may gossip mildly about a tiresome one. At most ONE tag, only when it lands naturally. Most replies should tag no one. Never tag ${username} themselves.`);
+    }
+  }
+  return lines.length ? `OTHER SOULS (context, not an obligation):\n${lines.join('\n')}` : '';
 }
 
 function buildWitnessDossier(targetId, targetUsername, memory, guildId, lang, langCode) {
@@ -799,6 +857,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           method: 'PATCH',
           body: { content: `${header}\n\n${reading}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) },
         });
+        noteMichaelSaid('aura', reading, { userId: targetId, username: targetUsername, guildId: guildId ?? null });
         console.log(`[michael] auracheck | subject=${targetUsername} (${targetId}) | by=${scannerName}`);
       } catch (err) {
         console.error('auracheck error:', err?.message ?? err);
@@ -833,6 +892,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `${header}\n\n${invoice}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) },
+        });
+        noteMichaelSaid('invoice', invoice, {
+          userId: targetId,
+          username: targetUsername,
+          guildId: guildId ?? null,
+          ttlMs: 48 * 60 * 60 * 1000,
+          ephemeraText: `I billed ${targetUsername} (<@${targetId}>). Payment is outstanding.`,
         });
         console.log(`[michael] soulinvoice | billed=${targetUsername} (${targetId}) | by=${requesterName}`);
       } catch (err) {
@@ -1297,9 +1363,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         // Passive dice roll...  selective, returns true if buttons should be shown
         const passiveTriggered = maybePassiveRollBlock(userId, userInput);
 
+        // Michael's own memory + cross-user context
+        const selfBlock = buildSelfContextBlock();
+        const relationsBlock = buildRelationsBlock(userId, username, userInput, guildId, preMemory.judgementScore ?? 0);
+        if (relationsBlock) console.log(`[michael] chat | relations block | ${relationsBlock.length} bytes`);
+
         // Run message generation and AI scoring in parallel...  no extra wait time
         const [michaelMessage, scoreDelta] = await Promise.all([
-          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission, characterBlock, langCode, registerBlock),
+          generateMichaelMessage(username, userInput, mood, memorySummary, judgementLabel, preMemory.impression ?? null, cosmicRole, contradictionHint, languagePermission, characterBlock, langCode, registerBlock, selfBlock, relationsBlock),
           scoreMichaelMessage(userInput),
         ]);
 
@@ -1357,6 +1428,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           method: 'PATCH',
           body: patchBody,
         });
+
+        noteMichaelSaid('chat', michaelMessage, { userId, username, guildId: guildId ?? null });
 
         // Feature 5...  Post-message revision: fetch the sent message ID then maybe append an edit
         if (channelId) {
@@ -1441,6 +1514,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         return;
       }
 
+      const babyMemoryHint = [
+        `verdict ${getJudgementLabel(preMemory.judgementScore ?? 0)} (${preMemory.judgementScore ?? 0})`,
+        preMemory.impression ? `impression: "${preMemory.impression}"` : null,
+      ].filter(Boolean).join('; ');
+
       const infuriated = Math.random() < 0.2;
       let typingInterval = null;
       if (channelId) {
@@ -1454,7 +1532,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         if (infuriated) {
           console.log(`[michael] babychat | meltdown | ${username} (${userId}) | guild=${guildId ?? 'dm'}`);
           const becameAntichrist = Boolean(guildId);
-          const meltdown = await generateBabyChatMeltdown(username, userInput, langCode, becameAntichrist);
+          const meltdown = await generateBabyChatMeltdown(username, userInput, langCode, becameAntichrist, babyMemoryHint);
           if (becameAntichrist) {
             setAntichristForGuild(guildId, userId, Date.now() + 24 * 60 * 60 * 1000);
           }
@@ -1475,7 +1553,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         } else {
           console.log(`[michael] babychat | toddler | ${username} (${userId})`);
           const [toddlerReply, scoreDelta] = await Promise.all([
-            generateBabyChatToddler(username, userInput, langCode),
+            generateBabyChatToddler(username, userInput, langCode, babyMemoryHint),
             scoreMichaelMessage(userInput),
           ]);
           saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId, guildId ?? null);
@@ -1631,7 +1709,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           score: preMemory.judgementScore ?? 0,
           langCode,
           registerBlock,
+          impression: preMemory.impression ?? null,
         });
+        noteMichaelSaid('voice', script, { userId, username, guildId: guildId ?? null });
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
         await DiscordMultipart(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -1678,6 +1758,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           method: 'PATCH',
           body: { content: lines.join('\n') },
         });
+        noteMichaelSaid('witness', sermon, { userId: targetId, username: targetUsername, guildId: guildId ?? null });
         console.log(`[michael] getuigenis | subject=${targetUsername} (${targetId}) | by=${username}`);
       } catch (err) {
         console.error('getuigenis error:', err);
@@ -2453,7 +2534,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       res.send({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
 
       try {
-        const morningMsg = await generateMorningAfter(invokerUsername, datePath, morningChoice, langCode);
+        const morningMsg = await generateMorningAfter(invokerUsername, datePath, morningChoice, langCode, invokerMem.impression ?? null);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
           body: { content: `${prev}${SEP}${morningMsg}`, components: [] },

@@ -13,6 +13,7 @@ import { generateLawStamp } from './openai.js';
 import { getGuildLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
 import { patchUserState } from './michael-memory.js';
+import { recordMichaelSaying } from './michael-self.js';
 import {
   canPublicStamp,
   fulfillProphecy,
@@ -147,6 +148,7 @@ export async function handleDayLawMessage({
         flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
       },
     });
+    recordMichaelSaying(contentLine, { kind: `stamp-${hit.kind}`, userId: authorId, guildId });
     console.log(`[michael] day-law stamp | ${hit.kind} | guild=${guildId} | user=${authorId}`);
   } catch (err) {
     console.error('[michael] day-law stamp failed:', err?.message ?? err);

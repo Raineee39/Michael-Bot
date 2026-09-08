@@ -19,6 +19,13 @@ Do **not** vacate or re-roll the seat just because they repented. `/horoscope` s
 ## Webhook / VPS
 Push to `main` → `/github-webhook` → `git reset --hard origin/main && npm install && pm2 restart michael-bot --update-env`. Michael **does** restart after a pull.
 
+## Self-memory & moods (`utils/michael-self.js`, `data/michael-self.json`)
+Michael remembers what he himself says. Three layers: a verbatim queue of his last ~12 outgoing lines; a rolling first-person summary condensed by the cheapest model (`GEMINI_SUMMARY_MODEL`, default `gemini-2.5-flash-lite`) once the queue hits 10; and **ephemera** — time-boxed notes (today's law 36h, invoices 48h, appointments 24h) that expire on read and are never fed into the long-term summary. `buildSelfContextBlock()` goes into /chat, horoscope, and day-law prompts.
+
+Moods are split: `currentMood` on user records stays "mood toward them"; Michael also has ONE **general mood** (self-healing daily roll, kinder distribution, includes general-only `genadig`). General mood modifies every dice roll (+3 genadig … −3 woedend) via `computeMichaelRoll`.
+
+/chat also gets cross-user context: theme-neighbours (souls whose `recentThemes` overlap the prompt — always included when a real overlap exists) and a favourites/nuisances gossip hint (only when he's fed up with the invoker, else ~15%; prompt says most replies tag no one).
+
 ## Chat / listen
 `/chat` and `/listentomichael` both load speaker + `@` / named subjects into THE REGISTER.
 
