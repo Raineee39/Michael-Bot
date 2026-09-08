@@ -1331,9 +1331,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         return;
       }
 
-      // ~15% chance Michael refuses outright...  no OpenAI call
-      if (Math.random() < 0.15) {
-        console.log(`[michael] chat | random-refusal (15%) | ${username} (${userId})`);
+      // ~6% chance Michael refuses outright...  no OpenAI call. Rare enough to
+      // stay a surprise instead of a coin-flip, but the flip-out stays possible.
+      if (Math.random() < 0.06) {
+        console.log(`[michael] chat | random-refusal (6%) | ${username} (${userId})`);
         saveUserMemory(userId, username, userInput, mood, 0, nextMood(mood, 0), channelId, guildId ?? null);
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',
@@ -1548,7 +1549,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         preMemory.impression ? `impression: "${preMemory.impression}"` : null,
       ].filter(Boolean).join('; ');
 
-      const infuriated = Math.random() < 0.2;
+      const infuriated = Math.random() < 0.1; // meltdown stays possible, not a coin-flip
       let typingInterval = null;
       if (channelId) {
         DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
