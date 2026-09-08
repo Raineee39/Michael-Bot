@@ -140,6 +140,48 @@ export function summarizeGuildMood(memberIds) {
   };
 }
 
+export function amsterdamDateKey() {
+  // YYYY-MM-DD in Europe/Amsterdam (en-CA locale formats ISO-style)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Amsterdam',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+// One-off forced chaos dates (Amsterdam) — prune entries once they've passed.
+const CHAOS_FORCED = {
+  '2026-09-09': 'rant',
+};
+
+/**
+ * How Michael delivers today's bulletin. The card and its mechanics are always
+ * created normally (stamps and prophecies keep working; /horoscope shows the
+ * tidy card) — chaos only affects how the morning post reads.
+ */
+export function pickDailyDeliveryMode() {
+  const forced = CHAOS_FORCED[amsterdamDateKey()];
+  if (forced) return forced;
+  const r = Math.random();
+  if (r < 0.10) return 'rant';   // derails mid-card, never finishes
+  if (r < 0.18) return 'terse';  // can't be bothered today
+  return 'normal';
+}
+
+/** Compact card digest for the chaos generators. */
+export function summarizeCardForChaos(card, offices = {}) {
+  if (!card) return '';
+  const lines = [`mood: ${card.mood}`];
+  if (card.forbiddenWord) lines.push(`forbidden word: ${card.forbiddenWord}`);
+  for (const p of (card.prophecies ?? []).slice(0, 2)) lines.push(`prophecy: <@${p.userId}> ${p.claim}`);
+  if (card.leastFavouriteUserId) lines.push(`least favourite: <@${card.leastFavouriteUserId}>${card.leastFavouriteReason ? ` (${card.leastFavouriteReason})` : ''}`);
+  if (card.rule) lines.push(`standing order: ${card.rule}`);
+  if (offices.chosenUserId) lines.push(`chosen one: <@${offices.chosenUserId}>`);
+  if (offices.antichristUserId) lines.push(`antichrist: <@${offices.antichristUserId}>`);
+  return lines.join('\n');
+}
+
 export function amsterdamDateLabel(langCode = 'nl') {
   return new Intl.DateTimeFormat(langCode === 'en' ? 'en-GB' : 'nl-NL', {
     timeZone: 'Europe/Amsterdam',
@@ -154,6 +196,22 @@ function clampContent(text, max = 1990) {
   const s = String(text ?? '').trim();
   if (s.length <= max) return s;
   return `${s.slice(0, max - 24)}\n...(register full)..Michael`;
+}
+
+/**
+ * Strip trailing model-written sign-offs so the card's own '....Michael' foot
+ * doesn't stack into a triple signature. ~10% of the time we leave them alone
+ * on purpose — a Michael who occasionally signs three times is the point.
+ */
+const SIGNOFF_LINE_RE = /^\s*(?:[.…]{1,6}\s*)?(?:Micha[eë]l|Michael)\s*[.…]*\s*$|^\s*(?:the\s+)?arch\s*angel\s+of\s+the\s+lord\s*[.…]*\s*$/i;
+
+export function stripTrailingSignoffs(text) {
+  if (Math.random() < 0.10) return String(text ?? '').trim(); // chaos allowance
+  const lines = String(text ?? '').trimEnd().split('\n');
+  while (lines.length && (SIGNOFF_LINE_RE.test(lines[lines.length - 1]) || !lines[lines.length - 1].trim())) {
+    lines.pop();
+  }
+  return lines.join('\n').trim();
 }
 
 /** Discord does not ping or render <@id> inside ``` / `code` / 4-space blocks. */
@@ -210,11 +268,11 @@ export function formatDayCard(lang, { dateLabel, title, card, horoscopeBody, soF
   const h = lang.horoscope;
   const L = lang.dayLaw;
   const head = [h.header, title, h.dateLine(dateLabel), ''].join('\n');
-  const body = buildCardBody(lang, card, horoscopeBody, offices);
+  const body = stripTrailingSignoffs(buildCardBody(lang, card, horoscopeBody, offices));
   const soFarBlock = soFar.length
     ? [h.divider, `**${L.soFarTitle}**`, ...soFar.map((line) => `• ${line}`)].join('\n')
     : '';
-  const closeClean = plainMentions(closing).slice(0, 320);
+  const closeClean = stripTrailingSignoffs(plainMentions(closing)).slice(0, 320);
   const closeBlock = closeClean ? [h.divider, L.booksHeader, closeClean].join('\n') : '';
   const foot = '....Michael';
 

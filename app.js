@@ -24,7 +24,7 @@ import {
 import { getRandomWisdom } from './wisdom.js';
 import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
-import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf } from './utils/openai.js';
+import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf, generateDayChaosBulletin } from './utils/openai.js';
 import { addSelfEphemera, applySelfCondense, buildSelfContextBlock, getSayingsForCondense, recordMichaelSaying, selfNeedsCondense } from './utils/michael-self.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild, getRelationLandscape, findThemeNeighbours } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
@@ -54,6 +54,8 @@ import {
   buildPersonalHoroscopeText,
   buildSubjectDossier,
   formatPersonalHoroscope,
+  pickDailyDeliveryMode,
+  summarizeCardForChaos,
 } from './utils/horoscope.js';
 import { applyForgivenessToTodayCard, getTodayCard, getTodayOffices, healChosenOneIfTurnedAntichrist, markDayPosted, recentFeaturedUserIds, wasChannelPostedToday } from './utils/day-ledger.js';
 
@@ -357,7 +359,7 @@ async function buildDailyBulletin(guildId, lang) {
     ({ chosenUserId, antichristUserId } = assignFreshDailyOffices(guildId, memberIds));
   }
 
-  const { content } = await buildDayLawForGuild({
+  const { card, content, offices: cardOffices } = await buildDayLawForGuild({
     guildId,
     memberIds,
     langCode,
@@ -366,9 +368,40 @@ async function buildDailyBulletin(guildId, lang) {
     getCosmicRole: (uid) => getCosmicRole(uid, guildId),
     title: lang.horoscope.dailyTitle,
   });
+
+  // Chaos delivery: the card and its mechanics stay law (stamps, prophecies,
+  // /horoscope reprints the tidy version) — only the morning POST goes feral.
+  let finalContent = content;
+  const mode = pickDailyDeliveryMode();
+  if (mode !== 'normal') {
+    try {
+      const h = lang.horoscope;
+      const chaosText = await generateDayChaosBulletin({
+        mode,
+        langCode,
+        lang,
+        dateLabel: amsterdamDateLabel(langCode),
+        cardDigest: summarizeCardForChaos(card, cardOffices ?? { chosenUserId, antichristUserId }),
+        selfBlock: buildSelfContextBlock(),
+      });
+      const foot = mode === 'terse' ? '\n....Michael' : ''; // a rant never signs
+      finalContent = [h.header, h.dailyTitle, h.dateLine(amsterdamDateLabel(langCode)), '', chaosText]
+        .join('\n').slice(0, 1980) + foot;
+      recordMichaelSaying(
+        mode === 'rant'
+          ? "I lost the thread of today's bulletin and never finished it."
+          : "I could not be bothered with today's bulletin.",
+        { kind: 'day-chaos', guildId },
+      );
+      console.log(`[michael] daily bulletin | chaos mode=${mode} | guild=${guildId}`);
+    } catch (err) {
+      console.error('[michael] chaos bulletin failed, using normal card:', err?.message ?? err);
+    }
+  }
+
   const gif = await fetchGiphyGif(getHoroscopeGifQuery());
   const embeds = gif ? [{ image: { url: gif } }] : [];
-  return { content, embeds, chosenUserId, antichristUserId };
+  return { content: finalContent, embeds, chosenUserId, antichristUserId };
 }
 
 const app = express();

@@ -658,6 +658,44 @@ ${dossiers}
   }
 }
 
+/**
+ * Chaotic rendition of the morning bulletin. The real card exists and its
+ * mechanics run normally — this only replaces how the post READS.
+ * mode 'rant': starts official, loses the thread, never finishes.
+ * mode 'terse': cannot be bothered; aggressively minimal.
+ */
+export async function generateDayChaosBulletin({ mode, langCode = 'nl', lang, dateLabel, cardDigest, selfBlock = '' }) {
+  const { outputInstruction } = lang.helpers;
+
+  const modeBlock = mode === 'rant'
+    ? `Today you LOSE THE THREAD. Begin as the official bulletin: the mood line, one or two prophecies from the digest, official tone. Then something in the digest or on your own desk sets you off and you derail into a furious tangent — celestial bureaucracy, the state of these souls, a grievance you cannot let go — escalating, formatting degrading (caps leaking in, sentences running on, one thought interrupting another). You keep meaning to return to the bulletin and never do.
+CRITICAL: the message NEVER finishes. It stops mid-sentence, mid-word even. No closing line, no "in conclusion", NO SIGN-OFF of any kind. It just ends, like the pen was dropped.`
+    : `Today you CANNOT BE BOTHERED. Write the bulletin in at most 5 short lines: the mood, the forbidden word, and one cold dismissive sentence telling the server to figure the rest out themselves — the register is open, look it up. No enthusiasm. No sign-off; end abruptly.`;
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: mode === 'rant' ? 550 : 160,
+    input: `
+${personaIntro(langCode)}
+It is time for the official morning bulletin of ${dateLabel} for this Discord server.
+${outputInstruction}
+${selfBlock ? `\n${selfBlock}\n` : ''}
+Today's card (this is real and stays law — reference it, do not contradict it):
+${cardDigest || '(the card is blank. That alone is enough to set you off.)'}
+
+${modeBlock}
+
+Rules:
+- Discord markdown allowed. Short lines. No # headers, no code fences.
+- Only use <@id> tags that appear in the card digest. Never invent IDs.
+- Keep under ${mode === 'rant' ? 1400 : 400} characters.
+    `.trim(),
+  });
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty chaos bulletin');
+  return raw;
+}
+
 function parseJsonObject(raw) {
   const jsonMatch = String(raw ?? '').match(/\{[\s\S]*\}/);
   return JSON.parse(jsonMatch ? jsonMatch[0] : raw);
@@ -862,7 +900,7 @@ Ledger:
 ${digest || '(nothing was stamped. The silence is also a verdict.)'}
 
 Mention at most one <@id> if it fits. Then say the books are closed.
-Close with 2 to 5 dots followed by your sign-off name.
+Do NOT sign off — this text is embedded in a card that already carries your signature.
     `.trim(),
   });
   const raw = response.output?.[0]?.content?.[0]?.text?.trim();

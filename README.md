@@ -98,6 +98,16 @@ Webhook URL (include the port if Caddy uses 8443):
 
 `https://michael-bot.duckdns.org:8443/github-webhook`
 
+### Standalone deploy webhook (survives a dead bot)
+
+The webhook also ships as its own process (`deploy-webhook-server.js`, port 3002) so a crash-looping bot can't brick its own deploys. One-time VPS setup:
+
+```bash
+pm2 start deploy-webhook-server.js --name michael-deploy && pm2 save
+```
+
+Then point Caddy's `/github-webhook` route at `localhost:3002`. Until Caddy is switched the bot's built-in endpoint keeps handling deploys as before. The standalone process only restarts `michael-bot`; restart `michael-deploy` manually after changing the webhook code itself.
+
 ## Night window (22:00–10:00 Amsterdam)
 
 Only automated posts:
