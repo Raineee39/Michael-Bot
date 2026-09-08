@@ -1,4 +1,5 @@
 import './utils/load-env.js';
+// Registration is also run automatically by the deploy webhook when this file changes.
 import { DiscordRequest, InstallGlobalCommands, InstallGuildCommands } from './utils.js';
 
 const TEST_COMMAND = {
