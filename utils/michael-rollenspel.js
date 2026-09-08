@@ -12,11 +12,10 @@ import {
   patchMichaelCharacter,
   patchUserState,
   saveMichaelCharacter,
-  shouldReferenceCharacterThisTurn,
 } from './michael-memory.js';
 import { getCurrentAntichristUserId, isAntichristCleansed, markAntichristCleansedForGuild } from './cosmic-state.js';
 
-export { formatCharacterForPrompt, shouldReferenceCharacterThisTurn };
+export { formatCharacterForPrompt };
 
 const STAT_KEYS = ['aura', 'discipline', 'chaos', 'inzicht', 'volharding'];
 
