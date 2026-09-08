@@ -878,12 +878,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       }
       takeLongReply(stashId);
       const share = componentId.startsWith('longreply_share:');
-      const note = share
-        ? (langCode === 'nl' ? '🕊️ Verkondigd aan de gemeente.' : '🕊️ Proclaimed to the congregation.')
-        : (langCode === 'nl' ? '🕯️ Verzegeld, alleen voor goddelijke ogen.' : '🕯️ Sealed, for divine eyes only.');
+      // No confirmation note — the buttons simply vanish; on share the same
+      // message appears publicly in the channel.
       res.send({
         type: InteractionResponseType.UPDATE_MESSAGE,
-        data: { content: `${prev}\n\n*${note}*`.slice(0, DISCORD_MESSAGE_CONTENT_MAX), components: [] },
+        data: { components: [] },
       });
       if (share && entry.channelId) {
         try {
