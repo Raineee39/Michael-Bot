@@ -261,7 +261,8 @@ function rememberAfterthoughtCandidate({ messageId, channelId, guildId, authorId
 async function trySendAfterthought() {
   const item = pendingAfterthought;
   if (!item) return;
-  if (isDutchQuietHoursForUnpromptedSends()) return;                       // night: let it go
+  // No night-window gate here: the 25% draw + 3h cooldown already keep this
+  // rare, and a 2am afterthought to a 2am message is exactly the bit.
   if (Date.now() - lastAfterthoughtAt < AFTERTHOUGHT_COOLDOWN_MS) return;  // not twice an evening
   const lastAt = lastMessageAtByChannel.get(item.channelId) ?? 0;
   if (Date.now() - lastAt < AFTERTHOUGHT_SILENCE_MS) return;               // channel woke up again
