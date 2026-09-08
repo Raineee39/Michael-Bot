@@ -576,7 +576,7 @@ Rules:
 - Keep total under ${maxChars} characters including the sign-off.
 Close with 2 to 5 dots followed by your sign-off name.
 
-Dossiers (flavour only):
+Dossiers (what you remember about these souls — impressions, grudges, confessions, recent messages. Let it shape your sentences and stats so they feel personal; paraphrase, never recap the file or quote a confession verbatim):
 ${dossiers}
     `.trim();
 
@@ -667,6 +667,8 @@ ${chosenId ? `CHOSEN ONE (must appear in a prophecy or omen): <@${chosenId}>` : 
 ${antId ? `ANTICHRIST (must appear in a prophecy or omen): <@${antId}>` : ''}
 Allowed Discord IDs only: ${idsHint}
 ${yesterdayDigest ? `\nYESTERDAY'S BOOKS (residue — do not recap, just let it flavour today's cruelty):\n${yesterdayDigest}\n` : ''}
+DOSSIERS (what you remember about these souls — impressions, recent messages, grudges, confessions. Ground your prophecies, least favourite, and stats in this material so they feel personal. Do not recite the file):
+${subjectBlock}
 
 Return ONLY JSON (no markdown fences):
 {
@@ -685,6 +687,7 @@ Return ONLY JSON (no markdown fences):
 
 Rules:
 - 1 to 3 prophecies. Each watch list is 1 to 4 words that would appear in Discord if the prophecy comes true. Detectable in chat. No "will not X".
+- Prophecies, leastFavouriteReason, and stats should draw on the dossiers (a grudge, a confession, an impression, a pattern in their recent messages) whenever the file gives you material. Paraphrase; never quote a confession verbatim.
 - Never invent IDs. Never use IDs not in the allowed list.
 - forbiddenWord is not a name, not a common function word, not an insult slur.
 - 1 to 3 stats. Invent the labels.
