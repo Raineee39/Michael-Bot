@@ -314,9 +314,9 @@ export const FEEDBACK_OWNER_ID = process.env.FEEDBACK_DM_USER_ID || '49627618751
 const LONG_REPLY_TTL_MS = 14 * 60 * 1000;
 const pendingLongReplies = new Map(); // id → { userId, channelId, langCode, content, embeds, files, expiresAt }
 
-export function stashLongReply({ userId, channelId, langCode, content, embeds = null, files = null }) {
+export function stashLongReply({ userId, channelId, langCode, content, embeds = null, files = null, shareContent = null }) {
   const id = Math.random().toString(36).slice(2, 10);
-  pendingLongReplies.set(id, { userId, channelId, langCode, content, embeds, files, expiresAt: Date.now() + LONG_REPLY_TTL_MS });
+  pendingLongReplies.set(id, { userId, channelId, langCode, content, embeds, files, shareContent, expiresAt: Date.now() + LONG_REPLY_TTL_MS });
   // opportunistic cleanup
   for (const [k, v] of pendingLongReplies) {
     if (v.expiresAt < Date.now()) pendingLongReplies.delete(k);

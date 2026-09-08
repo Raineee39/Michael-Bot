@@ -887,7 +887,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       if (share && entry.channelId) {
         try {
           const payload = {
-            content: String(entry.content ?? '').slice(0, DISCORD_MESSAGE_CONTENT_MAX),
+            content: String(entry.shareContent ?? entry.content ?? '').slice(0, DISCORD_MESSAGE_CONTENT_MAX),
             ...(entry.embeds ? { embeds: entry.embeds } : {}),
           };
           if (entry.files?.length) {

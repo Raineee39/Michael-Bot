@@ -276,7 +276,10 @@ export async function handleImagine(ctx) {
         const files = [{ buffer, filename: `michael-imagine.${ext}`, contentType: mimeType || 'image/png' }];
         const payload = { content: `> ${safeInput}\n\n${caption}` };
         if (decisionBox) {
-          const stashId = stashLongReply({ userId, channelId, langCode, content: payload.content, files });
+          const shareContent = langCode === 'nl'
+            ? `Mijn muze <@${userId}> heeft kunst geëist van MIJN hand: "${safeInput}"\n\n${caption}`
+            : `My muse <@${userId}> has demanded art by MY hand: "${safeInput}"\n\n${caption}`;
+          const stashId = stashLongReply({ userId, channelId, langCode, content: payload.content, files, shareContent });
           payload.components = longReplyButtons(stashId, langCode);
         }
         await DiscordMultipart(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
@@ -453,7 +456,10 @@ export async function handleMycharacter(ctx) {
         const channelId = req.body.channel_id ?? req.body.channel?.id;
         const body = { content: sheetContent, embeds: sheetEmbeds };
         if (decisionBox) {
-          const stashId = stashLongReply({ userId, channelId, langCode, content: sheetContent, embeds: sheetEmbeds });
+          const shareContent = langCode === 'nl'
+            ? `<@${userId}> koos ervoor hun kosmische inschrijving aan de gemeente te tonen. ${sheetContent}`
+            : `<@${userId}> chose to reveal their cosmic enrolment to the congregation. ${sheetContent}`;
+          const stashId = stashLongReply({ userId, channelId, langCode, content: sheetContent, embeds: sheetEmbeds, shareContent });
           body.components = longReplyButtons(stashId, langCode);
         }
         await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
