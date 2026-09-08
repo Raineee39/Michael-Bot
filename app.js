@@ -2655,11 +2655,16 @@ app.post(
     // Acknowledge immediately so GitHub doesn't time out
     res.status(200).send('Deploying...');
 
+    // If the push changed commands.js, re-register slash commands with Discord.
+    // Non-fatal: fails with 403/20012 while the VPS token does not match APP_ID.
     const DEPLOY_CMD = [
       'cd /root/michael-bot',
+      'BEFORE=$(git rev-parse HEAD:commands.js)',
       'git fetch origin main',
       'git reset --hard origin/main',
       'npm install',
+      'AFTER=$(git rev-parse HEAD:commands.js)',
+      'if [ "$BEFORE" != "$AFTER" ]; then npm run register || echo "[webhook] register failed (VPS token cannot update the application — run npm run register from the Mac)"; fi',
       'pm2 restart michael-bot --update-env',
     ].join(' && ');
 

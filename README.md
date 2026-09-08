@@ -32,7 +32,7 @@ npm run register   # register slash commands with Discord (run from a machine wh
 npm start
 ```
 
-The running bot reads env on the **VPS only**. Register from your Mac if the VPS token cannot update the application (Discord 403 / code 20012) — that Mac `.env` is only for `npm run register` (APP_ID + matching token). Do not put register in the VPS deploy chain.
+The running bot reads env on the **VPS only**. Register from your Mac if the VPS token cannot update the application (Discord 403 / code 20012) — that Mac `.env` is only for `npm run register` (APP_ID + matching token). The webhook deploy also runs register automatically when a push changed `commands.js`, but that only succeeds once the VPS `.env` token matches `APP_ID`; until then the deploy logs the failure and continues, and the Mac remains the fallback.
 
 Register asks Discord which servers the bot is in and installs there, so you do not need to list every guild in `GUILD_IDS`. After register, commands that are not server-only (`/horoscope`, `/chat`, …) also appear in DMs. Server-only ones (`/chosenone`, `/antichrist`, `/switchoflife`, `/cosmicstatus`) stay in servers.
 
@@ -78,7 +78,7 @@ The GitHub webhook on the VPS runs:
 cd /root/michael-bot && git fetch origin main && git reset --hard origin/main && npm install && pm2 restart michael-bot --update-env
 ```
 
-Same as `npm run deploy`. After adding or renaming slash commands, run `npm run register` from the Mac, then restart Discord if the list looks stale.
+Same as `npm run deploy`, plus: if the push changed `commands.js`, the webhook runs `npm run register` before the restart (non-fatal — a register failure is logged and the deploy continues). This only works once the VPS `.env` token matches `APP_ID`; until then, after adding or renaming slash commands run `npm run register` from the Mac, then restart Discord if the list looks stale.
 
 Webhook URL (include the port if Caddy uses 8443):
 
