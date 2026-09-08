@@ -431,6 +431,44 @@ function noteMichaelSaid(kind, text, { userId = null, username = null, guildId =
   }
 }
 
+/** PATCH the deferred original interaction reply. */
+function patchOriginal(token, body) {
+  return DiscordRequest(`webhooks/${process.env.APP_ID}/${token}/messages/@original`, { method: 'PATCH', body });
+}
+
+/** Keep the typing indicator alive; returns a stop function. */
+function startTypingLoop(channelId) {
+  if (!channelId) return () => {};
+  const poke = () => DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+  poke();
+  const interval = setInterval(poke, 8000);
+  return () => clearInterval(interval);
+}
+
+/**
+ * Standard deferred-reply handler shape: defer, run work, patch the reply,
+ * patch an error message if work throws. Kills the copy-pasted boilerplate.
+ */
+async function withDeferredReply(req, res, { ephemeral = false, typing = false, errorContent = null }, work) {
+  const channelId = req.body.channel_id ?? req.body.channel?.id;
+  const token = req.body.token;
+  res.send({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    ...(ephemeral ? { data: { flags: InteractionResponseFlags.EPHEMERAL } } : {}),
+  });
+  const stopTyping = typing ? startTypingLoop(channelId) : () => {};
+  try {
+    await work({ channelId, token, patch: (body) => patchOriginal(token, body) });
+  } catch (err) {
+    console.error('[michael] handler failed:', err?.message ?? err);
+    if (errorContent) {
+      try { await patchOriginal(token, { content: errorContent }); } catch { /* token expired */ }
+    }
+  } finally {
+    stopTyping();
+  }
+}
+
 /**
  * Michael marks the verdict on his own reply: ⬆️ when the interaction raised
  * his opinion of the user, ⬇️ when it lowered it. Best effort, never throws.
@@ -821,28 +859,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const header = (lang.auracheck ?? lang.aurascan).header?.(targetUsername)
         ?? `🔮 **AURA: ${targetUsername}**`;
 
-      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
-
-      try {
+      await withDeferredReply(req, res, { errorContent: lang.ui.auracheckError ?? lang.ui.vibecheckError }, async ({ patch }) => {
         const reading = await generateAuraCheck(targetUsername, dossier, {
           scannerName,
           langCode,
         });
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: `${header}\n\n${reading}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) },
-        });
+        await patch({ content: `${header}\n\n${reading}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) });
         noteMichaelSaid('aura', reading, { userId: targetId, username: targetUsername, guildId: guildId ?? null });
         console.log(`[michael] auracheck | subject=${targetUsername} (${targetId}) | by=${scannerName}`);
-      } catch (err) {
-        console.error('auracheck error:', err?.message ?? err);
-        try {
-          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-            method: 'PATCH',
-            body: { content: lang.ui.auracheckError ?? lang.ui.vibecheckError },
-          });
-        } catch { /* token expired */ }
-      }
+      });
       return;
     }
 
@@ -857,17 +882,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         ? `🧾 **HEMELSE FACTUUR — ${targetUsername}**`
         : `🧾 **CELESTIAL INVOICE — ${targetUsername}**`;
 
-      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
-
-      try {
+      await withDeferredReply(req, res, { errorContent: lang.ui.auracheckError ?? lang.ui.vibecheckError }, async ({ patch }) => {
         const invoice = await generateSoulInvoice(targetUsername, dossier, {
           requesterName,
           langCode,
         });
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: `${header}\n\n${invoice}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) },
-        });
+        await patch({ content: `${header}\n\n${invoice}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) });
         noteMichaelSaid('invoice', invoice, {
           userId: targetId,
           username: targetUsername,
@@ -876,15 +896,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           ephemeraText: `I billed ${targetUsername} (<@${targetId}>). Payment is outstanding.`,
         });
         console.log(`[michael] soulinvoice | billed=${targetUsername} (${targetId}) | by=${requesterName}`);
-      } catch (err) {
-        console.error('soulinvoice error:', err?.message ?? err);
-        try {
-          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-            method: 'PATCH',
-            body: { content: lang.ui.auracheckError ?? lang.ui.vibecheckError },
-          });
-        } catch { /* token expired */ }
-      }
+      });
       return;
     }
 
@@ -1280,13 +1292,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       }
 
       // Show typing indicator while OpenAI processes; refresh every 8s so it doesn't expire
-      let typingInterval = null;
-      if (channelId) {
-        DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
-        typingInterval = setInterval(() => {
-          DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
-        }, 8000);
-      }
+      const stopTyping = startTypingLoop(channelId);
 
       try {
         // Reuse already-loaded memory...  avoid a second file read
@@ -1427,7 +1433,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           });
         } catch { /* token already gone */ }
       } finally {
-        if (typingInterval) clearInterval(typingInterval);
+        stopTyping();
       }
       return;
     }
@@ -1447,13 +1453,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
       });
 
-      let typingInterval = null;
-      if (channelId) {
-        DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
-        typingInterval = setInterval(() => {
-          DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
-        }, 8000);
-      }
+      const stopTyping = startTypingLoop(channelId);
 
       try {
         const { buffer, mimeType, flavor } = await generateMichaelImage(userInput, {
@@ -1480,7 +1480,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           });
         } catch { /* token expired */ }
       } finally {
-        if (typingInterval) clearInterval(typingInterval);
+        stopTyping();
       }
       return;
     }
@@ -1500,13 +1500,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         data: { content: `> ${safeInput}\n\n${pick(lang.ui.michaelPlaceholders)}` },
       });
 
-      let typingInterval = null;
-      if (channelId) {
-        DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
-        typingInterval = setInterval(() => {
-          DiscordRequest(`channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
-        }, 8000);
-      }
+      const stopTyping = startTypingLoop(channelId);
 
       try {
         const registerSubjects = collectRegisterSubjects(req, userId, username, userInput);
@@ -1549,7 +1543,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           });
         } catch { /* token expired */ }
       } finally {
-        if (typingInterval) clearInterval(typingInterval);
+        stopTyping();
       }
       return;
     }
@@ -1564,9 +1558,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       const label = getJudgementLabel(memory.judgementScore ?? 0);
       const dossier = buildWitnessDossier(targetId, targetUsername, memory, guildId, lang, langCode);
 
-      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
-
-      try {
+      await withDeferredReply(req, res, { errorContent: lang.ui.getuigenisError }, async ({ patch }) => {
         const sermon = await generateWitnessStatement(targetUsername, dossier, langCode);
         const lines = [
           g.header(targetUsername),
@@ -1575,21 +1567,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           '',
           sermon,
         ];
-        await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-          method: 'PATCH',
-          body: { content: lines.join('\n') },
-        });
+        await patch({ content: lines.join('\n') });
         noteMichaelSaid('witness', sermon, { userId: targetId, username: targetUsername, guildId: guildId ?? null });
         console.log(`[michael] getuigenis | subject=${targetUsername} (${targetId}) | by=${username}`);
-      } catch (err) {
-        console.error('getuigenis error:', err);
-        try {
-          await DiscordRequest(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
-            method: 'PATCH',
-            body: { content: lang.ui.getuigenisError },
-          });
-        } catch { /* token expired */ }
-      }
+      });
       return;
     }
 
