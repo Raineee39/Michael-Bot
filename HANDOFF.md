@@ -31,6 +31,11 @@ Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → 
 ## Removed (2026-09)
 `/test`, `/aurascan` (canned lines), `/babychat` (+ its generators), old `/michaelmood` (canned humeur lines), `game.js`, `aura.js`, `examples/`. `/cosmicstatus` was renamed to `/michaelmood` (same handler: offices + mood toward you). The character sheet is now always in the /chat prompt (with Michael Points) instead of a 12% gate. Michael never says tally/score numbers in prose — arrows and /vibecheck do that. The quiet afterthought (reply to the last message once a channel goes silent 12 min, 25% draw, 3h cooldown, needs /switchoflife ON) is now actually wired — it previously had no caller.
 
+## Language: Dutch keys must never reach a prompt (2026-09)
+Moods (`woedend`, `afwezig`, `genadig`, …) and judgement verdicts (`vermoeiend`, `onbeslist`, …) are stored as **Dutch keys**. They are lookup keys for `lang.moodDescriptions` / `lang.judgementDescriptions`, NOT display text. Injecting them raw into an English prompt makes the model code-switch — that is why English servers got half-Dutch daily cards ("WOEDEND WRATH!").
+
+Rule: translate at every boundary where stored state enters a prompt, using `displayMood(langCode, key)` / `displayJudgement(langCode, key)` from `utils/lang/index.js`. Keep the raw key for map lookups and comparisons. Same applies to `formatCharacterForPrompt` (has an English branch) and `buildSubjectDossier`/`buildSelfContextBlock`/`buildWitnessDossier` (all take langCode). `generateDayLaw` also carries an explicit one-language rule for its JSON strings.
+
 ## Inner life (2026-09)
 **The eternal labour** (`getLabour` in michael-self.js): one long-term work (Census of Souls, overdue Quarterly Report, Archive of Unanswered Prayers, inventory of lost objects) that creeps forward ~daily then collapses. Capped at 97%, setback odds rise sharply past 80%, and a total collapse switches him to a different work. Surfaced in `buildSelfContextBlock` so it leaks into chat, horoscopes, day-law and rants — he blames his mood on it, never announces progress, never finishes.
 

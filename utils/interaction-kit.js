@@ -29,6 +29,7 @@ import {
 import { generatePostRevision, summariseMichaelSelf } from './openai.js';
 import { scheduleBusinessResurface } from './unprompted-chat.js';
 import { getCurrentAntichristUserId, getUitverkoreneUserId, isAntichristCleansed } from './cosmic-state.js';
+import { displayJudgement } from './lang/index.js';
 
 export const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
@@ -166,7 +167,7 @@ export function buildRelationsBlock(userId, username, userInput, guildId, judgem
 
 export function buildWitnessDossier(targetId, targetUsername, memory, guildId, lang, langCode) {
   const g = lang.getuigenis ?? lang.vibecheck;
-  const label = getJudgementLabel(memory.judgementScore ?? 0);
+  const label = displayJudgement(langCode, getJudgementLabel(memory.judgementScore ?? 0));
   const mood = memory.currentMood ?? 'afwezig';
   const cosmic = getCosmicRole(targetId, guildId);
   const character = memory.michaelCharacter;

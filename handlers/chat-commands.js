@@ -138,7 +138,7 @@ export async function handleChat(ctx) {
         const passiveTriggered = maybePassiveRollBlock(userId, userInput);
 
         // Michael's own memory + cross-user context
-        const selfBlock = buildSelfContextBlock();
+        const selfBlock = buildSelfContextBlock(langCode);
         const relationsBlock = buildRelationsBlock(userId, username, userInput, guildId, preMemory.judgementScore ?? 0);
         if (relationsBlock) console.log(`[michael] chat | relations block | ${relationsBlock.length} bytes`);
 

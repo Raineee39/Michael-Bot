@@ -1,5 +1,6 @@
 import { loadAllMemory, loadUserMemory, getJudgementLabel, resolveField, patchUserState, guildInteractionAt, interactorIdsForGuild } from './michael-memory.js';
 import { addSelfEphemera, buildSelfContextBlock, recordMichaelSaying } from './michael-self.js';
+import { displayJudgement, displayMood } from './lang/index.js';
 import { generateBooksClosed, generateDayLaw, generateHoroscope } from './openai.js';
 import {
   getTodayCard,
@@ -90,11 +91,12 @@ export function pickHoroscopeSubjects(memberIds, {
   return [...picked].slice(0, target);
 }
 
-export function buildSubjectDossier(userId, memory, getCosmicRole) {
+export function buildSubjectDossier(userId, memory, getCosmicRole, langCode = 'nl') {
   const mem = memory ?? loadUserMemory(userId);
   const username = mem.username || userId;
-  const judgement = getJudgementLabel(mem.judgementScore ?? 0);
-  const mood = mem.currentMood ?? 'afwezig';
+  // Stored verdict/mood are Dutch keys: translate before they reach a prompt.
+  const judgement = displayJudgement(langCode, getJudgementLabel(mem.judgementScore ?? 0));
+  const mood = displayMood(langCode, mem.currentMood ?? 'afwezig');
   const cosmic = getCosmicRole?.(userId) ?? null;
   const prompts = (mem.prompts ?? []).filter(p => !p.startsWith('[')).slice(-4);
   const character = mem.michaelCharacter;
@@ -108,7 +110,7 @@ export function buildSubjectDossier(userId, memory, getCosmicRole) {
     `cosmic role: ${cosmic ?? 'none'}`,
   ];
   if (character) {
-    lines.push(`character: ${resolveField(character.archetype, 'en')} / ${resolveField(character.lineage, 'en')} / ${resolveField(character.title, 'en')}`);
+    lines.push(`character: ${resolveField(character.archetype, langCode)} / ${resolveField(character.lineage, langCode)} / ${resolveField(character.title, langCode)}`);
   }
   const business = (mem.unfinishedBusiness ?? []).slice(-2);
   if (business.length) {
@@ -329,7 +331,7 @@ export async function buildHoroscopeText({
   const subjects = subjectIds.map((userId) => ({
     userId,
     username: loadUserMemory(userId).username || userId,
-    dossier: buildSubjectDossier(userId, loadUserMemory(userId), getCosmicRole),
+    dossier: buildSubjectDossier(userId, loadUserMemory(userId), getCosmicRole, langCode),
   }));
   const aggregateMood = summarizeGuildMood(memberIds);
   return generateHoroscope({
@@ -340,7 +342,7 @@ export async function buildHoroscopeText({
     aggregateMood,
     subjects,
     offices,
-    selfBlock: buildSelfContextBlock(),
+    selfBlock: buildSelfContextBlock(langCode),
   });
 }
 
@@ -431,7 +433,7 @@ export async function buildDayLawForGuild({
   const subjects = subjectIds.map((userId) => ({
     userId,
     username: loadUserMemory(userId).username || userId,
-    dossier: buildSubjectDossier(userId, loadUserMemory(userId), getCosmicRole),
+    dossier: buildSubjectDossier(userId, loadUserMemory(userId), getCosmicRole, langCode),
   }));
   const allowed = new Set(subjects.map((s) => s.userId));
   const safeOffices = {
@@ -449,7 +451,7 @@ export async function buildDayLawForGuild({
       subjects,
       offices: safeOffices,
       yesterdayDigest: closedYesterday ? yesterdayDigest(closedYesterday) : '',
-      selfBlock: buildSelfContextBlock(),
+      selfBlock: buildSelfContextBlock(langCode),
     });
   } catch (err) {
     console.error('[michael] day law failed, using fallback card:', err?.message ?? err);
@@ -491,7 +493,7 @@ export async function buildPersonalHoroscopeText(userId, langCode, lang) {
   const subjects = [{
     userId,
     username: mem.username || userId,
-    dossier: buildSubjectDossier(userId, mem, () => null),
+    dossier: buildSubjectDossier(userId, mem, () => null, langCode),
   }];
   return generateHoroscope({
     langCode,

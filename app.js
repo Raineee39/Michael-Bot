@@ -348,7 +348,7 @@ async function buildCosmicAppointmentMessage(guildId, lang, role) {
     role,
     userId,
     username,
-    dossier: buildSubjectDossier(userId, mem, () => role),
+    dossier: buildSubjectDossier(userId, mem, () => role, lang.code ?? 'nl'),
     langCode: lang.code ?? 'nl',
   });
   const header = role === 'antichrist' ? lang.antichrist.header : lang.uitverkorene.header;
@@ -414,7 +414,7 @@ async function buildDailyBulletin(guildId, lang) {
         lang,
         dateLabel: amsterdamDateLabel(langCode),
         cardDigest: summarizeCardForChaos(card, cardOffices ?? { chosenUserId, antichristUserId }),
-        selfBlock: buildSelfContextBlock(),
+        selfBlock: buildSelfContextBlock(langCode),
       });
       const foot = mode === 'terse' ? '\n....Michael' : ''; // a rant never signs
       finalContent = [h.header, h.dailyTitle, h.dateLine(amsterdamDateLabel(langCode)), '', chaosText]

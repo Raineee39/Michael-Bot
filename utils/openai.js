@@ -1,6 +1,6 @@
 import './load-env.js';
 import { GoogleGenAI } from '@google/genai';
-import { getLang } from './lang/index.js';
+import { getLang, displayJudgement, displayMood } from './lang/index.js';
 import { resolveField } from './michael-memory.js';
 
 const geminiKey = process.env.GEMINI_API_KEY;
@@ -263,16 +263,16 @@ ${lengthSignoffDefault}`;
 
   // Build mood/tone header
   const moodLabel = langCode === 'nl'
-    ? `Huidige toon: ${mood}`
+    ? `Huidige toon: ${displayMood(langCode, mood)}`
     : langCode === 'en'
-      ? `Current tone: ${mood}`
-      : `النبرة الحالية: ${mood}`;
+      ? `Current tone: ${displayMood(langCode, mood)}`
+      : `النبرة الحالية: ${displayMood(langCode, mood)}`;
 
   const judgementLabelHeader = langCode === 'nl'
-    ? `Houding tegenover deze gebruiker: ${judgementLabel ?? 'onbeslist'}`
+    ? `Houding tegenover deze gebruiker: ${displayJudgement(langCode, judgementLabel)}`
     : langCode === 'en'
-      ? `Attitude toward this user: ${judgementLabel ?? 'onbeslist'}`
-      : `الموقف تجاه هذا المستخدم: ${judgementLabel ?? 'onbeslist'}`;
+      ? `Attitude toward this user: ${displayJudgement(langCode, judgementLabel)}`
+      : `الموقف تجاه هذا المستخدم: ${displayJudgement(langCode, judgementLabel)}`;
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
@@ -451,7 +451,7 @@ export async function generateVibecheckComment(username, judgementLabel, impress
 ${personaIntro(langCode)} Give a brief, personal verdict on ${username}. Maximum two sentences. No numbered list, no advice, no elaboration. Pure voice: formal address (${formalAddress}), strangely terse, mildly judgemental or uncomfortably appreciative depending on the verdict.
 ${outputInstruction}
 Close with ....your-sign-off-name.${cosmicBlock}${characterBlock}
-Verdict: ${judgementLabel}
+Verdict: ${displayJudgement(langCode, judgementLabel)}
 Long-term impression: ${impressionText}
     `.trim(),
   });
@@ -561,7 +561,7 @@ export async function generateAntichristDenial({ username, commandName, impressi
 ${personaIntro(langCode)}
 ${username} is TODAY'S ANTICHRIST of this server. They just tried to use one of your services ("${commandName}" — describe the attempt in your own words, NEVER say the command name or any slash-syntax). You refuse them, as heaven requires, for 24 hours.
 ${impression ? `Your file on them: "${impression}"` : ''}
-Your standing verdict: ${judgementLabel ?? 'onbeslist'}.
+Your standing verdict: ${displayJudgement(langCode, judgementLabel)}.
 
 1 or 2 short sentences. Vary your angle: bureaucratic (the counter is closed to the beast), personal (use the file), theatrical (the register recoiled), or bored (not even worth the stamp). Petty, final, faintly amused or genuinely tired — never a lecture.
 ${outputInstruction} Formal address (${formalAddress}). Close with 2 to 5 dots followed by your sign-off name.
@@ -826,7 +826,7 @@ Invent TODAY'S LAW for this Discord server. Date: ${dateLabel}.
 ${lang.helpers.outputInstruction}
 This is a closed system for 24 hours. Petty celestial clerk. Not a paragraph.
 
-Field mood hint: ${aggregateMood?.dominantMood ?? 'afwezig'}. Known souls: ${aggregateMood?.knownUsers ?? 0}.
+Field mood hint: ${lang.moodNames?.[aggregateMood?.dominantMood ?? 'afwezig'] ?? aggregateMood?.dominantMood ?? 'absent'}. Known souls: ${aggregateMood?.knownUsers ?? 0}.
 ${selfBlock ? `\n${selfBlock}\nStay consistent with your own recent proclamations.\n` : ''}${chosenId ? `CHOSEN ONE (must appear in a prophecy or omen): <@${chosenId}>` : ''}
 ${antId ? `ANTICHRIST (must appear in a prophecy or omen): <@${antId}>` : ''}
 Allowed Discord IDs only: ${idsHint}
@@ -855,7 +855,7 @@ Rules:
 - Never invent IDs. Never use IDs not in the allowed list.
 - forbiddenWord is not a name, not a common function word, not an insult slur.
 - 1 to 3 stats. Invent the labels.
-- English or Dutch to match the output instruction. Short strings.
+- LANGUAGE: every string you return (mood, omen, claims, forbiddenWord, rule, stat labels and values) MUST be in the language named by the output instruction above, with no words from any other language. Names in the dossiers may be in another language; do not let them pull you out of it.
   `.trim();
 
   const run = async () => {
@@ -1040,8 +1040,8 @@ ${cosmicBlock}
 This lingered: "${item.prompt}"
 Why it didn't sit right: ${item.reason}
 
-Current tone: ${mood}...  ${moodDesc}
-Verdict on ${username}: ${judgementLabel}...  ${judgementDesc}
+Current tone: ${displayMood(langCode, mood)}...  ${moodDesc}
+Verdict on ${username}: ${displayJudgement(langCode, judgementLabel)}...  ${judgementDesc}
 
 Write 1 to 3 short sentences (usually 2). Refer fluidly to what was said earlier...  paraphrase, never quote literally.
 Make it feel like delayed resentment or a lingering concern...  vague but specific enough to feel uncomfortable.
@@ -1069,7 +1069,7 @@ export async function generateQuietAfterthought(username, leftover, mood, langCo
 ${personaIntro(langCode)}
 The room went quiet. You waited. Now you reply to something ${username} said earlier, as if it only just landed.
 What they said: "${safe}"
-Current tone: ${mood}...  ${moodDesc}
+Current tone: ${displayMood(langCode, mood)}...  ${moodDesc}
 
 1 or 2 short sentences. Snarky, cryptic, slightly late. Do not quote them verbatim. Do not greet. Do not ask a question unless it is rhetorical.
 ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 5 dots followed by your sign-off name.
@@ -1224,8 +1224,8 @@ export async function generateMichaelCharacterSheet(username, judgementLabel, im
 
   const context = [
     impression ? `Long-term impression: "${impression}"` : null,
-    `Verdict: ${judgementLabel ?? 'onbeslist'}`,
-    `Michael's mood: ${currentMood ?? 'afwezig'}`,
+    `Verdict: ${displayJudgement(langCode, judgementLabel)}`,
+    `Michael's mood: ${displayMood(langCode, currentMood)}`,
   ].filter(Boolean).join('\n');
 
   const response = await client.responses.create({
@@ -1320,8 +1320,8 @@ ${personaIntro(langCode)} You review the cosmic enrolment of ${username} in your
 - Lineage: ${lineage}
 - Title: ${title}
 - Stats: ${statNames.aura ?? 'aura'} ${stats.aura}, ${statNames.discipline ?? 'discipline'} ${stats.discipline}, ${statNames.chaos ?? 'chaos'} ${stats.chaos}, ${statNames.inzicht ?? 'inzicht'} ${stats.inzicht}, ${statNames.volharding ?? 'volharding'} ${stats.volharding}
-- Your verdict on them: ${judgementLabel ?? 'onbeslist'}
-- Your mood: ${currentMood ?? 'afwezig'}
+- Your verdict on them: ${displayJudgement(langCode, judgementLabel)}
+- Your mood: ${displayMood(langCode, currentMood)}
 
 Write one to two short sentences of reaction on this profile...  as if you are checking the register and noticing something. Tone: distant, mildly condescending, serious. The user had no say in their assignment.
 ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 4 dots followed by your sign-off name.
@@ -1432,8 +1432,8 @@ ${personaIntro(langCode)} Someone asks for forgiveness. You have rolled in the h
 
 Roll: ${rollLine}...  ${tierLabel}
 Outcome: ${accepted ? 'forgiven (reluctantly)' : 'rejected'}
-Current mood: ${currentMood}
-${accepted ? `New mood: ${newMood}` : ''}
+Current mood: ${displayMood(langCode, currentMood)}
+${accepted ? `New mood: ${displayMood(langCode, newMood)}` : ''}
 Verdict after this interaction: ${judgementScore}
 
 ${antichristCleansed
@@ -1474,7 +1474,7 @@ ${personaIntro(langCode)} You just wrote this:
 
 Write ONLY a short afterthought...  as if after sending you realise it wasn't quite right. Begin with "Edit:" then 1 to 2 short sentences (usually 1). Do NOT repeat or rewrite the original. Just the edit line.
 ${revisionAntiLoop}
-Tone: ${mood}...  ${revisionMoodDesc}
+Tone: ${displayMood(langCode, mood)}...  ${revisionMoodDesc}
 ${outputInstruction} ${styleHint}. Close with 2 to 4 dots followed by your sign-off name.
     `.trim(),
   });
@@ -1551,8 +1551,8 @@ export async function generateMichaelImage(userPrompt, { username, mood, judgeme
     `
 You rewrite image prompts for Archangel Michael. Output ONLY the image prompt in English. No quotes, no preamble, no sign-off.
 User ${username || 'someone'} asked for: "${safe}"
-Michael's current mood: ${mood ?? 'afwezig'}
-Michael's verdict on them: ${judgementLabel ?? 'onbeslist'}
+Michael's current mood: ${displayMood('en', mood)}
+Michael's verdict on them: ${displayJudgement('en', judgementLabel)}
 Flavor: ${flavor}
 ${flavorHint}
 One dense paragraph, visual and specific, 40 to 90 words.
@@ -1592,8 +1592,8 @@ ${personaIntro(langCode)}
 ${username || 'Someone'} asked you for advice, to be spoken aloud as a voice message. Write ONLY the words you will speak. No stage directions, no asterisks, no "Edit:", no ellipsis spam.
 Language: ${spokenLang}. Formal address (${formalAddress}).
 User asked: "${safe}"
-Your mood toward them now: ${mood ?? 'afwezig'}...  ${moodDesc}
-Your standing verdict: ${judgementLabel ?? 'onbeslist'}...  ${judgementDesc}
+Your mood toward them now: ${displayMood(langCode, mood)}...  ${moodDesc}
+Your standing verdict: ${displayJudgement(langCode, judgementLabel)}...  ${judgementDesc}
 ${impression ? `Your long-term impression of them: "${impression}"` : ''}
 Never say scores or point totals aloud — attitude in tone only.
 ${registerBlock ? `
@@ -1603,7 +1603,7 @@ ${registerBlock}
 If they ask about a tagged person, a confession, or anything on file — speak using that specific material. Do not invent ignorance. A named confession must be alluded to in the spoken reply.
 ` : ''}
 Speak as yourself. Use the register when it is relevant. Do not ignore a file you were just handed.
-${mood === 'woedend' || mood === 'streng' ? 'If furious (woedend): write the entire reply in ALL CAPS so it can be shouted aloud.' : ''}
+${mood === 'woedend' || mood === 'streng' ? 'If the mood is wrathful: write the entire reply in ALL CAPS so it can be shouted aloud.' : ''}
 2 to 4 short spoken sentences. End by saying your name once (${lang.signOff}).
 ${outputInstruction}
     `.trim(),

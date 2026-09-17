@@ -831,6 +831,10 @@ export function formatCharacterForPrompt(character, langCode = 'nl', michaelPoin
   const l = resolveField(character.lineage, langCode);
   const t = resolveField(character.title, langCode);
   const { stats } = character;
+  if (langCode === 'en') {
+    const pts = typeof michaelPoints === 'number' ? ` Campaign standing (Michael Points): ${michaelPoints}.` : '';
+    return `Cosmic enrolment (binding, by Michael's own hand): archetype "${a}", lineage "${l}", title/epithet "${t}", stats aura ${stats.aura} · discipline ${stats.discipline} · chaos ${stats.chaos} · insight ${stats.inzicht} · perseverance ${stats.volharding}.${pts}`;
+  }
   const points = typeof michaelPoints === 'number'
     ? ` Campagnestand (Michael Points): ${michaelPoints}.`
     : '';

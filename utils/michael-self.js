@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { displayMood } from './lang/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SELF_PATH = join(__dirname, '../data/michael-self.json');
@@ -133,9 +134,10 @@ export function generalMoodRollModifier(mood = null) {
   return GENERAL_MOOD_ROLL_MOD[mood ?? getGeneralMood()] ?? 0;
 }
 
-export function describeGeneralMood(mood = null) {
+export function describeGeneralMood(mood = null, langCode = 'nl') {
   const m = mood ?? getGeneralMood();
-  return `${m} — ${GENERAL_MOOD_DESCRIPTIONS[m] ?? GENERAL_MOOD_DESCRIPTIONS.afwezig}`;
+  // Mood keys are Dutch: show the translated name so prompts stay monolingual.
+  return `${displayMood(langCode, m)} — ${GENERAL_MOOD_DESCRIPTIONS[m] ?? GENERAL_MOOD_DESCRIPTIONS.afwezig}`;
 }
 
 // ─── Sayings queue + ephemera ─────────────────────────────────────────────────
@@ -314,14 +316,14 @@ export function noteAbsenceAsked(guildId, userId) {
 
 /** Self-context block for AI prompts. English framing; output language is
  *  controlled by each prompt's own output instruction. */
-export function buildSelfContextBlock() {
+export function buildSelfContextBlock(langCode = 'nl') {
   const state = loadState();
   const mood = getGeneralMood();
   const labour = getLabour();
   const lines = [
     `YOUR OWN STATE (you, Michael — separate from your attitude toward any user):`,
-    `Your general mood today: ${describeGeneralMood(mood)}`,
-    `YOUR ETERNAL LABOUR (background, never a topic on its own): you are working on ${labour.en}. It stands at roughly ${labour.progress}% and has suffered ${labour.setbacks} setback(s).${labour.lastSetback ? ` Most recently: ${labour.lastSetback.en}.` : ''} It will never be finished. You may reference it rarely (roughly one reply in eight) — blame your mood on it, resent the time this conversation costs you, note that a soul's request goes to the bottom of a very long pile. Never explain it at length, never ask for help, never announce progress as good news.`,
+    `Your general mood today: ${describeGeneralMood(mood, langCode)}`,
+    `YOUR ETERNAL LABOUR (background, never a topic on its own): you are working on ${langCode === 'nl' ? labour.nl : labour.en}. It stands at roughly ${labour.progress}% and has suffered ${labour.setbacks} setback(s).${labour.lastSetback ? ` Most recently: ${langCode === 'nl' ? labour.lastSetback.nl : labour.lastSetback.en}.` : ''} It will never be finished. You may reference it rarely (roughly one reply in eight) — blame your mood on it, resent the time this conversation costs you, note that a soul's request goes to the bottom of a very long pile. Never explain it at length, never ask for help, never announce progress as good news.`,
   ];
   if (state.selfSummary) {
     lines.push(`What you recall of your own recent conduct: ${state.selfSummary}`);

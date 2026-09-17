@@ -24,6 +24,7 @@ export default {
 
   // Short display names for mood keys (used in UI labels)
   moodNames: {
+    genadig:             'genadig',
     afwezig:             'afwezig',
     streng:              'streng',
     verward:             'verward',
