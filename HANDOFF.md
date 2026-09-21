@@ -31,6 +31,13 @@ Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → 
 ## Removed (2026-09)
 `/test`, `/aurascan` (canned lines), `/babychat` (+ its generators), old `/michaelmood` (canned humeur lines), `game.js`, `aura.js`, `examples/`. `/cosmicstatus` was renamed to `/michaelmood` (same handler: offices + mood toward you). The character sheet is now always in the /chat prompt (with Michael Points) instead of a 12% gate. Michael never says tally/score numbers in prose — arrows and /vibecheck do that. The quiet afterthought (reply to the last message once a channel goes silent 12 min, 25% draw, 3h cooldown, needs /switchoflife ON) is now actually wired — it previously had no caller.
 
+## Language: self-memory is PER LANGUAGE (2026-09)
+Michael serves a Dutch server and an English one, but his self-memory is one global file. Handing an English prompt his Dutch sayings, Dutch rolling summary and Dutch ephemera dragged the model into Dutch — and it got worse over time as the memory filled with Dutch from his busier server.
+
+Every saying and ephemera now carries a `langCode`, `selfSummary` became `selfSummaries` keyed by language (legacy value migrates to `nl`), and `buildSelfContextBlock(langCode)` only ever returns that language's memory. The sayings cap is applied PER language so a busy Dutch server cannot evict the English memory. Every write site passes langCode; `summariseMichaelSelf` is told which language to write. Day-law and chaos prompts also carry an explicit rule that usernames, dossier excerpts and quoted memory may be in other languages and must not pull the output out of the required one.
+
+Untagged memory that predates this defaults to `nl`, so the English server starts from a clean slate.
+
 ## Language: Dutch keys must never reach a prompt (2026-09)
 Moods (`woedend`, `afwezig`, `genadig`, …) and judgement verdicts (`vermoeiend`, `onbeslist`, …) are stored as **Dutch keys**. They are lookup keys for `lang.moodDescriptions` / `lang.judgementDescriptions`, NOT display text. Injecting them raw into an English prompt makes the model code-switch — that is why English servers got half-Dutch daily cards ("WOEDEND WRATH!").
 

@@ -344,7 +344,7 @@ ${context}
  * Ephemera (time-boxed notes) are deliberately NOT passed in: they expire on
  * their own and must never survive into the long-term summary.
  */
-export async function summariseMichaelSelf(sayings, existingSummary) {
+export async function summariseMichaelSelf(sayings, existingSummary, langCode = 'nl') {
   const lines = (sayings ?? [])
     .map((s) => `- [${s.kind}${s.username ? ` to ${s.username}` : ''}] "${s.text}"`)
     .join('\n');
@@ -355,6 +355,8 @@ ${existingSummary ? `Merge with his existing self-summary, keeping what still ho
 
 His recent sayings:
 ${lines || '(nothing recorded)'}
+
+Write the summary in ${langCode === 'en' ? 'English' : 'Dutch'} and in no other language.
     `.trim(),
     { maxOutputTokens: 120, model: SUMMARY_MODEL },
   );
@@ -756,6 +758,7 @@ ${cardDigest || '(the card is blank. That alone is enough to set you off.)'}
 ${modeBlock}
 
 Rules:
+- LANGUAGE: write everything in the language named by the output instruction above, with no words from any other language. Usernames and your own quoted memory may contain other languages; do not follow them.
 - Discord markdown allowed. Short lines. No # headers, no code fences.
 - Only use <@id> tags that appear in the card digest. Never invent IDs.
 - Keep under ${mode === 'rant' ? 1400 : 400} characters.
@@ -855,7 +858,7 @@ Rules:
 - Never invent IDs. Never use IDs not in the allowed list.
 - forbiddenWord is not a name, not a common function word, not an insult slur.
 - 1 to 3 stats. Invent the labels.
-- LANGUAGE: every string you return (mood, omen, claims, forbiddenWord, rule, stat labels and values) MUST be in the language named by the output instruction above, with no words from any other language. Names in the dossiers may be in another language; do not let them pull you out of it.
+- LANGUAGE: every string you return (mood, omen, claims, forbiddenWord, rule, stat labels and values) MUST be in the language named by the output instruction above, with no words from any other language. Usernames, dossier excerpts and your own quoted memory may contain other languages; they are evidence, not a cue. Do not let them pull you out of the required language.
   `.trim();
 
   const run = async () => {

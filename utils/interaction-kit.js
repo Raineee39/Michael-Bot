@@ -68,15 +68,15 @@ export function fileUnfinishedBusiness(userId, username, details, guildId) {
  * Record something Michael just said publicly, and condense his self-memory
  * with the cheapest model once the queue fills. Fire-and-forget, never throws.
  */
-export function noteMichaelSaid(kind, text, { userId = null, username = null, guildId = null, ttlMs = null, ephemeraText = null } = {}) {
+export function noteMichaelSaid(kind, text, { userId = null, username = null, guildId = null, ttlMs = null, ephemeraText = null, langCode = 'nl' } = {}) {
   try {
-    recordMichaelSaying(text, { kind, userId, username, guildId });
-    if (ttlMs) addSelfEphemera(ephemeraText ?? text, ttlMs);
-    if (selfNeedsCondense()) {
-      const { sayings, summary } = getSayingsForCondense();
-      summariseMichaelSelf(sayings, summary)
+    recordMichaelSaying(text, { kind, userId, username, guildId, langCode });
+    if (ttlMs) addSelfEphemera(ephemeraText ?? text, ttlMs, langCode);
+    if (selfNeedsCondense(langCode)) {
+      const { sayings, summary } = getSayingsForCondense(langCode);
+      summariseMichaelSelf(sayings, summary, langCode)
         .then((s) => {
-          applySelfCondense(s);
+          applySelfCondense(s, langCode);
           console.log('[michael] self-memory condensed');
         })
         .catch((err) => console.error('[michael] self-condense failed:', err?.message ?? err));

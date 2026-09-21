@@ -72,9 +72,10 @@ function defaultState() {
   return {
     generalMood: 'afwezig',
     generalMoodSetAt: 0,
-    selfSummary: null,
-    recentSayings: [], // { text, kind, userId, username, guildId, ts }
-    ephemera: [],      // { text, expiresAt }
+    selfSummary: null,          // legacy single-language summary (migrated)
+    selfSummaries: {},          // langCode -> rolling first-person digest
+    recentSayings: [], // { text, kind, userId, username, guildId, langCode, ts }
+    ephemera: [],      // { text, expiresAt, langCode }
   };
 }
 
@@ -91,6 +92,9 @@ function loadState() {
         state = { ...defaultState(), ...JSON.parse(readFileSync(SELF_PATH, 'utf8')) };
       } catch { /* corrupted file...  start over */ }
     }
+    // Migrate the pre-multilingual single summary into the per-language map.
+    if (!state.selfSummaries || typeof state.selfSummaries !== 'object') state.selfSummaries = {};
+    if (state.selfSummary && !state.selfSummaries.nl) state.selfSummaries.nl = state.selfSummary;
     stateCache = state;
   }
   const now = Date.now();
@@ -143,44 +147,56 @@ export function describeGeneralMood(mood = null, langCode = 'nl') {
 // ─── Sayings queue + ephemera ─────────────────────────────────────────────────
 
 /** Record something Michael himself just said publicly. */
-export function recordMichaelSaying(text, { kind = 'chat', userId = null, username = null, guildId = null } = {}) {
+export function recordMichaelSaying(text, { kind = 'chat', userId = null, username = null, guildId = null, langCode = 'nl' } = {}) {
   const clean = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 240);
   if (!clean) return;
   const state = loadState();
-  state.recentSayings = [
-    ...state.recentSayings,
-    { text: clean, kind, userId, username, guildId, ts: Date.now() },
-  ].slice(-MAX_SAYINGS);
+  const entry = { text: clean, kind, userId, username, guildId, langCode, ts: Date.now() };
+  // Cap PER LANGUAGE: a busy Dutch server must never evict the English memory.
+  const seen = {};
+  const kept = [];
+  for (const s of [...state.recentSayings, entry].reverse()) {
+    const lc = s.langCode ?? 'nl';
+    seen[lc] = (seen[lc] ?? 0) + 1;
+    if (seen[lc] <= MAX_SAYINGS) kept.push(s);
+  }
+  state.recentSayings = kept.reverse();
   saveState(state);
 }
 
 /** File a time-boxed note that must expire ("today's law", "billed X"). */
-export function addSelfEphemera(text, ttlMs = DEFAULT_EPHEMERA_TTL_MS) {
+export function addSelfEphemera(text, ttlMs = DEFAULT_EPHEMERA_TTL_MS, langCode = 'nl') {
   const clean = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
   if (!clean) return;
   const state = loadState();
-  state.ephemera = [...state.ephemera, { text: clean, expiresAt: Date.now() + ttlMs }].slice(-MAX_EPHEMERA);
+  state.ephemera = [...state.ephemera, { text: clean, expiresAt: Date.now() + ttlMs, langCode }].slice(-MAX_EPHEMERA);
   saveState(state);
 }
 
-export function selfNeedsCondense() {
-  return loadState().recentSayings.length >= CONDENSE_AT;
+export function selfNeedsCondense(langCode = 'nl') {
+  return loadState().recentSayings.filter((s) => (s.langCode ?? 'nl') === langCode).length >= CONDENSE_AT;
 }
 
 /** Everything the summariser needs, in one read. */
-export function getSayingsForCondense() {
+export function getSayingsForCondense(langCode = 'nl') {
   const state = loadState();
+  const mine = state.recentSayings.filter((s) => (s.langCode ?? 'nl') === langCode);
   return {
-    sayings: state.recentSayings.slice(0, -KEEP_AFTER_CONDENSE),
-    summary: state.selfSummary,
+    sayings: mine.slice(0, -KEEP_AFTER_CONDENSE),
+    summary: state.selfSummaries?.[langCode] ?? null,
   };
 }
 
 /** Store the condensed summary; keep only the freshest verbatim lines. */
-export function applySelfCondense(summary) {
+export function applySelfCondense(summary, langCode = 'nl') {
   const state = loadState();
-  state.selfSummary = String(summary ?? '').trim().slice(0, MAX_SELF_SUMMARY) || state.selfSummary;
-  state.recentSayings = state.recentSayings.slice(-KEEP_AFTER_CONDENSE);
+  if (!state.selfSummaries || typeof state.selfSummaries !== 'object') state.selfSummaries = {};
+  const next = String(summary ?? '').trim().slice(0, MAX_SELF_SUMMARY);
+  if (next) state.selfSummaries[langCode] = next;
+  // Only this language's backlog is folded away; other languages are untouched.
+  const mine = state.recentSayings.filter((s) => (s.langCode ?? 'nl') === langCode);
+  const keep = new Set(mine.slice(-KEEP_AFTER_CONDENSE));
+  state.recentSayings = state.recentSayings.filter((s) => (s.langCode ?? 'nl') !== langCode || keep.has(s));
   saveState(state);
 }
 
@@ -325,10 +341,13 @@ export function buildSelfContextBlock(langCode = 'nl') {
     `Your general mood today: ${describeGeneralMood(mood, langCode)}`,
     `YOUR ETERNAL LABOUR (background, never a topic on its own): you are working on ${langCode === 'nl' ? labour.nl : labour.en}. It stands at roughly ${labour.progress}% and has suffered ${labour.setbacks} setback(s).${labour.lastSetback ? ` Most recently: ${langCode === 'nl' ? labour.lastSetback.nl : labour.lastSetback.en}.` : ''} It will never be finished. You may reference it rarely (roughly one reply in eight) — blame your mood on it, resent the time this conversation costs you, note that a soul's request goes to the bottom of a very long pile. Never explain it at length, never ask for help, never announce progress as good news.`,
   ];
-  if (state.selfSummary) {
-    lines.push(`What you recall of your own recent conduct: ${state.selfSummary}`);
+  // Only this language's memory: his Dutch server's sayings must never be
+  // handed to an English prompt, or the model follows them out of English.
+  const summary = state.selfSummaries?.[langCode] ?? null;
+  if (summary) {
+    lines.push(`What you recall of your own recent conduct: ${summary}`);
   }
-  const recent = state.recentSayings.slice(-4);
+  const recent = state.recentSayings.filter((s) => (s.langCode ?? 'nl') === langCode).slice(-4);
   if (recent.length) {
     lines.push('Things you yourself said recently (stay consistent with them; you may refer back, never repeat verbatim):');
     for (const s of recent) {
@@ -336,9 +355,10 @@ export function buildSelfContextBlock(langCode = 'nl') {
       lines.push(`- [${s.kind}${who}] "${s.text}"`);
     }
   }
-  if (state.ephemera.length) {
+  const myEphemera = state.ephemera.filter((e) => (e.langCode ?? 'nl') === langCode);
+  if (myEphemera.length) {
     lines.push('Temporary matters still on your desk (these expire; mention only while relevant):');
-    for (const e of state.ephemera.slice(-5)) {
+    for (const e of myEphemera.slice(-5)) {
       lines.push(`- ${e.text}`);
     }
   }

@@ -396,7 +396,10 @@ export async function buildDayLawForGuild({
         correction,
       });
       if (correction) {
-        recordMichaelSaying('The register found an error in my own filing. A correction was entered. This is now on my record.', { kind: 'correction', guildId });
+        recordMichaelSaying(langCode === 'en'
+          ? 'The register found an error in my own filing. A correction was entered. This is now on my record.'
+          : 'Het register vond een fout in mijn eigen administratie. Er is een correctie ingevoerd. Dit staat nu op mijn naam.',
+          { kind: 'correction', guildId, langCode });
       }
     } catch (err) {
       console.error('[michael] books-closed failed:', err?.message ?? err);
@@ -471,10 +474,13 @@ export async function buildDayLawForGuild({
   saveTodayCard(guildId, card, safeOffices);
   // Today's law matters today, not in the grander scheme...  ephemera expires on its own.
   addSelfEphemera(
-    `Today's law I declared: mood "${card.mood}", forbidden word ${card.forbiddenWord}${card.rule ? `, rule: ${card.rule}` : ''}.`,
+    langCode === 'en'
+      ? `Today's law I declared: mood "${card.mood}", forbidden word ${card.forbiddenWord}${card.rule ? `, rule: ${card.rule}` : ''}.`
+      : `Wet die ik vandaag afkondigde: humeur "${card.mood}", verboden woord ${card.forbiddenWord}${card.rule ? `, regel: ${card.rule}` : ''}.`,
     36 * 60 * 60 * 1000,
+    langCode,
   );
-  recordMichaelSaying(`Declared today's law: ${card.mood}${card.omen ? ` — ${card.omen}` : ''}`, { kind: 'day-law', guildId });
+  recordMichaelSaying(`${langCode === 'en' ? "Declared today's law" : 'Wet van vandaag afgekondigd'}: ${card.mood}${card.omen ? ` — ${card.omen}` : ''}`, { kind: 'day-law', guildId, langCode });
   return {
     card,
     content: formatDayCard(lang, {

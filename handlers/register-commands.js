@@ -107,7 +107,7 @@ export async function handleAuracheck(ctx) {
           langCode,
         });
         await patch({ content: `${header}\n\n${reading}`.slice(0, DISCORD_MESSAGE_CONTENT_MAX) });
-        noteMichaelSaid('aura', reading, { userId: targetId, username: targetUsername, guildId: guildId ?? null });
+        noteMichaelSaid('aura', reading, { userId: targetId, username: targetUsername, guildId: guildId ?? null, langCode });
         console.log(`[michael] auracheck | subject=${targetUsername} (${targetId}) | by=${scannerName}`);
       });
       return;
@@ -135,6 +135,7 @@ export async function handleSoulinvoice(ctx) {
           userId: targetId,
           username: targetUsername,
           guildId: guildId ?? null,
+          langCode,
           ttlMs: 48 * 60 * 60 * 1000,
           ephemeraText: `I billed ${targetUsername} (<@${targetId}>). Payment is outstanding.`,
         });
@@ -258,7 +259,7 @@ export async function handleWitness(ctx) {
           sermon,
         ];
         await patch({ content: lines.join('\n') });
-        noteMichaelSaid('witness', sermon, { userId: targetId, username: targetUsername, guildId: guildId ?? null });
+        noteMichaelSaid('witness', sermon, { userId: targetId, username: targetUsername, guildId: guildId ?? null, langCode });
         console.log(`[michael] getuigenis | subject=${targetUsername} (${targetId}) | by=${username}`);
       });
       return;

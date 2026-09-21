@@ -182,7 +182,7 @@ async function trySendBusiness(item) {
 
   markBusinessMentioned(item.authorId, business.id);
   if (business.severity <= 2) markBusinessResolved(item.authorId, business.id);
-  recordMichaelSaying(content, { kind: 'resurface', userId: item.authorId, username: item.username, guildId: item.guildId ?? null });
+  recordMichaelSaying(content, { kind: 'resurface', userId: item.authorId, username: item.username, guildId: item.guildId ?? null, langCode });
 
   console.log(`[michael] business-resurface | sent | user=${item.authorId} | ch=${item.channelId} | sev=${business.severity}`);
   pendingBusiness = null;
@@ -286,6 +286,6 @@ async function trySendAfterthought() {
     },
   });
   lastAfterthoughtAt = Date.now();
-  recordMichaelSaying(content, { kind: 'afterthought', userId: item.authorId, username: item.username, guildId: item.guildId });
+  recordMichaelSaying(content, { kind: 'afterthought', userId: item.authorId, username: item.username, guildId: item.guildId, langCode });
   console.log(`[michael] afterthought | sent | user=${item.authorId} | ch=${item.channelId}`);
 }

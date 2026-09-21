@@ -203,7 +203,7 @@ export async function handleChat(ctx) {
           body: patchBody,
         });
 
-        noteMichaelSaid('chat', michaelMessage, { userId, username, guildId: guildId ?? null });
+        noteMichaelSaid('chat', michaelMessage, { userId, username, guildId: guildId ?? null, langCode });
         reactScoreArrow(channelId, req.body.token, scoreDelta);
 
         // Feature 5...  Post-message revision: fetch the sent message ID then maybe append an edit
@@ -343,7 +343,7 @@ export async function handleListentomichael(ctx) {
           }),
           scoreMichaelMessage(userInput),
         ]);
-        noteMichaelSaid('voice', script, { userId, username, guildId: guildId ?? null });
+        noteMichaelSaid('voice', script, { userId, username, guildId: guildId ?? null, langCode });
         saveUserMemory(userId, username, userInput, mood, scoreDelta, nextMood(mood, scoreDelta), channelId, guildId ?? null);
         await DiscordMultipart(`webhooks/${process.env.APP_ID}/${req.body.token}/messages/@original`, {
           method: 'PATCH',

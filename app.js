@@ -358,6 +358,7 @@ async function buildCosmicAppointmentMessage(guildId, lang, role) {
     userId,
     username,
     guildId,
+    langCode: lang.code ?? 'nl',
     ttlMs: 24 * 60 * 60 * 1000,
     ephemeraText: `I appointed ${username} (<@${userId}>) as ${role} for today.`,
   });
@@ -420,10 +421,14 @@ async function buildDailyBulletin(guildId, lang) {
       finalContent = [h.header, h.dailyTitle, h.dateLine(amsterdamDateLabel(langCode)), '', chaosText]
         .join('\n').slice(0, 1980) + foot;
       recordMichaelSaying(
-        mode === 'rant'
-          ? "I lost the thread of today's bulletin and never finished it."
-          : "I could not be bothered with today's bulletin.",
-        { kind: 'day-chaos', guildId },
+        langCode === 'en'
+          ? (mode === 'rant'
+            ? "I lost the thread of today's bulletin and never finished it."
+            : "I could not be bothered with today's bulletin.")
+          : (mode === 'rant'
+            ? 'Ik verloor de draad van het bulletin van vandaag en heb het nooit afgemaakt.'
+            : 'Ik kon vandaag de moeite niet opbrengen voor het bulletin.'),
+        { kind: 'day-chaos', guildId, langCode },
       );
       console.log(`[michael] daily bulletin | chaos mode=${mode} | guild=${guildId}`);
     } catch (err) {
@@ -483,7 +488,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         langCode,
       });
       await patchOriginal(req.body.token, { content: `${denial}${lawNote}` });
-      noteMichaelSaid('denial', denial, { userId: invokingUserId, username, guildId: guildId ?? null });
+      noteMichaelSaid('denial', denial, { userId: invokingUserId, username, guildId: guildId ?? null, langCode });
     } catch (err) {
       console.error('[michael] antichrist denial AI failed, using pool:', err?.message ?? err);
       const refusalPool = (lang.ui.antichristRefusals ?? lang.ui.nee).filter((r) => !r.includes('{command}'));
@@ -1622,7 +1627,7 @@ async function runAbsenceCheck(guildId, channelId) {
       body: { content, flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS },
     });
     noteAbsenceAsked(guildId, subject.userId);
-    noteMichaelSaid('absence', content, { userId: subject.userId, username: subject.username, guildId });
+    noteMichaelSaid('absence', content, { userId: subject.userId, username: subject.username, guildId, langCode });
     console.log(`[michael] absence inquiry | ${subject.username} (${subject.userId}) | ${subject.daysGone}d | guild=${guildId}`);
   } catch (err) {
     console.error('[michael] absence inquiry failed:', err?.message ?? err);

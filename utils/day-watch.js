@@ -148,7 +148,7 @@ export async function handleDayLawMessage({
         flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS,
       },
     });
-    recordMichaelSaying(contentLine, { kind: `stamp-${hit.kind}`, userId: authorId, guildId });
+    recordMichaelSaying(contentLine, { kind: `stamp-${hit.kind}`, userId: authorId, guildId, langCode });
     console.log(`[michael] day-law stamp | ${hit.kind} | guild=${guildId} | user=${authorId}`);
   } catch (err) {
     console.error('[michael] day-law stamp failed:', err?.message ?? err);
