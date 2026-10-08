@@ -31,6 +31,13 @@ Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → 
 ## Removed (2026-09)
 `/test`, `/aurascan` (canned lines), `/babychat` (+ its generators), old `/michaelmood` (canned humeur lines), `game.js`, `aura.js`, `examples/`. `/cosmicstatus` was renamed to `/michaelmood` (same handler: offices + mood toward you). The character sheet is now always in the /chat prompt (with Michael Points) instead of a 12% gate. Michael never says tally/score numbers in prose — arrows and /vibecheck do that. The quiet afterthought (reply to the last message once a channel goes silent 12 min, 25% draw, 3h cooldown, needs /switchoflife ON) is now actually wired — it previously had no caller.
 
+## Unprompted speech budget (2026-10)
+All the ways Michael speaks without being addressed — snark, quiet afterthoughts, resurfaced grudges, absence inquiries, and replies to his name being dropped — now share ONE budget per guild: `utils/speech-budget.js`, **max 2 per day, never within 3 hours**, persisted in `data/speech-budget.json` so a deploy restart does not refill it. Individual rates were lowered too (snark 0.5%→0.15%, afterthought 25%→12% with a 6h cooldown), but the shared budget is the guarantee: no combination can make him chatty.
+
+A real **@-ping always gets an answer** and costs no budget — he was addressed. Merely saying "michael" in a message is being talked *about*: 20% chance, and it spends budget. That was the main source of constant chatter (previously every single mention got a reply).
+
+Day-law stamps keep their own budget (now 2/day, 90 min apart) since they are the card mechanic, not chatter. Ambient reacts: 2% with a 15-minute cooldown.
+
 ## Language: self-memory is PER LANGUAGE (2026-09)
 Michael serves a Dutch server and an English one, but his self-memory is one global file. Handing an English prompt his Dutch sayings, Dutch rolling summary and Dutch ephemera dragged the model into Dutch — and it got worse over time as the memory filled with Dutch from his busier server.
 

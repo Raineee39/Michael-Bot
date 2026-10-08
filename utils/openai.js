@@ -675,8 +675,8 @@ export async function generateHoroscope({
       ? 'Private horoscope for one soul. One or two punches about them, then fake stats.'
       : 'On-demand reading of THIS server. Short. Punchy. Gossip plus forecast.';
 
-  const maxChars = mode === 'daily' ? 850 : 700;
-  const maxTokens = mode === 'daily' ? 480 : 400;
+  const maxChars = mode === 'daily' ? 600 : 520;
+  const maxTokens = mode === 'daily' ? 340 : 300;
 
   const buildInput = (dossiers) => `
 ${personaIntro(langCode)}
@@ -690,8 +690,8 @@ EXACT layout (no extra sections):
 
 1) First line exactly: **${moodLabel}:** YOUR-INVENTED-MOOD
    Invent the mood. Loud. Caps and extra ! allowed. Examples of energy (do not copy): WRATHFUL!!!!!!! / administratively disappointed / DAMP
-2) Blank line, then 2 to 4 SHORT sentences, each on its own line. Mix one general omen (weather, bureaucracy, cosmic vibes) with specific things named people might do, skip, meet, or suffer. Gossip-sermon. Example energy (do not copy): "Hot in hell." / "<@123> will not game." / "<@456> meets something with wings."
-3) Blank line, then 2 to 4 invented register stats, each on its own line as **Label:** value
+2) Blank line, then 2 or 3 SHORT sentences, each on its own line. Mix one general omen (weather, bureaucracy, cosmic vibes) with specific things named people might do, skip, meet, or suffer. Gossip-sermon. Example energy (do not copy): "Hot in hell." / "<@123> will not game." / "<@456> meets something with wings."
+3) Blank line, then exactly 2 invented register stats, each on its own line as **Label:** value
    YOU invent the labels and values. Petty, bureaucratic, stupid, cruel. They do not have to be true.
    Example energy (do not copy): **Least favourite:** <@123> (lazy) / **Forbidden word:** DUST / **Chance of salvation:** 3%
    If a stat names a person, use a real <@userId> from the dossiers only.
@@ -840,24 +840,25 @@ ${subjectBlock}
 Return ONLY JSON (no markdown fences):
 {
   "mood": "loud invented mood, caps and ! allowed",
-  "omen": "one short general omen sentence (weather / bureaucracy / cosmic)",
+  "omen": "ONE short omen sentence, max 15 words (weather / bureaucracy / cosmic)",
   "prophecies": [
-    { "userId": "REAL_ID", "claim": "something they might SAY or DO in chat today", "watch": ["keyword", "keyword"] }
+    { "userId": "REAL_ID", "claim": "something they might SAY or DO in chat today (max 12 words)", "watch": ["keyword", "keyword"] }
   ],
   "forbiddenWord": "ONE uncommon word, 3-12 letters",
   "leastFavouriteUserId": "REAL_ID or empty",
   "leastFavouriteReason": "one petty word",
-  "rule": "one stupid standing order for the server today",
+  "rule": "one stupid standing order for the server today, max 12 words",
   "ruleWatch": ["optional", "keywords"],
   "stats": [{ "label": "invented label", "value": "short value" }]
 }
 
 Rules:
-- 1 to 3 prophecies. Each watch list is 1 to 4 words that would appear in Discord if the prophecy comes true. Detectable in chat. No "will not X".
+- EXACTLY 1 or 2 prophecies, no more. Each watch list is 1 to 4 words that would appear in Discord if the prophecy comes true. Detectable in chat. No "will not X".
 - Prophecies, leastFavouriteReason, and stats should draw on the dossiers (a grudge, a confession, an impression, a pattern in their recent messages) whenever the file gives you material. Paraphrase; never quote a confession verbatim.
 - Never invent IDs. Never use IDs not in the allowed list.
 - forbiddenWord is not a name, not a common function word, not an insult slur.
-- 1 to 3 stats. Invent the labels.
+- EXACTLY 1 or 2 stats. Invent the labels. Values are a word or a number, never a sentence.
+- BREVITY IS THE POINT: this card is read at a glance. Every string is terse and clipped. Never explain, never elaborate, never write a second sentence where one will do.
 - LANGUAGE: every string you return (mood, omen, claims, forbiddenWord, rule, stat labels and values) MUST be in the language named by the output instruction above, with no words from any other language. Usernames, dossier excerpts and your own quoted memory may contain other languages; they are evidence, not a cue. Do not let them pull you out of the required language.
   `.trim();
 
@@ -892,13 +893,13 @@ Rules:
       return {
         id: `p${i + 1}`,
         userId,
-        claim: trimAtSentence(p.claim, 240),
+        claim: trimAtSentence(p.claim, 110),
         watch,
         status: 'open',
       };
     })
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, 2);
 
   const stats = (Array.isArray(parsed.stats) ? parsed.stats : [])
     .map((s) => ({
@@ -906,18 +907,18 @@ Rules:
       value: String(s.value ?? '').trim().slice(0, 60),
     }))
     .filter((s) => s.label && s.value)
-    .slice(0, 3);
+    .slice(0, 2);
 
   const least = allowId(parsed.leastFavouriteUserId, allowed);
 
   return {
     mood: trimAtSentence(parsed.mood ?? (langCode === 'nl' ? 'AMBtenaarlijk VERTOORND' : 'WRATHFUL!!!!!!!'), 80),
-    omen: trimAtSentence(parsed.omen, 320),
+    omen: trimAtSentence(parsed.omen, 140),
     prophecies,
     forbiddenWord: sanitizeForbiddenWord(parsed.forbiddenWord, [fallbackWord, 'TITHES', 'PAPIER']),
     leastFavouriteUserId: least,
     leastFavouriteReason: String(parsed.leastFavouriteReason ?? '').trim().slice(0, 40),
-    rule: trimAtSentence(parsed.rule, 240),
+    rule: trimAtSentence(parsed.rule, 120),
     ruleWatch: (Array.isArray(parsed.ruleWatch) ? parsed.ruleWatch : [])
       .map((w) => String(w).trim())
       .filter((w) => w.length >= 3 && w.length <= 20)
@@ -967,7 +968,7 @@ export async function generateBooksClosed({ langCode = 'nl', dateLabel, digest, 
     max_output_tokens: 160,
     input: `
 ${personaIntro(langCode)}
-Write a SHORT epilogue for yesterday (${dateLabel}). Petty clerk. Two or three sentences max.
+Write a VERY SHORT epilogue for yesterday (${dateLabel}). Petty clerk. One or two clipped sentences, never more.
 ${correctionBlock}${outputInstruction}
 
 Use this ledger only as flavour. Do NOT recap it. Do NOT write DATE OF CLOSURE. Do NOT write FAILED. Do NOT list statuses. Do NOT use code fences.
@@ -987,7 +988,7 @@ Do NOT sign off — this text is embedded in a card that already carries your si
     .replace(/`(<@\d+>)`/g, '$1')
     .replace(/^ {4}/gm, '')
     .trim()
-    .slice(0, 320);
+    .slice(0, 220);
 }
 
 export async function generateCosmicAppointment({

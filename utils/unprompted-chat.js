@@ -20,6 +20,7 @@ import {
 import { isMichaelLifeActive } from './life-switch.js';
 import { generateDelayedConsequence, generateQuietAfterthought } from './openai.js';
 import { recordMichaelSaying } from './michael-self.js';
+import { canSpeakUnprompted, noteUnpromptedSpeech } from './speech-budget.js';
 import { getGuildLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
 import {
@@ -31,14 +32,14 @@ import {
 } from './michael-memory.js';
 import { getCurrentAntichristUserId, getUitverkoreneUserId, isAntichristCleansed } from './cosmic-state.js';
 
-const SNARK_CHANCE = 0.005;
+const SNARK_CHANCE = 0.0015;
 const SILENCE_MS = 10 * 60 * 1000;
 
 // Quiet afterthought...  once a channel goes silent, Michael may circle back to
 // the last thing said as if it only just landed. Rare on purpose.
 const AFTERTHOUGHT_SILENCE_MS = 12 * 60 * 1000;
-const AFTERTHOUGHT_CHANCE = 0.25;       // drawn when the silence timer fires
-const AFTERTHOUGHT_COOLDOWN_MS = 3 * 60 * 60 * 1000; // global: max one per 3h
+const AFTERTHOUGHT_CHANCE = 0.12;       // drawn when the silence timer fires
+const AFTERTHOUGHT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // global: max one per 6h
 const AFTERTHOUGHT_MIN_CONTENT = 12;    // skip "ok" and emoji-only leftovers
 
 /** @type {null | { messageId: string, channelId: string, authorId: string, username: string, guildId: string, businessId: string }} */
@@ -148,6 +149,12 @@ async function trySendBusiness(item) {
     return false;
   }
 
+  if (!canSpeakUnprompted(item.guildId)) {
+    console.log('[michael] business-resurface | skipped | unprompted budget spent');
+    pendingBusiness = null;
+    return false;
+  }
+
   const langCode = getGuildLanguage(item.guildId);
   const lang = getLang(langCode);
   const memory = loadUserMemory(item.authorId);
@@ -180,6 +187,7 @@ async function trySendBusiness(item) {
     },
   });
 
+  noteUnpromptedSpeech(item.guildId, 'resurface');
   markBusinessMentioned(item.authorId, business.id);
   if (business.severity <= 2) markBusinessResolved(item.authorId, business.id);
   recordMichaelSaying(content, { kind: 'resurface', userId: item.authorId, username: item.username, guildId: item.guildId ?? null, langCode });
@@ -202,6 +210,7 @@ async function sendSnark({ messageId, channelId, guildId }) {
         message_reference: { message_id: messageId, fail_if_not_exists: false },
       },
     });
+    noteUnpromptedSpeech(guildId, 'snark');
     console.log(`[michael] snark | msg=${messageId} | ch=${channelId}`);
   } catch (err) {
     console.error('[michael] snark failed:', err.message);
@@ -236,7 +245,7 @@ export function handleUnpromptedChat({
 
   if (isDutchQuietHoursForUnpromptedSends()) return;
 
-  if (Math.random() < SNARK_CHANCE) {
+  if (Math.random() < SNARK_CHANCE && canSpeakUnprompted(guildId)) {
     sendSnark({ messageId, channelId, guildId });
   }
 }
@@ -267,6 +276,7 @@ async function trySendAfterthought() {
   const lastAt = lastMessageAtByChannel.get(item.channelId) ?? 0;
   if (Date.now() - lastAt < AFTERTHOUGHT_SILENCE_MS) return;               // channel woke up again
   if (!isMichaelLifeActive(item.guildId, item.channelId)) return;
+  if (!canSpeakUnprompted(item.guildId)) return;
   if (Math.random() > AFTERTHOUGHT_CHANCE) {
     pendingAfterthought = null;                                            // rolled away...  this one is forgotten
     return;
@@ -286,6 +296,7 @@ async function trySendAfterthought() {
     },
   });
   lastAfterthoughtAt = Date.now();
+  noteUnpromptedSpeech(item.guildId, 'afterthought');
   recordMichaelSaying(content, { kind: 'afterthought', userId: item.authorId, username: item.username, guildId: item.guildId, langCode });
   console.log(`[michael] afterthought | sent | user=${item.authorId} | ch=${item.channelId}`);
 }

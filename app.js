@@ -58,6 +58,7 @@ import { getHoroscopeGifQuery } from './uitverkorene.js';
 import { ROUND_1, ROUND_2, ROUND_3, VERDICTS, DATE_SCORES, DATE_ROUND4_PATHS } from './date.js';
 import { generateMichaelMessage, summariseUserHistory, generateVibecheckComment, scoreMichaelMessage, generateMorningAfter, generatePostRevision, generateMijnRolComment, generateMichaelImage, generateMichaelVoiceAdvice, generateWitnessStatement, generateConfessionAck, generateAuraCheck, generateCosmicAppointment, generateSoulInvoice, summariseMichaelSelf, generateDayChaosBulletin, generateAntichristDenial, generateAbsenceInquiry } from './utils/openai.js';
 import { addSelfEphemera, applySelfCondense, buildSelfContextBlock, canAskAboutAbsence, getSayingsForCondense, noteAbsenceAsked, recordMichaelSaying, selfNeedsCondense } from './utils/michael-self.js';
+import { canSpeakUnprompted, noteUnpromptedSpeech } from './utils/speech-budget.js';
 import { loadUserMemory, saveUserMemory, getJudgementLabel, needsSummarisation, updateImpression, loadAllMemory, addUnfinishedBusiness, maybeAgeBusiness, addTheme, detectThemeOverlap, patchUserState, updateLastChannel, recordLanguageRequest, getRequestedLanguageCode, userSpeaksUnlockedLanguage, formatCharacterForPrompt, resolveField, ensureUserRecord, addConfession, getRecentConfessions, getOutstandingBusiness, noteGuildInteraction, interactorIdsForGuild, getRelationLandscape, findThemeNeighbours, findAbsentSouls } from './utils/michael-memory.js';
 import { ensureMichaelCharacter, runForgivenessRoll, runOnderhandelen, maybePassiveRollBlock, executePassiveRoll } from './utils/michael-rollenspel.js';
 import { startGateway } from './utils/gateway.js';
@@ -1607,6 +1608,7 @@ async function runAbsenceCheck(guildId, channelId) {
   if (!guildId || !channelId) return;
   if (isDutchQuietHoursForUnpromptedSends()) return;
   if (Math.random() > ABSENCE_CHECK_CHANCE) return;
+  if (!canSpeakUnprompted(guildId)) return;
 
   const candidates = findAbsentSouls(guildId).filter((s) => canAskAboutAbsence(guildId, s.userId));
   if (!candidates.length) return;
@@ -1627,6 +1629,7 @@ async function runAbsenceCheck(guildId, channelId) {
       body: { content, flags: MESSAGE_FLAG_SUPPRESS_NOTIFICATIONS },
     });
     noteAbsenceAsked(guildId, subject.userId);
+    noteUnpromptedSpeech(guildId, 'absence');
     noteMichaelSaid('absence', content, { userId: subject.userId, username: subject.username, guildId, langCode });
     console.log(`[michael] absence inquiry | ${subject.username} (${subject.userId}) | ${subject.daysGone}d | guild=${guildId}`);
   } catch (err) {

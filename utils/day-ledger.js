@@ -5,8 +5,8 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEDGER_PATH = join(__dirname, '../data/day-ledger.json');
 
-export const MAX_PUBLIC_STAMPS = 4;
-export const MIN_STAMP_GAP_MS = 25 * 60 * 1000;
+export const MAX_PUBLIC_STAMPS = 2;
+export const MIN_STAMP_GAP_MS = 90 * 60 * 1000;
 
 function readAll() {
   if (!existsSync(LEDGER_PATH)) return { guilds: {} };
@@ -354,7 +354,7 @@ export function soFarLines(guildId, lang) {
   const events = day.ledger?.events ?? [];
   if (!events.length) return [];
   const L = lang.dayLaw;
-  return events.slice(-6).map((e) => {
+  return events.slice(-3).map((e) => {
     if (e.kind === 'forbidden' && e.userId) return L.soFarForbidden(e.userId, e.word);
     if (e.kind === 'prophecy' && e.userId) return L.soFarProphecy(e.userId, e.claim);
     if (e.kind === 'least' && e.userId) return L.soFarLeast(e.userId);

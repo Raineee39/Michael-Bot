@@ -30,6 +30,7 @@ import { resolveLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
 import { handleUnpromptedChat, scheduleBusinessResurface } from './unprompted-chat.js';
 import { isMichaelLifeActive } from './life-switch.js';
+import { canSpeakUnprompted, noteUnpromptedSpeech } from './speech-budget.js';
 import { handleDayLawMessage } from './day-watch.js';
 import { getCurrentAntichristUserId, getUitverkoreneUserId, isAntichristCleansed } from './cosmic-state.js';
 
@@ -48,7 +49,7 @@ const INSULT_RE = /\b(kut|fuck|shit|klootzak|lul|eikel|idioot|sukkel|kanker|godv
 
 const AMBIENT_REACTS = ['🧿', '🪬', '👁️', '😇', '👼', '🕊️', '🙏', '✨', '🕯️', '⚖️', '⚡', '🌟', '🪽', '⛪', '✝️'];
 const AMBIENT_REACT_CHANCE = 0.02; // rare on purpose...  a react should feel like being seen
-const AMBIENT_REACT_COOLDOWN_MS = 45 * 1000;
+const AMBIENT_REACT_COOLDOWN_MS = 15 * 60 * 1000; // at most one ambient react per 15 min
 const lastAmbientReactAt = new Map();
 
 function maybeAmbientReact(guildId, channelId, messageId) {
@@ -68,10 +69,19 @@ function maybeAmbientReact(guildId, channelId, messageId) {
 function messageMentionsMichael(msg, botUserId) {
   const content = msg.content ?? '';
   if (MICHAEL_NAME_RE.test(content)) return true;
+  return messagePingsMichael(msg, botUserId);
+}
+
+/** A real @-ping: the user is ADDRESSING him, not merely talking about him. */
+function messagePingsMichael(msg, botUserId) {
   const ids = new Set([botUserId, process.env.APP_ID].filter(Boolean));
   if (!ids.size || !Array.isArray(msg.mentions)) return false;
   return msg.mentions.some((u) => ids.has(u.id));
 }
+
+// Saying his name in passing is not the same as speaking to him. A ping always
+// gets an answer; being talked about rarely does, and costs budget when it does.
+const NAME_DROP_REPLY_CHANCE = 0.2;
 
 function queueGatewayBusiness(authorId, username, details, guildId) {
   ensureUserRecord(authorId, username);
@@ -246,6 +256,17 @@ export function startGateway() {
         if (!isMichaelLifeActive(guildId, channelId)) {
           console.log(`[michael] gateway | name-mention skipped | life-switch off | ch=${channelId}`);
           return;
+        }
+
+        // Addressed directly -> always answer. Merely named -> usually stay
+        // silent; he is a presence in the room, not a participant in it.
+        const pinged = messagePingsMichael(msg, botUserId);
+        if (!pinged) {
+          if (Math.random() > NAME_DROP_REPLY_CHANCE || !canSpeakUnprompted(guildId)) {
+            console.log(`[michael] gateway | name-drop ignored | user=${authorId}`);
+            return;
+          }
+          noteUnpromptedSpeech(guildId, 'name-drop');
         }
 
         ensureUserRecord(authorId, msg.author?.username ?? authorId);
