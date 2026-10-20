@@ -31,6 +31,16 @@ Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → 
 ## Removed (2026-09)
 `/test`, `/aurascan` (canned lines), `/babychat` (+ its generators), old `/michaelmood` (canned humeur lines), `game.js`, `aura.js`, `examples/`. `/cosmicstatus` was renamed to `/michaelmood` (same handler: offices + mood toward you). The character sheet is now always in the /chat prompt (with Michael Points) instead of a 12% gate. Michael never says tally/score numbers in prose — arrows and /vibecheck do that. The quiet afterthought (reply to the last message once a channel goes silent 12 min, 25% draw, 3h cooldown, needs /switchoflife ON) is now actually wired — it previously had no caller.
 
+## The daily card is a horoscope, not a form (2026-10)
+The card used to be a fixed JSON schema — mood, omen, prophecy, forbidden word, least favourite, rule, stats — so it rendered the same sections in the same order every day and read like a form.
+
+`generateDayLaw` now has liberty. Three things create the variety:
+1. **A random ANGLE** picked in code each day (one soul dominates / the whole field / warnings / an audit / off-world weather / the archive resurfaces / suspiciously fortunate / sparse and ominous / assignments / a reckoning). It shapes the whole card.
+2. **Optional sections are diced in code**: rule 50%, least favourite 40%, stats 45%. Most days some of them are absent entirely, and the prompt is told they do not exist today.
+3. **`segments`**: 1-2 sections whose HEADINGS Michael invents himself, plus `recentCardLabels(guildId)` from the ledger's new `shapeHistory`, which lists the headings he used in the last 5 days and forbids reusing them.
+
+`readings` (1-3 per-soul predictions drawn from dossiers) are now the heart of the card, with `forecast` as the server-wide reading. The mechanical core that day-watch stamps depend on — `forbiddenWord`, `prophecies[].watch`, and `ruleWatch`/`leastFavouriteUserId` when present — is unchanged, so the stamp game still works; it just fires less on days those sections are absent.
+
 ## Unprompted speech budget (2026-10)
 All the ways Michael speaks without being addressed — snark, quiet afterthoughts, resurfaced grudges, absence inquiries, and replies to his name being dropped — now share ONE budget per guild: `utils/speech-budget.js`, **max 2 per day, never within 3 hours**, persisted in `data/speech-budget.json` so a deploy restart does not refill it. Individual rates were lowered too (snark 0.5%→0.15%, afterthought 25%→12% with a 6h cooldown), but the shared budget is the guarantee: no combination can make him chatty.
 

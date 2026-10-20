@@ -5,6 +5,7 @@ import { generateBooksClosed, generateDayLaw, generateHoroscope } from './openai
 import {
   getTodayCard,
   getTodayOffices,
+  recentCardLabels,
   recentFeaturedUserIds,
   rollGuildDay,
   saveTodayCard,
@@ -175,6 +176,9 @@ export function pickDailyDeliveryMode() {
 export function summarizeCardForChaos(card, offices = {}) {
   if (!card) return '';
   const lines = [`mood: ${card.mood}`];
+  if (card.forecast) lines.push(`forecast: ${card.forecast}`);
+  for (const r of (card.readings ?? []).slice(0, 2)) lines.push(`reading <@${r.userId}>: ${r.text}`);
+  for (const seg of (card.segments ?? []).slice(0, 2)) lines.push(`${seg.label}: ${seg.body}`);
   if (card.forbiddenWord) lines.push(`forbidden word: ${card.forbiddenWord}`);
   for (const p of (card.prophecies ?? []).slice(0, 2)) lines.push(`prophecy: <@${p.userId}> ${p.claim}`);
   if (card.leastFavouriteUserId) lines.push(`least favourite: <@${card.leastFavouriteUserId}>${card.leastFavouriteReason ? ` (${card.leastFavouriteReason})` : ''}`);
@@ -232,11 +236,21 @@ function buildCardBody(lang, card, horoscopeBody, offices = {}) {
   const lines = [];
   if (card) {
     lines.push(`**${h.moodLabel}:** ${card.mood}`, '');
+    // The reading comes first: the server, then the souls named today.
+    if (card.forecast) lines.push(card.forecast, '');
     if (card.omen) lines.push(card.omen);
     if (card.amendment) lines.push(card.amendment);
     if (offices.antichristCleansed && offices.antichristUserId) {
       lines.push(h.currentAntichristCleansed?.(offices.antichristUserId)
         ?? `**Antichrist of the day:** <@${offices.antichristUserId}> — *cleansed. The seat remains.*`);
+    }
+    for (const r of card.readings ?? []) {
+      lines.push(`<@${r.userId}> — ${r.text}`);
+    }
+    if (card.readings?.length) lines.push('');
+    // Sections Michael invented for today; headings change daily.
+    for (const seg of card.segments ?? []) {
+      lines.push(`**${seg.label}**`, seg.body, '');
     }
     for (const p of card.prophecies ?? []) {
       lines.push(`<@${p.userId}> ${p.claim}`);
@@ -455,12 +469,16 @@ export async function buildDayLawForGuild({
       offices: safeOffices,
       yesterdayDigest: closedYesterday ? yesterdayDigest(closedYesterday) : '',
       selfBlock: buildSelfContextBlock(langCode),
+      recentLabels: recentCardLabels(guildId),
     });
   } catch (err) {
     console.error('[michael] day law failed, using fallback card:', err?.message ?? err);
     card = {
       mood: langCode === 'nl' ? 'HET REGISTER STOTTERT' : 'THE REGISTER STUTTERS',
       omen: lang.dayLaw.booksFallback,
+      forecast: '',
+      readings: [],
+      segments: [],
       prophecies: [],
       forbiddenWord: langCode === 'nl' ? 'STOF' : 'DUST',
       leastFavouriteUserId: null,

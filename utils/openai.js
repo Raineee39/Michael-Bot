@@ -813,6 +813,7 @@ export async function generateDayLaw({
   offices = {},
   yesterdayDigest = '',
   selfBlock = '',
+  recentLabels = [],
 }) {
   const allowed = new Set(subjects.map((s) => s.userId).filter(Boolean));
   const chosenId = offices.chosenUserId && allowed.has(offices.chosenUserId) ? offices.chosenUserId : null;
@@ -823,49 +824,85 @@ export async function generateDayLaw({
     : '(no dossiers)';
   const idsHint = [...allowed].map((id) => `<@${id}>`).join(', ') || '(none)';
 
+  // The angle decides what KIND of day this is. Rotated in code so the card
+  // cannot settle into one shape, however agreeable the model feels.
+  const ANGLES = [
+    'ONE SOUL DOMINATES. Pick a single person and give them a long, specific, uncomfortably personal forecast. Everyone else gets a line at most.',
+    'THE WHOLE FIELD. Read the server as one organism: its collective mood, what it will collectively fail at today, where it is drifting.',
+    'A DAY OF WARNINGS. Everything is a hazard notice. What will go wrong, who will cause it, which hour is worst.',
+    'AN AUDIT. The register is counting things today and the numbers are unflattering. Lead with counts, ratios and findings.',
+    'A WEATHER REPORT from somewhere that is not Earth. Conditions, pressure, visibility, what is falling and on whom.',
+    'THE ARCHIVE RESURFACES. Something old comes back: an anniversary, a filing you lost, a debt nobody remembers but you.',
+    'SUSPICIOUSLY FORTUNATE. The omens are good. You do not trust them and you say so.',
+    'A SPARSE, OMINOUS DAY. Say very little. What you do say should land badly and linger.',
+    'ASSIGNMENTS. You are handing out duties and chores to named souls, whether they agreed or not.',
+    'A RECKONING. You have been reading the register and you have opinions about recent conduct.',
+  ];
+  const angle = ANGLES[Math.floor(Math.random() * ANGLES.length)];
+
+  // Which of the old fixed sections are even allowed today. Most days drop
+  // some of them entirely, which is what stops the card reading like a form.
+  const allowRule = Math.random() < 0.5;
+  const allowLeast = Math.random() < 0.4;
+  const allowStats = Math.random() < 0.45;
+  const readingCount = 1 + Math.floor(Math.random() * 3);   // 1-3
+  const segmentCount = Math.random() < 0.45 ? 2 : 1;        // 1-2 invented sections
+
+  const optionalSpec = [
+    allowRule ? '  "rule": "a standing order for today, max 12 words", \n  "ruleWatch": ["word", "word"],' : '',
+    allowLeast ? '  "leastFavouriteUserId": "REAL_ID", "leastFavouriteReason": "one petty word",' : '',
+    allowStats ? '  "stats": [{ "label": "invented label", "value": "a word or a number" }],' : '',
+  ].filter(Boolean).join('\n');
+
   const input = `
 ${personaIntro(langCode)}
-Invent TODAY'S LAW for this Discord server. Date: ${dateLabel}.
+You are writing TODAY'S HOROSCOPE for this Discord server. Date: ${dateLabel}.
 ${lang.helpers.outputInstruction}
-This is a closed system for 24 hours. Petty celestial clerk. Not a paragraph.
+You are a petty celestial clerk who also reads the future. This is a horoscope first and a decree second.
 
-Field mood hint: ${lang.moodNames?.[aggregateMood?.dominantMood ?? 'afwezig'] ?? aggregateMood?.dominantMood ?? 'absent'}. Known souls: ${aggregateMood?.knownUsers ?? 0}.
-${selfBlock ? `\n${selfBlock}\nStay consistent with your own recent proclamations.\n` : ''}${chosenId ? `CHOSEN ONE (must appear in a prophecy or omen): <@${chosenId}>` : ''}
-${antId ? `ANTICHRIST (must appear in a prophecy or omen): <@${antId}>` : ''}
+TODAY'S ANGLE (this shapes the whole card — commit to it):
+${angle}
+
+Field mood hint: ${lang.moodNames?.[aggregateMood?.dominantMood ?? 'afwezig'] ?? 'absent'}. Known souls: ${aggregateMood?.knownUsers ?? 0}.
+${selfBlock ? `\n${selfBlock}\nStay consistent with your own recent proclamations.\n` : ''}${chosenId ? `CHOSEN ONE (must appear somewhere): <@${chosenId}>` : ''}
+${antId ? `ANTICHRIST (must appear somewhere): <@${antId}>` : ''}
 Allowed Discord IDs only: ${idsHint}
-${yesterdayDigest ? `\nYESTERDAY'S BOOKS (residue — do not recap, just let it flavour today's cruelty):\n${yesterdayDigest}\n` : ''}
-DOSSIERS (what you remember about these souls — impressions, recent messages, grudges, confessions. Ground your prophecies, least favourite, and stats in this material so they feel personal. Do not recite the file):
+${recentLabels.length ? `\nHEADINGS YOU ALREADY USED THIS WEEK — do not reuse any of them, invent new ones:\n${recentLabels.map((l) => `- ${l}`).join('\n')}\n` : ''}${yesterdayDigest ? `\nYESTERDAY'S BOOKS (residue — do not recap, just let it flavour today):\n${yesterdayDigest}\n` : ''}
+DOSSIERS (what you remember about these souls. Ground your predictions in this material so they feel personal and earned. Do not recite the file):
 ${subjectBlock}
 
 Return ONLY JSON (no markdown fences):
 {
   "mood": "loud invented mood, caps and ! allowed",
-  "omen": "ONE short omen sentence, max 15 words (weather / bureaucracy / cosmic)",
+  "forecast": "the reading for the SERVER as a whole. 1-2 sentences, specific, predictive, in today's angle",
+  "readings": [
+    { "userId": "REAL_ID", "text": "a personal prediction for this soul today — what will happen TO them, what they will do, what they should fear or (rarely) hope. Specific to their file." }
+  ],
   "prophecies": [
     { "userId": "REAL_ID", "claim": "something they might SAY or DO in chat today (max 12 words)", "watch": ["keyword", "keyword"] }
   ],
+  "segments": [
+    { "label": "A HEADING YOU INVENT TODAY", "body": "1-2 short lines under it" }
+  ],
   "forbiddenWord": "ONE uncommon word, 3-12 letters",
-  "leastFavouriteUserId": "REAL_ID or empty",
-  "leastFavouriteReason": "one petty word",
-  "rule": "one stupid standing order for the server today, max 12 words",
-  "ruleWatch": ["optional", "keywords"],
-  "stats": [{ "label": "invented label", "value": "short value" }]
+${optionalSpec}
 }
 
 Rules:
-- EXACTLY 1 or 2 prophecies, no more. Each watch list is 1 to 4 words that would appear in Discord if the prophecy comes true. Detectable in chat. No "will not X".
-- Prophecies, leastFavouriteReason, and stats should draw on the dossiers (a grudge, a confession, an impression, a pattern in their recent messages) whenever the file gives you material. Paraphrase; never quote a confession verbatim.
+- "readings" is the heart of the card: EXACTLY ${readingCount}. Real horoscope entries for named souls, drawn from their dossiers. Never generic.
+- "segments": EXACTLY ${segmentCount}. YOU invent the heading and what belongs under it — an omen, a verdict, a list, a weather note, a complaint, a count, whatever today's angle wants. New headings every day.
+- EXACTLY 1 or 2 prophecies. Each watch list is 1-4 words that would appear in Discord if it comes true. Detectable in chat. No "will not X".
+- Only the fields shown above. ${optionalSpec ? 'The optional fields shown ARE wanted today.' : 'No rule, no least favourite, no stats today — leave them out entirely.'}
 - Never invent IDs. Never use IDs not in the allowed list.
 - forbiddenWord is not a name, not a common function word, not an insult slur.
-- EXACTLY 1 or 2 stats. Invent the labels. Values are a word or a number, never a sentence.
-- BREVITY IS THE POINT: this card is read at a glance. Every string is terse and clipped. Never explain, never elaborate, never write a second sentence where one will do.
-- LANGUAGE: every string you return (mood, omen, claims, forbiddenWord, rule, stat labels and values) MUST be in the language named by the output instruction above, with no words from any other language. Usernames, dossier excerpts and your own quoted memory may contain other languages; they are evidence, not a cue. Do not let them pull you out of the required language.
+- BREVITY: the card is read at a glance. Every string terse and clipped. Never a second sentence where one will do.
+- LANGUAGE: every string MUST be in the language named by the output instruction above, with no words from any other language. Usernames, dossier excerpts and your own quoted memory may contain other languages; they are evidence, not a cue.
   `.trim();
 
   const run = async () => {
     const response = await client.responses.create({
       model: 'gpt-4.1-mini',
-      max_output_tokens: 700,
+      max_output_tokens: 800,
       input,
     });
     const raw = response.output?.[0]?.content?.[0]?.text?.trim();
@@ -890,15 +927,26 @@ Rules:
         .filter((w) => w.length >= 3 && w.length <= 20)
         .slice(0, 4);
       if (!watch.length) return null;
-      return {
-        id: `p${i + 1}`,
-        userId,
-        claim: trimAtSentence(p.claim, 110),
-        watch,
-        status: 'open',
-      };
+      return { id: `p${i + 1}`, userId, claim: trimAtSentence(p.claim, 110), watch, status: 'open' };
     })
     .filter(Boolean)
+    .slice(0, 2);
+
+  const readings = (Array.isArray(parsed.readings) ? parsed.readings : [])
+    .map((r) => {
+      const userId = allowId(r.userId, allowed);
+      const text = trimAtSentence(r.text, 190);
+      return userId && text ? { userId, text } : null;
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const segments = (Array.isArray(parsed.segments) ? parsed.segments : [])
+    .map((seg) => ({
+      label: String(seg.label ?? '').trim().replace(/[:：]\s*$/, '').slice(0, 48),
+      body: trimAtSentence(seg.body, 180),
+    }))
+    .filter((seg) => seg.label && seg.body)
     .slice(0, 2);
 
   const stats = (Array.isArray(parsed.stats) ? parsed.stats : [])
@@ -913,7 +961,9 @@ Rules:
 
   return {
     mood: trimAtSentence(parsed.mood ?? (langCode === 'nl' ? 'AMBtenaarlijk VERTOORND' : 'WRATHFUL!!!!!!!'), 80),
-    omen: trimAtSentence(parsed.omen, 140),
+    forecast: trimAtSentence(parsed.forecast, 200),
+    readings,
+    segments,
     prophecies,
     forbiddenWord: sanitizeForbiddenWord(parsed.forbiddenWord, [fallbackWord, 'TITHES', 'PAPIER']),
     leastFavouriteUserId: least,

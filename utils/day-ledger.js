@@ -53,6 +53,7 @@ function emptyDay(dateKey) {
     postedChannelId: null,
     yesterday: null,
     featuredHistory: [],
+    shapeHistory: [],
   };
 }
 
@@ -72,6 +73,32 @@ function appendFeaturedHistory(prev) {
     userIds: [...new Set(featuredIdsFromDay(prev))],
   };
   return [...(prev.featuredHistory ?? []), entry].slice(-7);
+}
+
+/** The section headings a card used, so tomorrow's card can avoid them. */
+function cardLabels(card) {
+  if (!card) return [];
+  const labels = (card.segments ?? []).map((s) => s.label).filter(Boolean);
+  for (const s of card.stats ?? []) if (s.label) labels.push(s.label);
+  return labels;
+}
+
+function appendShapeHistory(prev) {
+  const entry = { dateKey: prev.dateKey, labels: cardLabels(prev.card) };
+  return [...(prev.shapeHistory ?? []), entry].slice(-7);
+}
+
+/** Section headings used on recent cards, so Michael does not reuse them. */
+export function recentCardLabels(guildId, days = 5) {
+  const day = getGuildDay(guildId);
+  if (!day) return [];
+  const rows = [...(day.shapeHistory ?? [])];
+  if (day.dateKey === amsterdamDateKey() && day.yesterday) {
+    rows.push({ dateKey: day.yesterday.dateKey, labels: cardLabels(day.yesterday.card) });
+  } else if (day.dateKey !== amsterdamDateKey()) {
+    rows.push({ dateKey: day.dateKey, labels: cardLabels(day.card) });
+  }
+  return [...new Set(rows.slice(-days).flatMap((r) => r.labels ?? []))];
 }
 
 /** User IDs named on recent daily cards (offices + prophecies), newest last. */
@@ -172,6 +199,7 @@ export function rollGuildDay(guildId) {
   const day = emptyDay(today);
   day.yesterday = closedYesterday;
   day.featuredHistory = appendFeaturedHistory(prev);
+  day.shapeHistory = appendShapeHistory(prev);
   all.guilds[guildId] = day;
   writeAll(all);
   return { day, closedYesterday };
