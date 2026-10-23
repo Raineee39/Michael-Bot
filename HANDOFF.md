@@ -41,6 +41,11 @@ The card used to be a fixed JSON schema — mood, omen, prophecy, forbidden word
 
 `readings` (1-3 per-soul predictions drawn from dossiers) are now the heart of the card, with `forecast` as the server-wide reading. The mechanical core that day-watch stamps depend on — `forbiddenWord`, `prophecies[].watch`, and `ruleWatch`/`leastFavouriteUserId` when present — is unchanged, so the stamp game still works; it just fires less on days those sections are absent.
 
+## Name mentions are AI replies now (2026-10)
+Saying Michael's name in chat used to draw a random canned line from `lang.ui.nameReplies`, regardless of what the message said. The gateway now calls `generateNameMentionReply` (openai.js), which answers the actual message using the speaker's mood, verdict and impression. The canned pool survives only as the failure fallback.
+
+The reply knows how it was summoned: an **@-ping** means he was addressed and answers the content directly; a **name drop** means he overheard himself being discussed and is interjecting uninvited, which reads differently on purpose. Replies are recorded into self-memory (`mention-reply` / `name-drop-reply`) with their langCode. The gating from the talkativeness pass is unchanged: pings always answer, name drops are 20% and spend unprompted budget.
+
 ## Unprompted speech budget (2026-10)
 All the ways Michael speaks without being addressed — snark, quiet afterthoughts, resurfaced grudges, absence inquiries, and replies to his name being dropped — now share ONE budget per guild: `utils/speech-budget.js`, **max 2 per day, never within 3 hours**, persisted in `data/speech-budget.json` so a deploy restart does not refill it. Individual rates were lowered too (snark 0.5%→0.15%, afterthought 25%→12% with a 6h cooldown), but the shared budget is the guarantee: no combination can make him chatty.
 

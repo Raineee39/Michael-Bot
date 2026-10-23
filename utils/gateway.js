@@ -24,8 +24,9 @@
 
 import { WebSocket } from 'ws';
 import { addDiscordReaction, appendEditWithinDiscordLimit, DiscordRequest, isDutchQuietHoursForUnpromptedSends } from '../utils.js';
-import { addUnfinishedBusiness, loadUserMemory, updateLastChannel, ensureUserRecord, noteChatActivity, patchUserState } from './michael-memory.js';
-import { generatePostRevision } from './openai.js';
+import { addUnfinishedBusiness, loadUserMemory, updateLastChannel, ensureUserRecord, noteChatActivity, patchUserState, getJudgementLabel } from './michael-memory.js';
+import { recordMichaelSaying } from './michael-self.js';
+import { generateNameMentionReply, generatePostRevision } from './openai.js';
 import { resolveLanguage } from './guild-settings.js';
 import { getLang } from './lang/index.js';
 import { handleUnpromptedChat, scheduleBusinessResurface } from './unprompted-chat.js';
@@ -274,8 +275,26 @@ export function startGateway() {
         const gwLangCode = resolveLanguage(guildId, authorId);
         const gwLang = getLang(gwLangCode);
 
-        const pool = gwLang.ui.nameReplies ?? gwLang.ui.shadowReplyLines;
-        const reply = pool[Math.floor(Math.random() * pool.length)];
+        // Answer what was actually said. The canned pool is only a fallback
+        // for when generation fails.
+        const gwMemory = loadUserMemory(authorId);
+        const gwMood = gwMemory.currentMood ?? 'afwezig';
+        let reply;
+        try {
+          reply = await generateNameMentionReply({
+            username: msg.author?.username ?? authorId,
+            content,
+            mood: gwMood,
+            judgementLabel: getJudgementLabel(gwMemory.judgementScore ?? 0),
+            impression: gwMemory.impression ?? null,
+            langCode: gwLangCode,
+            addressed: pinged,
+          });
+        } catch (err) {
+          console.warn('[michael] gateway | name-mention AI failed, using pool:', err?.message ?? err);
+          const pool = gwLang.ui.nameReplies ?? gwLang.ui.shadowReplyLines;
+          reply = pool[Math.floor(Math.random() * pool.length)];
+        }
 
         try {
           const res = await DiscordRequest(`channels/${channelId}/messages`, {
@@ -286,10 +305,16 @@ export function startGateway() {
 
           // Feature 5...  Maybe edit the reply a few seconds later
           if (sentMsg?.id) {
-            const userMood = loadUserMemory(authorId).currentMood ?? 'afwezig';
-            maybeScheduleRevision(channelId, sentMsg.id, reply, userMood, gwLangCode);
+            maybeScheduleRevision(channelId, sentMsg.id, reply, gwMood, gwLangCode);
           }
-          console.log(`[michael] gateway | name-mention reply | ch=${channelId} | user=${authorId}`);
+          recordMichaelSaying(reply, {
+            kind: pinged ? 'mention-reply' : 'name-drop-reply',
+            userId: authorId,
+            username: msg.author?.username ?? authorId,
+            guildId,
+            langCode: gwLangCode,
+          });
+          console.log(`[michael] gateway | name-mention reply | ${pinged ? 'addressed' : 'overheard'} | ch=${channelId} | user=${authorId}`);
         } catch (err) {
           console.error('[michael] gateway reply failed:', err.message);
         }

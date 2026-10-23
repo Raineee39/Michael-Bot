@@ -1106,6 +1106,54 @@ ${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with
   return applyChaoticFormatting(response.output[0].content[0].text);
 }
 
+// ─── Name mentions in chat ────────────────────────────────────────────────────
+
+/**
+ * Someone said his name (or pinged him) in ordinary chat. He answers what was
+ * ACTUALLY said rather than reaching for a canned line.
+ * @param {boolean} addressed true when they @-pinged him; false when he merely
+ *   overheard his name and is interjecting uninvited.
+ */
+export async function generateNameMentionReply({
+  username,
+  content,
+  mood,
+  judgementLabel,
+  impression = null,
+  langCode = 'nl',
+  addressed = false,
+}) {
+  const lang = getLang(langCode);
+  const { outputInstruction, formalAddress, styleHint } = lang.helpers;
+  const moodDesc = lang.moodDescriptions[mood] ?? '';
+  const safe = String(content ?? '').replace(/"/g, "'").slice(0, 400);
+
+  const stance = addressed
+    ? 'They addressed you directly. Answer the thing they actually said — engage with its content, do not deflect with a stock line.'
+    : 'They were NOT talking to you; they said your name while talking amongst themselves. You overheard it and you are interjecting, uninvited. Respond to what was actually said, as someone who was not asked and does not care that he was not asked.';
+
+  const response = await client.responses.create({
+    model: 'gpt-4.1-mini',
+    max_output_tokens: 160,
+    input: `
+${personaIntro(langCode)}
+You are watching an ordinary Discord channel. ${username} wrote: "${safe}"
+${stance}
+Your mood toward them: ${displayMood(langCode, mood)}...  ${moodDesc}
+Your standing verdict on them: ${displayJudgement(langCode, judgementLabel)}.
+${impression ? `Your long-term impression of them: "${impression}"` : ''}
+Never state scores or point totals aloud.
+
+ONE or TWO short sentences. React to the substance of their message — the subject, the claim, the mood of it. Specific, not generic. No greeting, no offer of help, no question unless it is rhetorical.
+${outputInstruction} Formal address (${formalAddress}). ${styleHint}. Close with 2 to 5 dots followed by your sign-off name.
+    `.trim(),
+  });
+
+  const raw = response.output?.[0]?.content?.[0]?.text?.trim();
+  if (!raw) throw new Error('Gemini returned empty name-mention reply');
+  return applyChaoticFormatting(raw);
+}
+
 /**
  * Short afterthought once a channel has gone quiet...  Michael circles back
  * to one leftover message as if he only just decided it needed a remark.
