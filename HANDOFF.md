@@ -31,6 +31,11 @@ Per-user mood NEVER drifts on its own: `nextMood` is deterministic (delta 0 → 
 ## Removed (2026-09)
 `/test`, `/aurascan` (canned lines), `/babychat` (+ its generators), old `/michaelmood` (canned humeur lines), `game.js`, `aura.js`, `examples/`. `/cosmicstatus` was renamed to `/michaelmood` (same handler: offices + mood toward you). The character sheet is now always in the /chat prompt (with Michael Points) instead of a 12% gate. Michael never says tally/score numbers in prose — arrows and /vibecheck do that. The quiet afterthought (reply to the last message once a channel goes silent 12 min, 25% draw, 3h cooldown, needs /switchoflife ON) is now actually wired — it previously had no caller.
 
+## Mentions on the card: never doubled, never invented (2026-10)
+`buildCardBody` prefixes every reading and prophecy with `<@id>`, and the model opened its own text with the same tag, so cards showed `@user — @user, Chosen One...`. `stripSelfMention` (openai.js) removes the subject's own tag from text the renderer is about to prefix, including the `<@!id>` nickname form and any leading `—`/`,` left behind. Mentions of OTHER souls are kept.
+
+Separately, the model sometimes invented ids, which Discord renders as a broken ping (`@°°°°°`). `dropUnknownMentions` removes any mention whose id is not a known participant — it matches malformed, non-numeric mentions too. Applied to readings, claims, the forecast and segment bodies (against the day's allowed ids), and to the books-closed epilogue and chaos bulletin (against the ids that actually appear in their own digest). The books-closed prompt is also handed the exact legal tags, so the strip is only a backstop.
+
 ## The daily card is a horoscope, not a form (2026-10)
 The card used to be a fixed JSON schema — mood, omen, prophecy, forbidden word, least favourite, rule, stats — so it rendered the same sections in the same order every day and read like a form.
 

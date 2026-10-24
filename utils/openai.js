@@ -738,6 +738,7 @@ ${dossiers}
  */
 export async function generateDayChaosBulletin({ mode, langCode = 'nl', lang, dateLabel, cardDigest, selfBlock = '' }) {
   const { outputInstruction } = lang.helpers;
+  const allowedIds = new Set([...String(cardDigest ?? '').matchAll(/<@!?(\d+)>/g)].map((m) => m[1]));
 
   const modeBlock = mode === 'rant'
     ? `Today you LOSE THE THREAD. Begin as the official bulletin: the mood line, one or two prophecies from the digest, official tone. Then something in the digest or on your own desk sets you off and you derail into a furious tangent — celestial bureaucracy, the state of these souls, a grievance you cannot let go — escalating, formatting degrading (caps leaking in, sentences running on, one thought interrupting another). You may brush against the reorganisation of heaven you never speak of — one aborted half-sentence at most, never an explanation. You keep meaning to return to the bulletin and never do.
@@ -766,7 +767,7 @@ Rules:
   });
   const raw = response.output?.[0]?.content?.[0]?.text?.trim();
   if (!raw) throw new Error('Gemini returned empty chaos bulletin');
-  return raw;
+  return dropUnknownMentions(raw, allowedIds);
 }
 
 function parseJsonObject(raw) {
@@ -785,6 +786,35 @@ function sanitizeForbiddenWord(word, fallbacks) {
   if (cleaned.length < 3 || cleaned.length > 16) return fallbacks[0];
   if (FORBIDDEN_STOP.has(cleaned.toLowerCase())) return fallbacks[0];
   return cleaned.toUpperCase();
+}
+
+/**
+ * The card renderer already prefixes each reading/prophecy with the subject's
+ * mention, and the model tends to open with it too, which produced
+ * "@user — @user, Chosen One...". Strip the subject's own mention from text
+ * that is going to be prefixed with it.
+ */
+function stripSelfMention(text, userId) {
+  if (!text || !userId) return text ?? '';
+  return String(text)
+    .replace(new RegExp(`<@!?${userId}>`, 'g'), ' ')
+    .replace(/^[\s,.:;\u2014\u2013-]+/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * Models occasionally invent Discord IDs, which Discord renders as a broken
+ * ping. Drop any mention whose id is not a real participant. Matches malformed
+ * mentions too, not just numeric ones.
+ */
+function dropUnknownMentions(text, allowedIds) {
+  if (!text) return text ?? '';
+  return String(text)
+    .replace(/<@!?([^>]*)>/g, (match, id) => (allowedIds.has(String(id).trim()) ? match : ''))
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,!?;:])/g, '$1')
+    .trim();
 }
 
 function allowId(id, allowed) {
@@ -927,7 +957,9 @@ Rules:
         .filter((w) => w.length >= 3 && w.length <= 20)
         .slice(0, 4);
       if (!watch.length) return null;
-      return { id: `p${i + 1}`, userId, claim: trimAtSentence(p.claim, 110), watch, status: 'open' };
+      const claim = dropUnknownMentions(stripSelfMention(p.claim, userId), allowed);
+      if (!claim) return null;
+      return { id: `p${i + 1}`, userId, claim: trimAtSentence(claim, 110), watch, status: 'open' };
     })
     .filter(Boolean)
     .slice(0, 2);
@@ -935,8 +967,9 @@ Rules:
   const readings = (Array.isArray(parsed.readings) ? parsed.readings : [])
     .map((r) => {
       const userId = allowId(r.userId, allowed);
-      const text = trimAtSentence(r.text, 190);
-      return userId && text ? { userId, text } : null;
+      if (!userId) return null;
+      const text = trimAtSentence(dropUnknownMentions(stripSelfMention(r.text, userId), allowed), 190);
+      return text ? { userId, text } : null;
     })
     .filter(Boolean)
     .slice(0, 3);
@@ -944,7 +977,7 @@ Rules:
   const segments = (Array.isArray(parsed.segments) ? parsed.segments : [])
     .map((seg) => ({
       label: String(seg.label ?? '').trim().replace(/[:：]\s*$/, '').slice(0, 48),
-      body: trimAtSentence(seg.body, 180),
+      body: trimAtSentence(dropUnknownMentions(seg.body, allowed), 180),
     }))
     .filter((seg) => seg.label && seg.body)
     .slice(0, 2);
@@ -961,7 +994,7 @@ Rules:
 
   return {
     mood: trimAtSentence(parsed.mood ?? (langCode === 'nl' ? 'AMBtenaarlijk VERTOORND' : 'WRATHFUL!!!!!!!'), 80),
-    forecast: trimAtSentence(parsed.forecast, 200),
+    forecast: trimAtSentence(dropUnknownMentions(parsed.forecast, allowed), 200),
     readings,
     segments,
     prophecies,
@@ -1010,6 +1043,8 @@ Keep under 220 characters.
 export async function generateBooksClosed({ langCode = 'nl', dateLabel, digest, correction = false }) {
   const lang = getLang(langCode);
   const { outputInstruction } = lang.helpers;
+  // Only ids that actually appear in yesterday's ledger may be mentioned.
+  const allowedIds = new Set([...String(digest ?? '').matchAll(/<@!?(\d+)>/g)].map((m) => m[1]));
   const correctionBlock = correction
     ? `\nTODAY THE REGISTER AUDITED YOU. It found an error in YOUR OWN filing of yesterday — pick one plausible item from the ledger (a prophecy you should never have stamped, a word mis-transcribed, a verdict entered in the wrong column) and issue a formal correction. The register does not apologise. YOU do not apologise. Amend it in one grudging sentence, visibly annoyed that this is on the record.\n`
     : '';
@@ -1026,19 +1061,21 @@ Use this ledger only as flavour. Do NOT recap it. Do NOT write DATE OF CLOSURE. 
 Ledger:
 ${digest || '(nothing was stamped. The silence is also a verdict.)'}
 
-Mention at most one <@id> if it fits. Then say the books are closed.
+Mention at most one <@id> if it fits, and ONLY one of these exact tags: ${[...allowedIds].map((id) => `<@${id}>`).join(', ') || '(none — mention nobody)'}. Never invent an id. Then say the books are closed.
 Do NOT sign off — this text is embedded in a card that already carries your signature.
     `.trim(),
   });
   const raw = response.output?.[0]?.content?.[0]?.text?.trim();
   if (!raw) throw new Error('Gemini returned empty books-closed');
-  return raw
-    .replace(/```[a-z]*\n?([\s\S]*?)```/gi, '$1')
-    .replace(/```/g, '')
-    .replace(/`(<@\d+>)`/g, '$1')
-    .replace(/^ {4}/gm, '')
-    .trim()
-    .slice(0, 220);
+  return dropUnknownMentions(
+    raw
+      .replace(/```[a-z]*\n?([\s\S]*?)```/gi, '$1')
+      .replace(/```/g, '')
+      .replace(/`(<@\d+>)`/g, '$1')
+      .replace(/^ {4}/gm, '')
+      .trim(),
+    allowedIds,
+  ).slice(0, 220);
 }
 
 export async function generateCosmicAppointment({
