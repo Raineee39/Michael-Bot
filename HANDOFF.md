@@ -1,5 +1,24 @@
 # Handoff — 1 Sep 2026
 
+## Models and voice (2026-11)
+**Why this happened:** Google reroutes `gemini-2.5-flash` to `gemini-3.5-flash-lite` on 1 Dec 2026 and shuts `gemini-2.5-flash-preview-tts` on 18 Dec. The old code sent `thinkingBudget: 0` on every text call, which Flash-Lite 3.5 rejects with a bare 400, so the reroute would have failed every text generation.
+
+**Defaults now** (all in `utils/openai.js`, all overridable by env): voice `gemini-4-hydrogen`, bookkeeping `gemini-3.5-flash-lite`, image `gemini-nano-banana-2.1`, TTS `gemini-3.8-flash-tts`. If the VPS `.env` still sets `GEMINI_TEXT_MODEL` / `GEMINI_IMAGE_MODEL` / `GEMINI_TTS_MODEL` to 2.5 ids, those win over the new defaults: delete them.
+
+**Two tiers.** `tier: 'utility'` (message scoring, user impressions, self-summary, sheet translation) runs on Flash-Lite; everything in character runs on the voice model. Each tier falls back to a rolling `-latest` alias when the primary is missing, rate-limited or overloaded.
+
+**Thinking is negotiated, not configured.** Each model generation wants a different thinking setting and rejects the others. `generateOnModel` tries budget 0, then `minimal`, then `low`, then the model default, and caches what the model accepted. Thought tokens count against `maxOutputTokens` and Gemini 4 thinks a few hundred tokens regardless, so every call gets 2048 tokens of headroom and the caller's limit is enforced on the text afterwards (`clipToTokenBudget`). Do not remove the headroom: short replies come back empty with `MAX_TOKENS`.
+
+**TTS goes through the Interactions API.** Gemini 3.8 TTS treats text as a verbatim transcript; the old inline delivery prompt was spoken aloud ("Deep elderly male archangel voice..."). Style now travels as a `speech_metadata` annotation. It also returns a finished WAV, so `pcmToWav` only runs on raw PCM. The legacy `generateContent` path remains for 2.5/3.1 TTS ids.
+
+**The voice was rewritten to be funny instead of loud.** Before, nearly every reply was "you trouble the Higher with trivialities, seek your Inner Light" whatever was asked. Now:
+- `archangelBaseline` (both languages): deadpan celestial clerk by default; open wrath belongs to the `woedend` mood only, which is what makes it land.
+- `comedyRules` (new lang key, in the /chat prompt): answer the actual question with a real ruling; never make "this is trivial" the point; one specific concrete detail; one idea per reply; spiritual vocabulary is seasoning.
+- `detailNudge()`: the SOURCE of that concrete detail is drawn in code per call (a measurement, a saint with an opinion, a fee, a rule nobody remembers...) and rides in `personaIntro`, so every generator gets it. Without it the model found one joke ("filed under Form 12-C") and used it in every reply.
+- Style rules cap the tics: at most one ALL-CAPS word, one quoted word and one wide gap per reply outside `woedend`.
+- User impressions are written by the utility model with an explicit no-invention rule and in the server's language (`summariseUserHistory` was called without `langCode`, so English servers got Dutch impressions).
+- /chat sentence clamp is 3 (was 2) and no longer treats "St." / "nr." as a sentence end. The card gives one reading per soul.
+
 ## Antichrist seat after /forgiveme
 The named antichrist **stays on the card**. Successful repentance marks `antichristCleansed` on cosmic-state and today’s offices. The seat is filled; the office is inactive for the rest of the day (no “nee”, no antichrist role in chat/listen, no day-watch antichrist stamp).
 
@@ -20,7 +39,7 @@ Do **not** vacate or re-roll the seat just because they repented. `/horoscope` s
 Push to `main` → `/github-webhook` → `git reset --hard origin/main && npm install && pm2 restart michael-bot --update-env`. Michael **does** restart after a pull.
 
 ## Self-memory & moods (`utils/michael-self.js`, `data/michael-self.json`)
-Michael remembers what he himself says. Three layers: a verbatim queue of his last ~12 outgoing lines; a rolling first-person summary condensed by the cheapest model (`GEMINI_SUMMARY_MODEL`, default `gemini-2.5-flash-lite`) once the queue hits 10; and **ephemera** — time-boxed notes (today's law 36h, invoices 48h, appointments 24h) that expire on read and are never fed into the long-term summary. `buildSelfContextBlock()` goes into /chat, horoscope, and day-law prompts.
+Michael remembers what he himself says. Three layers: a verbatim queue of his last ~12 outgoing lines; a rolling first-person summary condensed by the cheapest model (`GEMINI_SUMMARY_MODEL`, the utility tier) once the queue hits 10; and **ephemera** — time-boxed notes (today's law 36h, invoices 48h, appointments 24h) that expire on read and are never fed into the long-term summary. `buildSelfContextBlock()` goes into /chat, horoscope, and day-law prompts.
 
 Moods are split: `currentMood` on user records stays "mood toward them"; Michael also has ONE **general mood** (self-healing daily roll, kinder distribution, includes general-only `genadig`). General mood modifies every dice roll (+3 genadig … −3 woedend) via `computeMichaelRoll`.
 

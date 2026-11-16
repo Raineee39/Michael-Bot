@@ -18,31 +18,43 @@ if (!process.env.GEMINI_API_KEY) {
   console.warn('[gemini] GEMINI_API_KEY is not set — /chat, /imagine, and /listentomichael will fail.');
 }
 
-/** Cheap Flash for text. Override with GEMINI_TEXT_MODEL if needed. */
-const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
-/** Cheapest model available — used only for low-stakes background summarisation. */
-const SUMMARY_MODEL = process.env.GEMINI_SUMMARY_MODEL || 'gemini-2.5-flash-lite';
-const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
-const TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
+// ─── Models ───────────────────────────────────────────────────────────────────
+//
+// Two text tiers. VOICE is everything Michael says in character. UTILITY is
+// bookkeeping nobody reads as prose (scoring a message -2..+2, summaries,
+// translating a sheet), so it runs on the cheapest model.
+//
+// Each tier has a fallback that is tried when the primary is missing or
+// overloaded. The fallbacks are Google's rolling "-latest" aliases on purpose:
+// pinned ids get shut down roughly yearly, the aliases do not, so a retired
+// primary degrades Michael instead of silencing him.
+const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-4-hydrogen';
+const TEXT_FALLBACK_MODEL = process.env.GEMINI_TEXT_FALLBACK_MODEL || 'gemini-flash-latest';
+const SUMMARY_MODEL = process.env.GEMINI_SUMMARY_MODEL || 'gemini-3.5-flash-lite';
+const SUMMARY_FALLBACK_MODEL = process.env.GEMINI_SUMMARY_FALLBACK_MODEL || 'gemini-flash-lite-latest';
+const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-nano-banana-2.1';
+const TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
+
+const TIERS = {
+  voice: [TEXT_MODEL, TEXT_FALLBACK_MODEL],
+  utility: [SUMMARY_MODEL, SUMMARY_FALLBACK_MODEL],
+};
 
 /** Single Michael voice — elderly male. Override with GEMINI_TTS_VOICE (see README). */
 const MICHAEL_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Algenib';
 
-/** Natural-language delivery for Gemini TTS (style-controlled, not a separate mood API). */
-const MICHAEL_TTS_DELIVERY = process.env.MICHAEL_TTS_DELIVERY || [
-  'Deep elderly male archangel voice.',
-  'Very low register, constantly angry and gravely serious.',
-  'Slow pace, cold biblical authority, contempt barely restrained.',
-  'Speak as Michael the Archangel pronouncing judgement, never warm or casual.',
-].join(' ');
+/**
+ * Delivery style for Gemini TTS. Gemini 3.8 TTS reads its text input strictly
+ * as a transcript, so direction must travel as a separate style annotation;
+ * put it in the text and he recites his own casting notes before the advice.
+ * Keep these short and about delivery only: the voice itself (age, gender,
+ * timbre) comes from GEMINI_TTS_VOICE.
+ */
+const MICHAEL_TTS_DELIVERY = process.env.MICHAEL_TTS_DELIVERY
+  || 'very low and slow, cold, grave, quietly contemptuous';
 
-const MICHAEL_TTS_DELIVERY_CAPS = process.env.MICHAEL_TTS_DELIVERY_CAPS || [
-  'Deep elderly male archangel voice.',
-  'FULL CAPS RAGE — shout and thunder like divine judgement.',
-  'Very loud, clipped, furious, barely controlled wrath.',
-  'Low register but INTENSE volume; hammer each word.',
-  'Speak the ALL-CAPS lines exactly as written — do not soften them.',
-].join(' ');
+const MICHAEL_TTS_DELIVERY_CAPS = process.env.MICHAEL_TTS_DELIVERY_CAPS
+  || 'shouting, furious, thunderous, clipped';
 
 /** True when the spoken script is mostly/all caps (woedend-style meltdown). */
 function scriptIsCapsRage(script, mood) {
@@ -73,55 +85,127 @@ function extractGeminiText(response) {
   return parts.map((p) => p?.text).filter(Boolean).join('\n').trim();
 }
 
-async function geminiText(input, { maxOutputTokens = 300, temperature, model } = {}) {
-  const baseConfig = {
-    maxOutputTokens,
-    ...(temperature !== undefined ? { temperature } : {}),
-  };
-  let response;
-  try {
-    response = await ai.models.generateContent({
-      model: model ?? TEXT_MODEL,
-      contents: input,
-      config: { ...baseConfig, thinkingConfig: { thinkingBudget: 0 } },
-    });
-  } catch (err) {
-    const msg = String(err?.message ?? err);
-    if (!/thinking/i.test(msg)) throw err;
-    console.warn('[gemini] thinkingConfig rejected, retrying without it');
-    response = await ai.models.generateContent({
-      model: model ?? TEXT_MODEL,
-      contents: input,
-      config: baseConfig,
-    });
-  }
-  const text = extractGeminiText(response);
-  if (!text) {
-    const cand = response?.candidates?.[0];
-    const reason = cand?.finishReason || response?.promptFeedback?.blockReason || 'unknown';
-    console.error('[gemini] empty text', { finishReason: cand?.finishReason, blockReason: response?.promptFeedback?.blockReason });
-    throw new Error(`Gemini returned empty text (${reason})`);
-  }
-  return text;
+// Thinking is configured differently per model generation and the API rejects
+// the wrong dialect with a bare 400: 2.5/3.8 Flash take thinkingBudget 0,
+// Flash-Lite 3.x wants thinkingLevel 'minimal', Gemini 4 only goes down to
+// 'low'. Rather than keep a table that rots with every release, try the
+// cheapest setting first and remember what each model accepted.
+const THINKING_ATTEMPTS = [
+  { thinkingBudget: 0 },
+  { thinkingLevel: 'minimal' },
+  { thinkingLevel: 'low' },
+  null, // model default
+];
+const thinkingChoice = new Map(); // model -> index into THINKING_ATTEMPTS
+
+// Thought tokens are billed against maxOutputTokens, and some models think
+// even when asked not to (Gemini 4 spends a few hundred regardless). Without
+// headroom a 60-token reply comes back empty with finishReason MAX_TOKENS.
+// The caller's limit is enforced on the visible text afterwards instead.
+const THINKING_HEADROOM = 2048;
+
+function isBadRequest(err) {
+  return err?.status === 400 || /INVALID_ARGUMENT|"code":\s*400/.test(String(err?.message ?? err));
 }
 
-/** Adapter so existing call sites keep working. */
+function isModelUnavailable(err) {
+  const status = err?.status;
+  if (status === 404 || status === 429 || status === 500 || status === 503) return true;
+  return /NOT_FOUND|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|"code":\s*(404|429|500|503)/i.test(String(err?.message ?? err));
+}
+
+/** Enforce the caller's output limit on the text itself (~4 chars per token, with slack). */
+function clipToTokenBudget(text, maxOutputTokens) {
+  const maxChars = maxOutputTokens * 6;
+  if (text.length <= maxChars) return text;
+  const window = text.slice(0, maxChars);
+  const stop = Math.max(window.lastIndexOf('. '), window.lastIndexOf('! '), window.lastIndexOf('? '), window.lastIndexOf('\n'));
+  return (stop > maxChars * 0.5 ? window.slice(0, stop + 1) : window).trim();
+}
+
+async function generateOnModel(model, input, { maxOutputTokens, temperature }) {
+  const start = thinkingChoice.get(model) ?? 0;
+  let lastErr;
+  for (let i = start; i < THINKING_ATTEMPTS.length; i++) {
+    const thinkingConfig = THINKING_ATTEMPTS[i];
+    const call = (headroom) => ai.models.generateContent({
+      model,
+      contents: input,
+      config: {
+        maxOutputTokens: maxOutputTokens + headroom,
+        ...(temperature !== undefined ? { temperature } : {}),
+        ...(thinkingConfig ? { thinkingConfig } : {}),
+      },
+    });
+    let response;
+    try {
+      response = await call(THINKING_HEADROOM);
+    } catch (err) {
+      lastErr = err;
+      if (isBadRequest(err) && i < THINKING_ATTEMPTS.length - 1) continue; // wrong thinking dialect, try the next
+      throw err;
+    }
+    if (thinkingChoice.get(model) !== i) {
+      thinkingChoice.set(model, i);
+      console.log(`[gemini] ${model} thinking config: ${JSON.stringify(thinkingConfig ?? 'model default')}`);
+    }
+    let text = extractGeminiText(response);
+    if (!text && response?.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+      console.warn(`[gemini] ${model} spent its whole budget thinking, retrying with more room`);
+      response = await call(THINKING_HEADROOM * 4);
+      text = extractGeminiText(response);
+    }
+    if (!text) {
+      const cand = response?.candidates?.[0];
+      const reason = cand?.finishReason || response?.promptFeedback?.blockReason || 'unknown';
+      console.error('[gemini] empty text', { model, finishReason: cand?.finishReason, blockReason: response?.promptFeedback?.blockReason });
+      throw new Error(`Gemini returned empty text (${reason})`);
+    }
+    return clipToTokenBudget(text, maxOutputTokens);
+  }
+  throw lastErr;
+}
+
+/**
+ * @param {'voice'|'utility'} [opts.tier] which model pair to use (default voice)
+ * @param {string} [opts.model] pin one model and skip the tier fallback
+ */
+async function geminiText(input, { maxOutputTokens = 300, temperature, model, tier = 'voice' } = {}) {
+  const models = model ? [model] : [...new Set(TIERS[tier] ?? TIERS.voice)];
+  let lastErr;
+  for (const [i, m] of models.entries()) {
+    try {
+      return await generateOnModel(m, input, { maxOutputTokens, temperature });
+    } catch (err) {
+      lastErr = err;
+      if (i === models.length - 1 || !isModelUnavailable(err)) throw err;
+      console.warn(`[gemini] ${m} unavailable (${String(err?.message ?? err).replace(/\s+/g, ' ').slice(0, 120)}), falling back to ${models[i + 1]}`);
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Adapter left over from the OpenAI days so the call sites keep their shape.
+ * Pass tier: 'utility' for bookkeeping calls; everything else is voice.
+ */
 const client = {
   responses: {
-    async create({ max_output_tokens, input }) {
-      const text = await geminiText(input, { maxOutputTokens: max_output_tokens });
+    async create({ max_output_tokens, input, tier }) {
+      const text = await geminiText(input, { maxOutputTokens: max_output_tokens, tier });
       return { output: [{ content: [{ text }] }] };
     },
   },
   chat: {
     completions: {
-      async create({ max_tokens, temperature, messages }) {
+      async create({ max_tokens, temperature, messages, tier }) {
         const prompt = (messages ?? [])
           .map((m) => `${m.role === 'system' ? 'Instructions' : 'User'}: ${m.content}`)
           .join('\n\n');
         const text = await geminiText(prompt, {
           maxOutputTokens: max_tokens ?? 16,
           temperature,
+          tier,
         });
         return { choices: [{ message: { content: text } }] };
       },
@@ -147,7 +231,15 @@ function applyChaoticFormatting(text) {
 function clampToMaxSentences(text, maxSentences, signOffName) {
   const normalized = String(text ?? '').trim();
   if (!normalized) return normalized;
-  const sentences = normalized.split(/(?<=[.!?؟])\s+/u).filter(Boolean);
+  // "St. Peter" and "nr. 12" are not sentence ends: glue a chunk that ends in
+  // an abbreviation back onto the one after it before counting.
+  const ABBREVIATION_END = /(?:^|[\s("'])(?:st|sint|mr|mrs|ms|dr|prof|no|nr|vs|ca|art|blz|bijv|evt|e\.g|i\.e)\.$/i;
+  const sentences = [];
+  for (const chunk of normalized.split(/(?<=[.!?؟])\s+/u).filter(Boolean)) {
+    const prev = sentences[sentences.length - 1];
+    if (prev && ABBREVIATION_END.test(prev)) sentences[sentences.length - 1] = `${prev} ${chunk}`;
+    else sentences.push(chunk);
+  }
   if (sentences.length <= maxSentences) return normalized;
   let clipped = sentences.slice(0, maxSentences).join(' ').trim();
   if (signOffName && !clipped.includes(signOffName)) {
@@ -169,7 +261,31 @@ function cosmicRoleBlock(lang, cosmicRole) {
  */
 function personaIntro(langCode) {
   const lang = getLang(langCode);
-  return `${lang.identityLine} ${lang.archangelBaseline ?? ''}`.trim();
+  return `${lang.identityLine} ${lang.archangelBaseline ?? ''}\n${detailNudge()}`.trim();
+}
+
+// Left alone, a model finds one good joke shape ("filed under Form 12-C") and
+// uses it in every reply. The source of the concrete detail is drawn in code,
+// the same way the daily card's angle is, so consecutive replies cannot settle
+// into one groove however much the model likes it.
+const DETAIL_SOURCES = [
+  'an exact and unreasonable measurement or quantity',
+  'a named saint or colleague who holds an opinion on the matter',
+  'a precedent from a specific, distant century',
+  'an object on or near your desk',
+  'a fee, fine, tariff or surcharge',
+  'the weather or conditions in some sphere that is not Earth',
+  'opening hours, a deadline, or a waiting period',
+  'an earlier incident of exactly this kind that ended badly',
+  'the state of the paperwork: a column, a stamp, a seal, a missing page',
+  'something you overheard from another department of heaven',
+  'a physical detail about the soul that you could only know by watching',
+  'a rule that exists for no reason anyone can remember',
+];
+
+function detailNudge() {
+  const source = DETAIL_SOURCES[Math.floor(Math.random() * DETAIL_SOURCES.length)];
+  return `If this reply wants one concrete detail, take it from: ${source}. Use it once, as plain fact, and do not announce it.`;
 }
 
 /**
@@ -275,7 +391,6 @@ ${lengthSignoffDefault}`;
       : `الموقف تجاه هذا المستخدم: ${displayJudgement(langCode, judgementLabel)}`;
 
   const response = await client.responses.create({
-    model: "gpt-4.1-mini",
     max_output_tokens: israelTopicHit ? 600 : 300,
     input: `
 ${lang.identityLine}
@@ -289,6 +404,8 @@ ${judgementLabelHeader}
 ${judgementDesc}
 NEVER state the register tally, judgement score, merit counts, or any numeric standing out loud. The bookkeeping is internal: your attitude shows only in tone. The arrows on your messages and the dashboards do the numbers, not you.
 ${lang.antiZionismBase}
+${lang.comedyRules ?? ''}
+${detailNudge()}
 ${lang.styleExamples}
 ${languageBlock}
 ${lang.styleRules(!!languagePermission, languagePermission?.promptName ?? '')}
@@ -305,7 +422,9 @@ ${lang.userAttribution(username, userInput)}
   });
 
   const generated = applyChaoticFormatting(response.output[0].content[0].text);
-  const sentenceCap = israelTopicHit ? 99 : (registerBlock ? 4 : 2);
+  // Safety net only: the prompt asks for 1 to 2 lines. One sentence of slack
+  // stops a legitimate short third sentence being amputated mid-thought.
+  const sentenceCap = israelTopicHit ? 99 : (registerBlock ? 4 : 3);
   return israelTopicHit
     ? generated
     : clampToMaxSentences(generated, sentenceCap, lang.signOff);
@@ -314,20 +433,18 @@ ${lang.userAttribution(username, userInput)}
 // ─── Background summarisation ──────────────────────────────────────────────────
 
 export async function summariseUserHistory(username, prompts, existingImpression, langCode = 'nl') {
-  const lang = getLang(langCode);
-  const { outputInstruction } = lang.helpers;
-
   const context = [
     existingImpression ? `Existing impression: "${existingImpression}"` : null,
     `Messages:\n${prompts.map((p, i) => `  ${i + 1}. "${p}"`).join('\n')}`,
   ].filter(Boolean).join('\n');
 
   const response = await client.responses.create({
-    model: "gpt-4.1-mini",
+    tier: 'utility',
     max_output_tokens: 60,
     input: `
-Summarise in at most 2 short sentences what impression the Archangel Michael has formed of a person based on the messages below. Write in first person as Michael, in his characteristic vague spiritual style. Be specific about patterns you see in the questions.
-${outputInstruction}
+Summarise in at most 2 short sentences what impression the Archangel Michael (a grave, dry celestial clerk) has formed of a person based on the messages below. Write in first person as Michael. Be specific about patterns you see in the questions.
+This goes on file and is treated as fact later: use ONLY what the messages actually say. Do not invent details, objects, names or events.
+Write in ${langCode === 'en' ? 'English' : 'Dutch'} and in no other language.
 
 ${context}
     `.trim(),
@@ -358,7 +475,7 @@ ${lines || '(nothing recorded)'}
 
 Write the summary in ${langCode === 'en' ? 'English' : 'Dutch'} and in no other language.
     `.trim(),
-    { maxOutputTokens: 120, model: SUMMARY_MODEL },
+    { maxOutputTokens: 120, tier: 'utility' },
   );
   return text.trim();
 }
@@ -371,7 +488,7 @@ Write the summary in ${langCode === 'en' ? 'English' : 'Dutch'} and in no other 
 export async function scoreMichaelMessage(userInput) {
   try {
     const response = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
+      tier: 'utility',
       temperature: 0,
       max_tokens: 3,
       messages: [
@@ -417,7 +534,6 @@ export async function generateMorningAfter(username, datePath, morningChoice, la
   }[morningChoice] ?? 'the user did something unexpected';
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 180,
     input: `
 ${personaIntro(langCode)} The morning after a date you send a short message to ${username}. The date ended well...  perhaps too well. You are not used to this feeling. Context: ${choiceContext}.${impressionLine} Write a short, cryptic message. Not too warm. Not too cold. Strangely specific. Formal but slightly different than usual. 1 to 2 sentences.
@@ -447,7 +563,6 @@ export async function generateVibecheckComment(username, judgementLabel, impress
     : '';
 
   const response = await client.responses.create({
-    model: "gpt-4.1-mini",
     max_output_tokens: 80,
     input: `
 ${personaIntro(langCode)} Give a brief, personal verdict on ${username}. Maximum two sentences. No numbered list, no advice, no elaboration. Pure voice: formal address (${formalAddress}), strangely terse, mildly judgemental or uncomfortably appreciative depending on the verdict.
@@ -468,7 +583,6 @@ export async function generateWitnessStatement(username, dossier, langCode = 'nl
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 320,
     input: `
 ${personaIntro(langCode)}
@@ -493,7 +607,6 @@ export async function generateAuraCheck(targetName, dossier, { scannerName, lang
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 240,
     input: `
 ${personaIntro(langCode)}
@@ -529,7 +642,6 @@ export async function generateAbsenceInquiry({ username, userId, daysGone, impre
       : 'Their file simply should not sit untouched. It is a matter of order.';
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 160,
     input: `
 ${personaIntro(langCode)}
@@ -557,7 +669,6 @@ export async function generateAntichristDenial({ username, commandName, impressi
   const { outputInstruction, formalAddress } = lang.helpers;
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 140,
     input: `
 ${personaIntro(langCode)}
@@ -581,7 +692,6 @@ export async function generateSoulInvoice(targetName, dossier, { requesterName, 
   const { outputInstruction, formalAddress, styleHint } = lang.helpers;
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 420,
     input: `
 ${personaIntro(langCode)}
@@ -623,7 +733,6 @@ export async function generateConfessionAck({
   const safe = String(confession ?? '').replace(/"/g, "'").slice(0, 400);
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 160,
     input: `
 ${personaIntro(langCode)}
@@ -713,7 +822,6 @@ ${dossiers}
 
   const run = async (dossiers) => {
     const response = await client.responses.create({
-      model: 'gpt-4.1-mini',
       max_output_tokens: maxTokens,
       input: buildInput(dossiers),
     });
@@ -746,7 +854,6 @@ CRITICAL: the message NEVER finishes. It stops mid-sentence, mid-word even. No c
     : `Today you CANNOT BE BOTHERED. Write the bulletin in at most 5 short lines: the mood, the forbidden word, and one cold dismissive sentence telling the server to figure the rest out themselves — the register is open, look it up. No enthusiasm. No sign-off; end abruptly.`;
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: mode === 'rant' ? 550 : 160,
     input: `
 ${personaIntro(langCode)}
@@ -931,7 +1038,6 @@ Rules:
 
   const run = async () => {
     const response = await client.responses.create({
-      model: 'gpt-4.1-mini',
       max_output_tokens: 800,
       input,
     });
@@ -972,6 +1078,8 @@ Rules:
       return text ? { userId, text } : null;
     })
     .filter(Boolean)
+    // One reading per soul: with few subjects the model doubles up on one person.
+    .filter((r, i, all) => all.findIndex((o) => o.userId === r.userId) === i)
     .slice(0, 3);
 
   const segments = (Array.isArray(parsed.segments) ? parsed.segments : [])
@@ -1023,7 +1131,6 @@ export async function generateLawStamp({ kind, langCode = 'nl', userId, extra = 
   }[kind] ?? extra;
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 120,
     input: `
 ${personaIntro(langCode)}
@@ -1049,7 +1156,6 @@ export async function generateBooksClosed({ langCode = 'nl', dateLabel, digest, 
     ? `\nTODAY THE REGISTER AUDITED YOU. It found an error in YOUR OWN filing of yesterday — pick one plausible item from the ledger (a prophecy you should never have stamped, a word mis-transcribed, a verdict entered in the wrong column) and issue a formal correction. The register does not apologise. YOU do not apologise. Amend it in one grudging sentence, visibly annoyed that this is on the record.\n`
     : '';
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 160,
     input: `
 ${personaIntro(langCode)}
@@ -1090,7 +1196,6 @@ export async function generateCosmicAppointment({
   const office = role === 'antichrist' ? 'ANTICHRIST for 24 hours' : 'CHOSEN ONE';
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 220,
     input: `
 ${personaIntro(langCode)}
@@ -1123,7 +1228,6 @@ export async function generateDelayedConsequence(username, item, mood, judgement
   const judgementDesc = lang.judgementDescriptions[judgementLabel] ?? lang.judgementDescriptions['onbeslist'] ?? '';
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 260,
     input: `
 ${personaIntro(langCode)} You have not let go of something from an earlier conversation with ${username}. You circle back to that unresolved moment now...  not threatening, but present and slightly uncomfortable.
@@ -1170,7 +1274,6 @@ export async function generateNameMentionReply({
     : 'They were NOT talking to you; they said your name while talking amongst themselves. You overheard it and you are interjecting, uninvited. Respond to what was actually said, as someone who was not asked and does not care that he was not asked.';
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 160,
     input: `
 ${personaIntro(langCode)}
@@ -1202,7 +1305,6 @@ export async function generateQuietAfterthought(username, leftover, mood, langCo
   const safe = String(leftover ?? '').replace(/"/g, "'").slice(0, 400);
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 180,
     input: `
 ${personaIntro(langCode)}
@@ -1241,7 +1343,6 @@ export async function generateCharacterFieldChange(kind, { verzoek, characterBef
 
   try {
     const response = await client.responses.create({
-      model: 'gpt-4.1-mini',
       max_output_tokens: 130,
       input: `
 You are Michael (Archangel), maintaining a cosmic RPG register.
@@ -1291,7 +1392,6 @@ export async function generateCharacterFieldPunishment(kind, { verzoek, characte
 
   try {
     const response = await client.responses.create({
-      model: 'gpt-4.1-mini',
       max_output_tokens: 130,
       input: `
 You are Michael (Archangel), maintaining a cosmic RPG register.
@@ -1331,7 +1431,7 @@ async function translateCharacterFields({ archetype, lineage, title }, fromLang)
   const langNames = { nl: 'Dutch', en: 'English' };
   try {
     const response = await client.responses.create({
-      model: 'gpt-4.1-mini',
+      tier: 'utility',
       max_output_tokens: 180,
       input: `
 Translate these RPG character sheet fields for a celestial Discord bot persona.
@@ -1368,7 +1468,6 @@ export async function generateMichaelCharacterSheet(username, judgementLabel, im
   ].filter(Boolean).join('\n');
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 220,
     input: `
 ${cs.intro(username, context)}
@@ -1451,7 +1550,6 @@ export async function generateMijnRolComment(username, character, judgementLabel
   const statNames = lang.characterSheet?.statNames ?? { aura: 'aura', discipline: 'discipline', chaos: 'chaos', inzicht: 'inzicht', volharding: 'volharding' };
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 160,
     input: `
 ${personaIntro(langCode)} You review the cosmic enrolment of ${username} in your field campaign:
@@ -1520,7 +1618,6 @@ export async function generateOnderhandelenNarrative({
   };
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 300,
     input: `
 ${personaIntro(langCode)} A user is trying to negotiate about their cosmic enrolment in your field campaign.
@@ -1564,7 +1661,6 @@ export async function generateForgivenessRollNarrative({
   const rollLine = `${roll.raw} ${sign}${Math.abs(roll.modifier)} → ${roll.total} (needed: ${need})`;
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 220,
     input: `
 ${personaIntro(langCode)} Someone asks for forgiveness. You have rolled in the higher register.
@@ -1605,7 +1701,6 @@ export async function generatePostRevision(originalText, mood, langCode = 'nl') 
     : 'BELANGRIJK: herhaal geen vaste scheldaanhef (sterveling e.d.), dezelfde CAPS-bevelenreeks of het origineel. Voeg iets nieuws toe (twijfel, detail, andere kant).';
 
   const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
     max_output_tokens: 260,
     input: `
 ${personaIntro(langCode)} You just wrote this:
@@ -1712,9 +1807,42 @@ One dense paragraph, visual and specific, 40 to 90 words.
   return { ...media, flavor, imagePrompt };
 }
 
+/** The 2.5/3.1 preview TTS models predate style annotations and the Interactions API. */
+const TTS_IS_LEGACY = /gemini-(2\.5|3\.1)-.*tts/i.test(TTS_MODEL);
+
+/** Text to audio. Returns { buffer, mimeType } or null. */
+async function synthesizeSpeech(spoken, style, langCode) {
+  if (TTS_IS_LEGACY) {
+    const response = await ai.models.generateContent({
+      model: TTS_MODEL,
+      contents: `Say this in the following manner (${style}): ${spoken}`,
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          languageCode: ttsLanguageCode(langCode),
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: MICHAEL_TTS_VOICE } },
+        },
+      },
+    });
+    return extractInlinePart(response);
+  }
+  const interaction = await ai.interactions.create({
+    model: TTS_MODEL,
+    input: [{
+      type: 'user_input',
+      content: [{ type: 'text', text: spoken, annotations: [{ type: 'speech_metadata', style }] }],
+    }],
+    response_format: { type: 'audio' },
+    generation_config: { speech_config: [{ voice: MICHAEL_TTS_VOICE }] },
+  });
+  const part = interaction?.output_audio
+    ?? (interaction?.steps ?? []).flatMap((step) => step?.content ?? []).find((c) => c?.type === 'audio' && c?.data);
+  if (!part?.data) return null;
+  return { buffer: Buffer.from(part.data, 'base64'), mimeType: part.mime_type || 'audio/wav' };
+}
+
 /**
- * Spoken advice as WAV (24 kHz PCM wrapped). Returns { wavBuffer, script, flavor }.
- * Gemini TTS accepts natural-language style in the prompt (no separate mood parameter).
+ * Spoken advice as WAV. Returns { wavBuffer, script, flavor }.
  */
 export async function generateMichaelVoiceAdvice(userInput, { username, mood, judgementLabel, score = 0, langCode = 'nl', registerBlock = '', impression = null } = {}) {
   const lang = getLang(langCode);
@@ -1750,26 +1878,11 @@ ${outputInstruction}
   );
 
   const spoken = script.replace(/\s+/g, ' ').trim().slice(0, 700);
-  const delivery = resolveTtsDelivery(spoken, mood);
-  const capsRage = scriptIsCapsRage(spoken, mood);
-  const ttsPayload = capsRage ? `${delivery} [shouting] ${spoken}` : `${delivery} ${spoken}`;
-
-  const ttsResponse = await ai.models.generateContent({
-    model: TTS_MODEL,
-    contents: ttsPayload,
-    config: {
-      responseModalities: ['AUDIO'],
-      speechConfig: {
-        languageCode: ttsLanguageCode(langCode),
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: MICHAEL_TTS_VOICE },
-        },
-      },
-    },
-  });
-
-  const audio = extractInlinePart(ttsResponse);
+  const audio = await synthesizeSpeech(spoken, resolveTtsDelivery(spoken, mood), langCode);
   if (!audio?.buffer?.length) throw new Error('Gemini TTS returned no audio');
-  const wavBuffer = pcmToWav(audio.buffer);
+  // Gemini 3.8 TTS returns a finished WAV; the 2.5 preview returned bare PCM.
+  // Wrapping a WAV in a second header plays the first header as a burst of noise.
+  const isWav = /wav/i.test(audio.mimeType) || audio.buffer.subarray(0, 4).toString('latin1') === 'RIFF';
+  const wavBuffer = isWav ? audio.buffer : pcmToWav(audio.buffer);
   return { wavBuffer, script: spoken, flavor };
 }

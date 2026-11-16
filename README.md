@@ -17,12 +17,15 @@ GITHUB_WEBHOOK_SECRET=
 FEEDBACK_DM_USER_ID=
 ```
 
-Optional Gemini overrides:
+Optional Gemini overrides. Leave these unset unless you have a reason: the defaults in `utils/openai.js` are kept current, and a pinned id in `.env` silently keeps Michael on a model Google is retiring.
 
 ```env
-GEMINI_TEXT_MODEL=gemini-2.5-flash
-GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
-GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts
+GEMINI_TEXT_MODEL=gemini-4-hydrogen           # everything Michael says in character
+GEMINI_TEXT_FALLBACK_MODEL=gemini-flash-latest
+GEMINI_SUMMARY_MODEL=gemini-3.5-flash-lite    # scoring, summaries, translations
+GEMINI_SUMMARY_FALLBACK_MODEL=gemini-flash-lite-latest
+GEMINI_IMAGE_MODEL=gemini-nano-banana-2.1
+GEMINI_TTS_MODEL=gemini-3.8-flash-tts
 GEMINI_TTS_VOICE=Algenib
 ```
 
@@ -118,7 +121,7 @@ Only automated posts:
 
 ## Gemini TTS (`/listentomichael`)
 
-Uses [Gemini speech generation](https://ai.google.dev/gemini-api/docs/speech-generation). Default voice is **Algenib**. Caps / `woedend` uses a louder delivery prompt.
+Uses [Gemini speech generation](https://ai.google.dev/gemini-api/docs/speech-generation). Default voice is **Algenib**. Caps / `woedend` uses a louder delivery style. The style is sent as a separate annotation, never in the spoken text (Gemini 3.8 TTS reads its text input verbatim). Override with `MICHAEL_TTS_DELIVERY` / `MICHAEL_TTS_DELIVERY_CAPS`: a few words about delivery only, not about the voice.
 
 ```env
 GEMINI_TTS_VOICE=Algenib

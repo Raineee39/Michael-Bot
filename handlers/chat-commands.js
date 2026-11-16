@@ -178,7 +178,7 @@ export async function handleChat(ctx) {
         if (needsSummarisation(userId)) {
           console.log(`[michael] summarisation | queued | ${username} (${userId})`);
           const fresh = loadUserMemory(userId);
-          summariseUserHistory(username, fresh.prompts, fresh.impression)
+          summariseUserHistory(username, fresh.prompts, fresh.impression, langCode)
             .then(imp => {
               updateImpression(userId, imp);
               console.log(`[michael] summarisation | done | ${username} (${userId})`);
