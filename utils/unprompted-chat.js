@@ -6,11 +6,11 @@
  *   - quiet afterthoughts once a channel goes silent
  *   - name-mention replies (handled in gateway.js)
  *
- * Independent of life-switch:
- *   - Unfinished business: after 10 minutes of silence Michael circles back
+ *   - unfinished business: after 10 minutes of silence Michael circles back
  *     to a grudge he filed earlier, replying to the original message to
  *     keep the conversation going. Only one resurface is armed at a time; a newer
  *     filing replaces the queued one and resets the 10-minute timer (never stacks).
+ *     The grudge is filed either way; with the switch off it is just never raised.
  */
 
 import {
@@ -77,8 +77,8 @@ function clearBusinessTimer() {
 
 /**
  * Arm the 10-minute silence timer for unfinished business in a channel.
- * Not gated by /switchoflife. Only one send can be pending; a newer filing
- * replaces the previous target and resets the silence clock.
+ * The switch is checked when it fires, not here. Only one send can be pending;
+ * a newer filing replaces the previous target and resets the silence clock.
  */
 export function scheduleBusinessResurface({
   messageId,
@@ -146,6 +146,14 @@ async function trySendBusiness(item) {
   const business = outstanding.find((b) => b.id === item.businessId);
   if (!business) {
     console.log(`[michael] business-resurface | expired or resolved | id=${item.businessId}`);
+    pendingBusiness = null;
+    return false;
+  }
+
+  if (!isMichaelLifeActive(item.guildId, item.channelId)) {
+    // The grudge stays on file; he just does not bring it up in a channel
+    // where he has been switched off.
+    console.log('[michael] business-resurface | skipped | life-switch off');
     pendingBusiness = null;
     return false;
   }

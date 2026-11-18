@@ -72,14 +72,18 @@ Hidden mechanics worth knowing: asking him twice for another language (e.g. "spe
 
 Default is **off**. Nothing in `.env` turns him on. Someone with Manage Server (or Manage Channels, for the channel button) must flip `/switchoflife`.
 
-**When on:**
+**When off**, Michael ignores the channel. The only things that still work: slash commands (with their buttons), and replies when someone **@-pings** him directly. Saying "michael" without the ping does nothing.
 
-- Name-mention / @bot replies (and the silent 🧿 for insults, ignoring bait)
-- Rare snark on random messages, quiet afterthoughts
+**When on**, he also lives in the channel:
+
+- Replies when his name comes up (20%, shared daily budget), the silent 🧿 for insults, ignoring bait
+- Rare snark, quiet afterthoughts, grudges resurfacing after 10 minutes of silence
+- Today's-card stamps and reactions when someone says the forbidden word, fulfils a prophecy, etc.
+- Rare ambient emoji reacts
 - Absence inquiries ("where did X go") in the daily channels
 - Delayed "divine pardon" after a badly failed `/forgiveme` or negotiation
 
-**Always works** (switch does not matter): slash commands, buttons, daily bulletin, today's-card stamps, rare ambient emoji reacts, and follow-ups after 10 minutes of silence on grudges filed during `/chat`.
+The **daily bulletin** posts at its scheduled time regardless of the switch.
 
 Stored in `data/life-switch.json` on the VPS. A channel setting beats the server setting; flipping a channel back to whatever the server says makes it follow the server again.
 
@@ -87,7 +91,7 @@ Stored in `data/life-switch.json` on the VPS. A channel setting beats the server
 
 If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, Gemini writes **today's card** at **10:00 Europe/Amsterdam**. Moons Grill (`183545688859213834`) is one hour later: **11:00 Amsterdam**, so it lands at **10:00 UK** during BST. That card is **law until tomorrow's card**. `/horoscope` reprints the same card (and a short "so far" if anything was stamped). The antichrist is refused on most commands, in public, with prejudice.
 
-Michael watches chat and stamps rarely (max 4 public stamps a day, 25 minutes apart). First hit on a law is a short reply; repeats get a reaction. Next morning he closes yesterday's books, judgement moves, and the residue flavours the new card. This does not need `/switchoflife`. The bot needs **Add Reactions** in the server.
+Michael watches chat and stamps rarely (max 4 public stamps a day, 25 minutes apart), in channels where `/switchoflife` is on. First hit on a law is a short reply; repeats get a reaction. Next morning he closes yesterday's books, judgement moves, and the residue flavours the new card. The bot needs **Add Reactions** in the server.
 
 ## Deploy (push to `main`)
 
@@ -118,7 +122,7 @@ Then point Caddy's `/github-webhook` route at `localhost:3002`. Until Caddy is s
 Only automated posts:
 
 - Daily bulletin cron (scheduled at 10:00, so it should fire)
-- Unprompted snark (only when `/switchoflife` is on)
+- Unprompted snark
 - Unfinished-business resurfacing waits until morning
 
 ## Gemini TTS (`/listentomichael`)

@@ -1,19 +1,19 @@
 // Discord Gateway (WebSocket) listener.
 //
-// Behaviour:
-// 1. Unprompted chat when /switchoflife is on for this server or channel:
-//    rare snark and quiet afterthoughts (utils/unprompted-chat.js).
-// 2. Unfinished business: after 10 minutes of silence Michael circles back to
-//    a grudge filed earlier, replying to the original message.
-// 3. When a non-bot message mentions "michael"/"michaël" or @mentions the bot,
-//    and only when the life-switch is on here:
+// /switchoflife decides everything here. OFF (the default): Michael ignores
+// the channel completely, except that a real @-ping still gets an answer.
+// ON:
+// 1. Rare snark and quiet afterthoughts (utils/unprompted-chat.js), and
+//    grudges resurfacing after 10 minutes of silence.
+// 2. When a message mentions "michael"/"michaël" or @mentions the bot:
 //    a. an insult gets a silent 🧿 half the time, and nothing else;
 //    b. bait ("antwoord dan") is usually ignored and filed as a grudge;
 //    c. otherwise an @-ping always gets an AI reply, a mere name drop 20% of
 //       the time (shared unprompted budget). Optional "Edit:" revision.
-// 4. lastChannelId is tracked per user.
-// 5. Today's card is law (independent of life-switch): rare stamps / reactions.
-// 6. Ambient emoji reacts: 2% of guild messages, 15 min cooldown, not at night.
+//    With the switch OFF only (a)-(c) for real @-pings apply.
+// 3. Today's card is law: rare stamps / reactions on matching messages.
+// 4. Ambient emoji reacts: 2% of guild messages, 15 min cooldown, not at night.
+// Always, invisibly: lastChannelId and chat activity are tracked per user.
 //
 // IMPORTANT: Requires the following Privileged Gateway Intents enabled in the
 // Discord Developer Portal:
@@ -184,13 +184,17 @@ export function startGateway() {
 
         const guildId = msg.guild_id ?? null;
         const mentionsMichael = messageMentionsMichael(msg, botUserId);
+        // Switch off = he does nothing in this channel unless @-pinged.
+        // Slash commands are handled elsewhere and are never affected.
+        const lifeOn = isMichaelLifeActive(guildId, channelId);
 
-        // Track the user's most-recently-active channel.
+        // Track the user's most-recently-active channel. Bookkeeping only,
+        // nothing visible, so it runs whatever the switch says.
         updateLastChannel(authorId, channelId, guildId);
         if (guildId) noteChatActivity(authorId, guildId);
-        maybeAmbientReact(guildId, channelId, msg.id);
+        if (lifeOn) maybeAmbientReact(guildId, channelId, msg.id);
 
-        if (guildId) {
+        if (guildId && lifeOn) {
           handleDayLawMessage({
             guildId,
             channelId,
@@ -218,11 +222,12 @@ export function startGateway() {
         // Only continue for messages that mention Michael
         if (!mentionsMichael) return;
 
-        // Off means off: he is not listening in this channel, so he does not
-        // stamp insults, file bait as a grudge (which would resurface as an
-        // unprompted post ten minutes later), or reply.
-        if (!isMichaelLifeActive(guildId, channelId)) {
-          console.log(`[michael] gateway | name-mention skipped | life-switch off | ch=${channelId}`);
+        // A real @-ping is someone addressing him: answered even when the
+        // switch is off. Merely saying his name is chatter he only reacts to
+        // when the switch is on.
+        const pinged = messagePingsMichael(msg, botUserId);
+        if (!lifeOn && !pinged) {
+          console.log(`[michael] gateway | name-drop skipped | life-switch off | ch=${channelId}`);
           return;
         }
 
@@ -262,7 +267,6 @@ export function startGateway() {
 
         // Addressed directly -> always answer. Merely named -> usually stay
         // silent; he is a presence in the room, not a participant in it.
-        const pinged = messagePingsMichael(msg, botUserId);
         if (!pinged) {
           if (Math.random() > NAME_DROP_REPLY_CHANCE || !canSpeakUnprompted(guildId)) {
             console.log(`[michael] gateway | name-drop ignored | user=${authorId}`);
