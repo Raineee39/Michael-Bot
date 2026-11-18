@@ -83,13 +83,13 @@ Default is **off**. Nothing in `.env` turns him on. Someone with Manage Server (
 - Absence inquiries ("where did X go") in the daily channels
 - Delayed "divine pardon" after a badly failed `/forgiveme` or negotiation
 
-The **daily bulletin** posts at its scheduled time regardless of the switch.
+- The **daily bulletin** (the morning card post). With the switch off, `/horoscope` still builds and shows today's card on demand.
 
 Stored in `data/life-switch.json` on the VPS. A channel setting beats the server setting; flipping a channel back to whatever the server says makes it follow the server again.
 
 ## Daily bulletin (10:00 Amsterdam; Moons Grill 11:00 Amsterdam / 10:00 UK)
 
-If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, Gemini writes **today's card** at **10:00 Europe/Amsterdam**. Moons Grill (`183545688859213834`) is one hour later: **11:00 Amsterdam**, so it lands at **10:00 UK** during BST. That card is **law until tomorrow's card**. `/horoscope` reprints the same card (and a short "so far" if anything was stamped). The antichrist is refused on most commands, in public, with prejudice.
+If `DAILY_GUILD_ID` and `DAILY_CHANNEL_ID` are set, and `/switchoflife` is on in that channel, Gemini writes **today's card** at **10:00 Europe/Amsterdam**. Moons Grill (`183545688859213834`) is one hour later: **11:00 Amsterdam**, so it lands at **10:00 UK** during BST. That card is **law until tomorrow's card**. `/horoscope` reprints the same card (and a short "so far" if anything was stamped). The antichrist is refused on most commands, in public, with prejudice.
 
 Michael watches chat and stamps rarely (max 4 public stamps a day, 25 minutes apart), in channels where `/switchoflife` is on. First hit on a law is a short reply; repeats get a reaction. Next morning he closes yesterday's books, judgement moves, and the residue flavours the new card. The bot needs **Add Reactions** in the server.
 
