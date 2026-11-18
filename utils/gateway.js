@@ -2,20 +2,18 @@
 //
 // Behaviour:
 // 1. Unprompted chat when /switchoflife is on for this server or channel:
-//    a. 0.5% chance of an immediate snarky reply to a random message.
-// 2. Unfinished business (independent of life-switch):
-//    After 10 minutes of silence Michael circles back to a filed grudge,
-//    replying to the earlier message to keep the conversation going.
-// 3. When a non-bot message mentions "michael"/"michaël" or @mentions the bot:
-//    a. Feature 3...  "Do not respond" trap: if the message contains baiting
-//       language, there is a 70% chance Michael silently ignores it and queues
-//       an unfinished business item instead of replying.
-//    b. If life-switch is on: Michael always replies with a short canned line;
-//       optional post-message revision ("Edit:") on that reply.
-//       When the life-switch is off (default), no reply is sent here.
+//    rare snark and quiet afterthoughts (utils/unprompted-chat.js).
+// 2. Unfinished business: after 10 minutes of silence Michael circles back to
+//    a grudge filed earlier, replying to the original message.
+// 3. When a non-bot message mentions "michael"/"michaël" or @mentions the bot,
+//    and only when the life-switch is on here:
+//    a. an insult gets a silent 🧿 half the time, and nothing else;
+//    b. bait ("antwoord dan") is usually ignored and filed as a grudge;
+//    c. otherwise an @-ping always gets an AI reply, a mere name drop 20% of
+//       the time (shared unprompted budget). Optional "Edit:" revision.
 // 4. lastChannelId is tracked per user.
 // 5. Today's card is law (independent of life-switch): rare stamps / reactions.
-// 6. Ambient emoji reacts on ~10% of guild messages (45s cooldown, not at night).
+// 6. Ambient emoji reacts: 2% of guild messages, 15 min cooldown, not at night.
 //
 // IMPORTANT: Requires the following Privileged Gateway Intents enabled in the
 // Discord Developer Portal:
@@ -220,6 +218,14 @@ export function startGateway() {
         // Only continue for messages that mention Michael
         if (!mentionsMichael) return;
 
+        // Off means off: he is not listening in this channel, so he does not
+        // stamp insults, file bait as a grudge (which would resurface as an
+        // unprompted post ten minutes later), or reply.
+        if (!isMichaelLifeActive(guildId, channelId)) {
+          console.log(`[michael] gateway | name-mention skipped | life-switch off | ch=${channelId}`);
+          return;
+        }
+
         // Silence as a weapon: an outrageous message aimed at Michael gets one
         // 🧿, a quiet mark against the soul, and nothing else. "Noted."
         if (INSULT_RE.test(content) && Math.random() < 0.5) {
@@ -252,11 +258,6 @@ export function startGateway() {
             messageId: msg.id,
             channelId,
           }, guildId);
-        }
-
-        if (!isMichaelLifeActive(guildId, channelId)) {
-          console.log(`[michael] gateway | name-mention skipped | life-switch off | ch=${channelId}`);
-          return;
         }
 
         // Addressed directly -> always answer. Merely named -> usually stay

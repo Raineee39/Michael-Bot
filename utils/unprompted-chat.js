@@ -2,8 +2,9 @@
  * Unprompted channel behaviour.
  *
  * Life-switch (/switchoflife) gates:
- *   - 0.5% instant snark replies to random messages
- *   - Name-mention replies (handled in gateway.js)
+ *   - rare instant snark replies to random messages
+ *   - quiet afterthoughts once a channel goes silent
+ *   - name-mention replies (handled in gateway.js)
  *
  * Independent of life-switch:
  *   - Unfinished business: after 10 minutes of silence Michael circles back
@@ -270,7 +271,7 @@ function rememberAfterthoughtCandidate({ messageId, channelId, guildId, authorId
 async function trySendAfterthought() {
   const item = pendingAfterthought;
   if (!item) return;
-  // No night-window gate here: the 25% draw + 3h cooldown already keep this
+  // No night-window gate here: the 12% draw + 6h cooldown already keep this
   // rare, and a 2am afterthought to a 2am message is exactly the bit.
   if (Date.now() - lastAfterthoughtAt < AFTERTHOUGHT_COOLDOWN_MS) return;  // not twice an evening
   const lastAt = lastMessageAtByChannel.get(item.channelId) ?? 0;

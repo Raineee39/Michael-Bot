@@ -1606,6 +1606,7 @@ const ABSENCE_CHECK_CHANCE = 0.25;
 
 async function runAbsenceCheck(guildId, channelId) {
   if (!guildId || !channelId) return;
+  if (!isMichaelLifeActive(guildId, channelId)) return; // unprompted chatter: needs the switch
   if (isDutchQuietHoursForUnpromptedSends()) return;
   if (Math.random() > ABSENCE_CHECK_CHANCE) return;
   if (!canSpeakUnprompted(guildId)) return;

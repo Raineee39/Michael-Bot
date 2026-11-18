@@ -63,7 +63,7 @@ In the [Discord Developer Portal](https://discord.com/developers/applications/14
 | `/dateangel` | `/dateer` | Go on a scripted date with the Archangel. His mood toward you shapes the opening. |
 | `/imagine` | — | Image from your prompt — holy, hellish, or petty depending on his mood and your standing. |
 | `/setlanguage` | `/michaeltaal` | Set the bot's language for the server (or your personal language in DMs). |
-| `/switchoflife` | — | Turn Michael's proactive life (name-replies, snark, afterthoughts) on/off per channel or server. Server-only. |
+| `/switchoflife` | — | Turn Michael's proactive life (name-replies, snark, afterthoughts, absence inquiries) on/off per channel or server. Server-only. |
 | `/feedback` | — | Send a bug/idea/note to Michael's maker, forwarded privately. |
 
 Hidden mechanics worth knowing: asking him twice for another language (e.g. "speak English") unlocks it permanently for you; every text interaction moves the tally; he remembers what he himself said (and forgets expired matters like old invoices by design).
@@ -74,12 +74,14 @@ Default is **off**. Nothing in `.env` turns him on. Someone with Manage Server (
 
 **When on:**
 
-- Name-mention / @bot replies
-- Rare snark on random messages
+- Name-mention / @bot replies (and the silent 🧿 for insults, ignoring bait)
+- Rare snark on random messages, quiet afterthoughts
+- Absence inquiries ("where did X go") in the daily channels
+- Delayed "divine pardon" after a badly failed `/forgiveme` or negotiation
 
-**Always works** (switch does not matter): slash commands, buttons, daily bulletin, today's-card stamps, unfinished-business follow-ups after 10 minutes of silence.
+**Always works** (switch does not matter): slash commands, buttons, daily bulletin, today's-card stamps, rare ambient emoji reacts, and follow-ups after 10 minutes of silence on grudges filed during `/chat`.
 
-Stored in `data/life-switch.json` on the VPS. Channel override beats server setting.
+Stored in `data/life-switch.json` on the VPS. A channel setting beats the server setting; flipping a channel back to whatever the server says makes it follow the server again.
 
 ## Daily bulletin (10:00 Amsterdam; Moons Grill 11:00 Amsterdam / 10:00 UK)
 
