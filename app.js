@@ -1523,6 +1523,12 @@ cron.schedule('*/15 * * * *', () => {
 
 async function postDailyBulletin(guildId, channelId, label) {
   if (!guildId || !channelId) return;
+  // Switched off = no unprompted posts at all. /horoscope still builds and
+  // shows today's card on demand, so the card game survives without this post.
+  if (!isMichaelLifeActive(guildId, channelId)) {
+    console.log(`[michael] daily bulletin skipped | ${label} | life-switch off in ${channelId}`);
+    return;
+  }
   if (isDutchQuietHoursForUnpromptedSends()) {
     console.log(`[michael] daily bulletin skipped | ${label} | Dutch quiet hours`);
     return;
@@ -1606,6 +1612,7 @@ const ABSENCE_CHECK_CHANCE = 0.25;
 
 async function runAbsenceCheck(guildId, channelId) {
   if (!guildId || !channelId) return;
+  if (!isMichaelLifeActive(guildId, channelId)) return; // unprompted chatter: needs the switch
   if (isDutchQuietHoursForUnpromptedSends()) return;
   if (Math.random() > ABSENCE_CHECK_CHANCE) return;
   if (!canSpeakUnprompted(guildId)) return;

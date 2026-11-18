@@ -1,6 +1,6 @@
 /**
  * Today's card is law. Watches guild chat and stamps rarely.
- * Independent of /switchoflife. Quiet hours: reactions only.
+ * Only called for channels where /switchoflife is on. Quiet hours: reactions only.
  */
 
 import {
